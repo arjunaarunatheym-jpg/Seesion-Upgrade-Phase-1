@@ -168,6 +168,9 @@ const TrainerDashboard = ({ user, onLogout }) => {
         return true;
       });
       
+      // Sort sessions by start_date (most recent/upcoming first)
+      activeSessions.sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
+      
       setSessions(activeSessions);
       
       // Auto-select first session if available
