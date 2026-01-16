@@ -888,13 +888,41 @@ const AdminDashboard = ({ user, onLogout }) => {
       const newParticipantIds = [];
       if (editingSession.newParticipants && editingSession.newParticipants.length > 0) {
         for (const participant of editingSession.newParticipants) {
-          const response = await axiosInstance.post("/auth/register", {
-            ...participant,
-            role: "participant",
-            company_id: editingSession.company_id,
-            location: editingSession.location,
-          });
-          newParticipantIds.push(response.data.id);
+          // First check if user already exists
+          try {
+            const checkResponse = await axiosInstance.get(`/users/check-ic/${encodeURIComponent(participant.id_number)}`);
+            if (checkResponse.data.exists) {
+              // User exists, use their ID
+              newParticipantIds.push(checkResponse.data.user.id);
+              continue;
+            }
+          } catch (checkErr) {
+            // Check endpoint might not exist or failed, proceed with registration
+          }
+          
+          // Try to register new user
+          try {
+            const response = await axiosInstance.post("/auth/register", {
+              ...participant,
+              role: "participant",
+              company_id: editingSession.company_id,
+              location: editingSession.location,
+            });
+            newParticipantIds.push(response.data.id);
+          } catch (regErr) {
+            // If registration fails due to existing user, try to find them
+            if (regErr.response?.data?.detail?.includes("already exists")) {
+              const findResponse = await axiosInstance.get(`/users?id_number=${encodeURIComponent(participant.id_number)}`);
+              const existingUser = findResponse.data.find(u => u.id_number === participant.id_number);
+              if (existingUser) {
+                newParticipantIds.push(existingUser.id);
+              } else {
+                throw regErr;
+              }
+            } else {
+              throw regErr;
+            }
+          }
         }
       }
 
