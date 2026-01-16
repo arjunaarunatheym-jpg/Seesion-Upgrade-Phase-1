@@ -15005,6 +15005,17 @@ logger = logging.getLogger(__name__)
 async def setup_admin_account():
     """Create or update admin account on startup"""
     try:
+        # Wait for MongoDB connection with timeout
+        try:
+            await asyncio.wait_for(db.command('ping'), timeout=10.0)
+            logging.info("✅ MongoDB connection established")
+        except asyncio.TimeoutError:
+            logging.error("❌ MongoDB connection timeout - startup will continue but some features may not work")
+            return
+        except Exception as conn_err:
+            logging.error(f"❌ MongoDB connection error: {conn_err} - startup will continue")
+            return
+        
         # PERFORMANCE OPTIMIZATION: Create database indexes
         # Indexes dramatically speed up queries on large datasets
         logging.info("📊 Creating database indexes for performance optimization...")
