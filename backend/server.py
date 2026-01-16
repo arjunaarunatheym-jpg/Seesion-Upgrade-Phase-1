@@ -168,9 +168,14 @@ def get_malaysia_time_str():
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
+# MongoDB connection with production-ready settings
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(
+    mongo_url,
+    serverSelectionTimeoutMS=5000,
+    connectTimeoutMS=10000,
+    socketTimeoutMS=20000
+)
 db_name = os.environ.get('DB_NAME')
 if not db_name:
     raise ValueError("DB_NAME environment variable is required")
