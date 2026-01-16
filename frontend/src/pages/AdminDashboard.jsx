@@ -888,19 +888,23 @@ const AdminDashboard = ({ user, onLogout }) => {
       const newParticipantIds = [];
       if (editingSession.newParticipants && editingSession.newParticipants.length > 0) {
         for (const participant of editingSession.newParticipants) {
-          // First check if user already exists
+          // First check if user already exists by IC number
           try {
-            const checkResponse = await axiosInstance.get(`/users/check-ic/${encodeURIComponent(participant.id_number)}`);
-            if (checkResponse.data.exists) {
+            const checkResponse = await axiosInstance.post("/users/check-exists", null, {
+              params: { id_number: participant.id_number }
+            });
+            if (checkResponse.data.exists && checkResponse.data.user) {
               // User exists, use their ID
               newParticipantIds.push(checkResponse.data.user.id);
+              toast.info(`Existing user "${participant.full_name}" linked to session`);
               continue;
             }
           } catch (checkErr) {
-            // Check endpoint might not exist or failed, proceed with registration
+            // Check endpoint failed, proceed with registration attempt
+            console.log("Check exists failed, attempting registration");
           }
           
-          // Try to register new user
+          // User doesn't exist, register new one
           try {
             const response = await axiosInstance.post("/auth/register", {
               ...participant,
@@ -910,14 +914,16 @@ const AdminDashboard = ({ user, onLogout }) => {
             });
             newParticipantIds.push(response.data.id);
           } catch (regErr) {
-            // If registration fails due to existing user, try to find them
+            // If registration fails due to existing user, extract their ID
             if (regErr.response?.data?.detail?.includes("already exists")) {
-              const findResponse = await axiosInstance.get(`/users?id_number=${encodeURIComponent(participant.id_number)}`);
-              const existingUser = findResponse.data.find(u => u.id_number === participant.id_number);
+              // Try to find the user via users list
+              const usersResp = await axiosInstance.get("/users");
+              const existingUser = usersResp.data.find(u => u.id_number === participant.id_number);
               if (existingUser) {
                 newParticipantIds.push(existingUser.id);
+                toast.info(`Existing user "${participant.full_name}" linked to session`);
               } else {
-                throw regErr;
+                throw new Error(`User with IC ${participant.id_number} exists but could not be found`);
               }
             } else {
               throw regErr;
