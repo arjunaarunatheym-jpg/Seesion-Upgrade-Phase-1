@@ -14971,6 +14971,16 @@ async def get_security_audit(
 # Include router (after all routes are defined)
 app.include_router(api_router)
 
+# Root health endpoint for deployment health checks
+@app.get("/health")
+async def root_health_check():
+    """Root health check endpoint for Kubernetes/deployment monitoring"""
+    try:
+        await db.command('ping')
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"status": "unhealthy", "error": str(e)})
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
