@@ -1402,6 +1402,94 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Social Media Footer */}
+      {socialMediaLinks.length > 0 && (
+        <footer className="bg-gray-100 border-t py-4 mt-8">
+          <div className="max-w-4xl mx-auto px-4 text-center">
+            <p className="text-sm text-gray-600 mb-3">Follow us on social media</p>
+            <div className="flex justify-center gap-4">
+              {socialMediaLinks.map((link, index) => (
+                <a
+                  key={index}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-2xl hover:scale-110 transition-transform"
+                  title={link.platform}
+                >
+                  {link.icon === 'facebook' ? '📘' : 
+                   link.icon === 'instagram' ? '📷' : 
+                   link.icon === 'tiktok' ? '🎵' : 
+                   link.icon === 'youtube' ? '▶️' : 
+                   link.icon === 'twitter' ? '🐦' : 
+                   link.icon === 'linkedin' ? '💼' : '🌐'}
+                </a>
+              ))}
+            </div>
+          </div>
+        </footer>
+      )}
+
+      {/* Social Media Popup (after feedback) */}
+      <Dialog open={showSocialPopup} onOpenChange={setShowSocialPopup}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-center text-xl">🎉 Thank You for Your Feedback!</DialogTitle>
+            <DialogDescription className="text-center">
+              Stay connected with us for driving tips, safety updates, and more!
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6">
+            <p className="text-center text-sm text-gray-600 mb-4">Follow us on social media:</p>
+            <div className="flex justify-center gap-6">
+              {socialMediaLinks.map((link, index) => (
+                <a
+                  key={index}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col items-center gap-1 hover:scale-110 transition-transform"
+                >
+                  <span className="text-4xl">
+                    {link.icon === 'facebook' ? '📘' : 
+                     link.icon === 'instagram' ? '📷' : 
+                     link.icon === 'tiktok' ? '🎵' : 
+                     link.icon === 'youtube' ? '▶️' : 
+                     link.icon === 'twitter' ? '🐦' : 
+                     link.icon === 'linkedin' ? '💼' : '🌐'}
+                  </span>
+                  <span className="text-xs text-gray-600">{link.platform}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <input
+                type="checkbox"
+                id="dont-show-again"
+                className="rounded"
+              />
+              <label htmlFor="dont-show-again" className="text-sm text-gray-600">Don't show this again</label>
+            </div>
+            <div className="flex gap-2 justify-center">
+              <Button variant="outline" onClick={() => {
+                const dontShow = document.getElementById('dont-show-again')?.checked;
+                handleDismissSocialPopup(dontShow);
+              }}>
+                Maybe Later
+              </Button>
+              <Button onClick={() => {
+                const dontShow = document.getElementById('dont-show-again')?.checked;
+                handleDismissSocialPopup(dontShow);
+              }}>
+                Done
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
