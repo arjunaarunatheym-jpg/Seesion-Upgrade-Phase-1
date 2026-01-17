@@ -2303,7 +2303,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
                                     <Download className="w-4 h-4" />
                                   </Button>
                                 )}
-                                {!['paid', 'cancelled'].includes(invoice.status) && (
+                                {!['paid', 'cancelled', 'voided'].includes(invoice.status) && (
                                   <Button 
                                     variant="ghost" 
                                     size="sm"
@@ -2312,6 +2312,19 @@ const FinanceDashboard = ({ user, onLogout }) => {
                                     title="Cancel"
                                   >
                                     <X className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {invoice.status === 'voided' && (
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                                    onClick={() => handleCreateReplacementInvoice(invoice.id)}
+                                    title="Create Replacement Invoice"
+                                    data-testid={`create-replacement-${invoice.id}`}
+                                  >
+                                    <Plus className="w-4 h-4 mr-1" />
+                                    Replace
                                   </Button>
                                 )}
                               </div>
