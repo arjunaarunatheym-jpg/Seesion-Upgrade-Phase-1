@@ -362,10 +362,12 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
     }
     
     try {
-      // Update user profile with verified name and IC
+      // Update user profile with verified name, IC, and contact details
       await axiosInstance.put("/users/profile", {
         full_name: verificationData.full_name.trim(),
-        id_number: verificationData.id_number.trim()
+        id_number: verificationData.id_number.trim(),
+        contact_email: verificationData.contact_email.trim(),
+        contact_phone: verificationData.contact_phone.trim()
       });
       
       setShowVerificationDialog(false);
