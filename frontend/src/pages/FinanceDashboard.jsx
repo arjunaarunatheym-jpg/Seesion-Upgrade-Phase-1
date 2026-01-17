@@ -4374,13 +4374,13 @@ const FinanceDashboard = ({ user, onLogout }) => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="facebook">📘 Facebook</SelectItem>
-                  <SelectItem value="instagram">📷 Instagram</SelectItem>
-                  <SelectItem value="tiktok">🎵 TikTok</SelectItem>
-                  <SelectItem value="youtube">▶️ YouTube</SelectItem>
-                  <SelectItem value="twitter">🐦 Twitter/X</SelectItem>
-                  <SelectItem value="linkedin">💼 LinkedIn</SelectItem>
-                  <SelectItem value="globe">🌐 Other</SelectItem>
+                  <SelectItem value="facebook"><span className="flex items-center gap-2"><FaFacebook className="text-[#1877F2]" /> Facebook</span></SelectItem>
+                  <SelectItem value="instagram"><span className="flex items-center gap-2"><FaInstagram className="text-[#E4405F]" /> Instagram</span></SelectItem>
+                  <SelectItem value="tiktok"><span className="flex items-center gap-2"><FaTiktok /> TikTok</span></SelectItem>
+                  <SelectItem value="youtube"><span className="flex items-center gap-2"><FaYoutube className="text-[#FF0000]" /> YouTube</span></SelectItem>
+                  <SelectItem value="twitter"><span className="flex items-center gap-2"><FaTwitter className="text-[#1DA1F2]" /> Twitter/X</span></SelectItem>
+                  <SelectItem value="linkedin"><span className="flex items-center gap-2"><FaLinkedin className="text-[#0A66C2]" /> LinkedIn</span></SelectItem>
+                  <SelectItem value="globe"><span className="flex items-center gap-2"><Globe className="w-4 h-4" /> Other</span></SelectItem>
                 </SelectContent>
               </Select>
             </div>
