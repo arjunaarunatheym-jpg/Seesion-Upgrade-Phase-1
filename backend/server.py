@@ -1814,6 +1814,9 @@ async def update_own_profile(profile_data: dict, request: Request, current_user:
         update_data["contact_email"] = profile_data["contact_email"]
     if "contact_phone" in profile_data:
         update_data["contact_phone"] = profile_data["contact_phone"]
+    # Social popup dismissed
+    if "social_popup_dismissed" in profile_data:
+        update_data["social_popup_dismissed"] = profile_data["social_popup_dismissed"]
     
     # Profile verification fields
     if "profile_verified" in profile_data:
