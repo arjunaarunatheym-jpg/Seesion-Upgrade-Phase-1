@@ -69,6 +69,17 @@ const FinanceDashboard = ({ user, onLogout }) => {
   });
   const [settingsLoading, setSettingsLoading] = useState(false);
   
+  // Social Media Links State
+  const [socialMediaLinks, setSocialMediaLinks] = useState([]);
+  const [showSocialMediaModal, setShowSocialMediaModal] = useState(false);
+  const [editingSocialMedia, setEditingSocialMedia] = useState(null);
+  const [socialMediaForm, setSocialMediaForm] = useState({
+    platform: '',
+    url: '',
+    icon: 'globe',
+    is_active: true
+  });
+  
   // Payment form state
   const [paymentForm, setPaymentForm] = useState({
     invoice_id: '',
