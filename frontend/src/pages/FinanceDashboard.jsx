@@ -3010,12 +3010,12 @@ const FinanceDashboard = ({ user, onLogout }) => {
                         <div key={index} className={`bg-white p-3 rounded border ${link.is_active ? 'border-pink-200' : 'border-gray-200 opacity-50'} flex justify-between items-center`}>
                           <div className="flex items-center gap-2">
                             <span className="text-xl">
-                              {link.icon === 'facebook' ? '📘' : 
-                               link.icon === 'instagram' ? '📷' : 
-                               link.icon === 'tiktok' ? '🎵' : 
-                               link.icon === 'youtube' ? '▶️' : 
-                               link.icon === 'twitter' ? '🐦' : 
-                               link.icon === 'linkedin' ? '💼' : '🌐'}
+                              {link.icon === 'facebook' ? <FaFacebook className="text-[#1877F2]" /> : 
+                               link.icon === 'instagram' ? <FaInstagram className="text-[#E4405F]" /> : 
+                               link.icon === 'tiktok' ? <FaTiktok className="text-black" /> : 
+                               link.icon === 'youtube' ? <FaYoutube className="text-[#FF0000]" /> : 
+                               link.icon === 'twitter' ? <FaTwitter className="text-[#1DA1F2]" /> : 
+                               link.icon === 'linkedin' ? <FaLinkedin className="text-[#0A66C2]" /> : <Globe className="text-gray-500" />}
                             </span>
                             <div>
                               <p className="font-medium text-sm">{link.platform}</p>
