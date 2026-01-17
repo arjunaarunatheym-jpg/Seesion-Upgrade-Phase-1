@@ -1041,6 +1041,8 @@ class CompanySettings(BaseModel):
     # Custom indemnity form upload
     indemnity_form_url: Optional[str] = None  # URL to uploaded custom indemnity form PDF
     indemnity_form_filename: Optional[str] = None  # Original filename
+    # Social media links - dynamic list
+    social_media_links: Optional[List[dict]] = None  # [{platform, url, icon, is_active}]
     updated_at: datetime = Field(default_factory=get_malaysia_time)
     updated_by: Optional[str] = None
 
