@@ -3277,6 +3277,75 @@ async def get_users(
             user['created_at'] = datetime.fromisoformat(user['created_at'])
     return users
 
+# Export participants with contact details (Admin only)
+# MUST be before /users/{user_id} to avoid route conflict
+@api_router.get("/users/export/participants")
+async def export_participants_csv(
+    session_id: Optional[str] = None,
+    company_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Export participant contact details to CSV - Admin only"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Finance can export participant data")
+    
+    # Build query
+    query = {"role": "participant"}
+    if company_id:
+        query["company_id"] = company_id
+    
+    # Get participants
+    participants = await db.users.find(query, {"_id": 0, "password": 0}).to_list(5000)
+    
+    # If session_id provided, filter to only that session's participants
+    if session_id:
+        session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+        if session:
+            session_participant_ids = set(session.get("participant_ids", []))
+            participants = [p for p in participants if p.get("id") in session_participant_ids]
+    
+    # Build CSV
+    import io
+    import csv
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Header
+    writer.writerow([
+        "Full Name", "IC Number", "Login Email", "Contact Email", "Contact Phone",
+        "Company", "Profile Verified", "Indemnity Accepted", "Created At"
+    ])
+    
+    # Get company names
+    company_ids = list(set(p.get("company_id") for p in participants if p.get("company_id")))
+    companies = await db.companies.find({"id": {"$in": company_ids}}, {"_id": 0}).to_list(500)
+    company_map = {c["id"]: c.get("name", "") for c in companies}
+    
+    # Data rows
+    for p in participants:
+        writer.writerow([
+            p.get("full_name", ""),
+            p.get("id_number", ""),
+            p.get("email", ""),
+            p.get("contact_email", ""),
+            p.get("contact_phone", ""),
+            company_map.get(p.get("company_id"), p.get("company_id", "")),
+            "Yes" if p.get("profile_verified") else "No",
+            "Yes" if p.get("indemnity_accepted") else "No",
+            p.get("created_at", "")[:10] if p.get("created_at") else ""
+        ])
+    
+    csv_content = output.getvalue()
+    output.close()
+    
+    from fastapi.responses import Response
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=participants_export.csv"}
+    )
+
 @api_router.get("/users/{user_id}", response_model=User)
 async def get_user(user_id: str, current_user: User = Depends(get_current_user)):
     # Allow access if: admin, supervisor, or the user themselves
