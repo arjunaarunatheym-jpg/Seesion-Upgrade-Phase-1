@@ -1672,7 +1672,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
   const filteredInvoices = statusFilter === 'all' 
     ? invoices 
     : statusFilter === 'pending' 
-      ? invoices.filter(inv => !['paid', 'cancelled'].includes(inv.status))
+      ? invoices.filter(inv => !['paid', 'cancelled', 'voided'].includes(inv.status))
       : statusFilter === 'draft'
         ? invoices.filter(inv => ['auto_draft', 'finance_review', 'draft'].includes(inv.status))
         : invoices.filter(inv => inv.status === statusFilter);
