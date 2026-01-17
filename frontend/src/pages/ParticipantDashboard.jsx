@@ -1455,15 +1455,10 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-2xl hover:scale-110 transition-transform"
+                  className="hover:scale-110 transition-transform"
                   title={link.platform}
                 >
-                  {link.icon === 'facebook' ? '📘' : 
-                   link.icon === 'instagram' ? '📷' : 
-                   link.icon === 'tiktok' ? '🎵' : 
-                   link.icon === 'youtube' ? '▶️' : 
-                   link.icon === 'twitter' ? '🐦' : 
-                   link.icon === 'linkedin' ? '💼' : '🌐'}
+                  <SocialIcon icon={link.icon} />
                 </a>
               ))}
             </div>
