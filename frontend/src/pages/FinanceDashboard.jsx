@@ -2981,6 +2981,64 @@ const FinanceDashboard = ({ user, onLogout }) => {
                   )}
                 </div>
 
+                {/* Social Media Links */}
+                <div className="p-4 bg-pink-50 rounded-lg space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="font-semibold text-pink-900">Social Media Links</h3>
+                      <p className="text-sm text-pink-700">Add your social media pages for participants to follow</p>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      onClick={() => {
+                        setEditingSocialMedia(null);
+                        setSocialMediaForm({ platform: '', url: '', icon: 'globe', is_active: true });
+                        setShowSocialMediaModal(true);
+                      }}
+                      data-testid="add-social-media-btn"
+                    >
+                      <Plus className="w-4 h-4 mr-1" /> Add Social Media
+                    </Button>
+                  </div>
+                  
+                  {socialMediaLinks.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-4">No social media links added yet.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {socialMediaLinks.map((link, index) => (
+                        <div key={index} className={`bg-white p-3 rounded border ${link.is_active ? 'border-pink-200' : 'border-gray-200 opacity-50'} flex justify-between items-center`}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">
+                              {link.icon === 'facebook' ? '📘' : 
+                               link.icon === 'instagram' ? '📷' : 
+                               link.icon === 'tiktok' ? '🎵' : 
+                               link.icon === 'youtube' ? '▶️' : 
+                               link.icon === 'twitter' ? '🐦' : 
+                               link.icon === 'linkedin' ? '💼' : '🌐'}
+                            </span>
+                            <div>
+                              <p className="font-medium text-sm">{link.platform}</p>
+                              <p className="text-xs text-gray-500 truncate max-w-[150px]">{link.url}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => {
+                              setEditingSocialMedia(index);
+                              setSocialMediaForm(link);
+                              setShowSocialMediaModal(true);
+                            }}>
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-600" onClick={() => handleDeleteSocialMedia(index)}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Bank Details */}
                 <div className="p-4 bg-green-50 rounded-lg space-y-4">
                   <h3 className="font-semibold text-green-900">Bank Details (for invoices)</h3>
