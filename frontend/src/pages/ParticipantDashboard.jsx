@@ -69,8 +69,12 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
       setTimeout(() => loadData(), 500);
       setTimeout(() => loadData(), 1500);
       setTimeout(() => loadData(), 3000);
+      // Show social media popup after feedback (if not dismissed before)
+      if (!user.social_popup_dismissed) {
+        setTimeout(() => setShowSocialPopup(true), 2000);
+      }
     }
-  }, [user.profile_verified, user.indemnity_accepted]);
+  }, [user.profile_verified, user.indemnity_accepted, user.social_popup_dismissed]);
   
   // Also reload when component becomes visible (tab focus)
   useEffect(() => {
