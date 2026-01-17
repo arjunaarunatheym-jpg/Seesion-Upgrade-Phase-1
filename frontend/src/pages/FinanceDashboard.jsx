@@ -407,8 +407,53 @@ const FinanceDashboard = ({ user, onLogout }) => {
     try {
       const response = await axiosInstance.get('/finance/company-settings');
       setCompanySettings(response.data);
+      setSocialMediaLinks(response.data.social_media_links || []);
     } catch (error) {
       console.error('Failed to load company settings');
+    }
+  };
+
+  // Social media link handlers
+  const handleSaveSocialMedia = async () => {
+    if (!socialMediaForm.platform.trim() || !socialMediaForm.url.trim()) {
+      toast.error('Platform name and URL are required');
+      return;
+    }
+    
+    let updatedLinks = [...socialMediaLinks];
+    if (editingSocialMedia !== null) {
+      updatedLinks[editingSocialMedia] = socialMediaForm;
+    } else {
+      updatedLinks.push(socialMediaForm);
+    }
+    
+    try {
+      await axiosInstance.put('/finance/company-settings', {
+        ...companySettings,
+        social_media_links: updatedLinks
+      });
+      setSocialMediaLinks(updatedLinks);
+      setShowSocialMediaModal(false);
+      setEditingSocialMedia(null);
+      setSocialMediaForm({ platform: '', url: '', icon: 'globe', is_active: true });
+      toast.success('Social media link saved');
+    } catch (error) {
+      toast.error('Failed to save social media link');
+    }
+  };
+
+  const handleDeleteSocialMedia = async (index) => {
+    if (!window.confirm('Delete this social media link?')) return;
+    const updatedLinks = socialMediaLinks.filter((_, i) => i !== index);
+    try {
+      await axiosInstance.put('/finance/company-settings', {
+        ...companySettings,
+        social_media_links: updatedLinks
+      });
+      setSocialMediaLinks(updatedLinks);
+      toast.success('Social media link deleted');
+    } catch (error) {
+      toast.error('Failed to delete');
     }
   };
 
