@@ -1805,6 +1805,11 @@ async def update_own_profile(profile_data: dict, request: Request, current_user:
         update_data["blood_type"] = profile_data["blood_type"]
     if "medical_conditions" in profile_data:
         update_data["medical_conditions"] = profile_data["medical_conditions"]
+    # Real contact details (participant provides their actual email/phone)
+    if "contact_email" in profile_data:
+        update_data["contact_email"] = profile_data["contact_email"]
+    if "contact_phone" in profile_data:
+        update_data["contact_phone"] = profile_data["contact_phone"]
     
     # Profile verification fields
     if "profile_verified" in profile_data:
