@@ -31,7 +31,12 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
   // First-time login states
   const [showVerificationDialog, setShowVerificationDialog] = useState(false);
   const [showIndemnityDialog, setShowIndemnityDialog] = useState(false);
-  const [verificationData, setVerificationData] = useState({ full_name: "", id_number: "" });
+  const [verificationData, setVerificationData] = useState({ 
+    full_name: "", 
+    id_number: "",
+    contact_email: "",
+    contact_phone: ""
+  });
   const [activeTab, setActiveTab] = useState("overview");
   const [companySettings, setCompanySettings] = useState({});
   const [currentTrainingSession, setCurrentTrainingSession] = useState(null);
@@ -47,7 +52,9 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
       // First time login, show verification
       setVerificationData({
         full_name: user.full_name || "",
-        id_number: user.id_number || ""
+        id_number: user.id_number || "",
+        contact_email: user.contact_email || "",
+        contact_phone: user.contact_phone || ""
       });
       setShowVerificationDialog(true);
     }
