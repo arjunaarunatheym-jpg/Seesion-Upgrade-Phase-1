@@ -10513,6 +10513,70 @@ async def create_replacement_invoice(
         "replaces_invoice_number": voided_invoice.get("invoice_number")
     }
 
+# Reverse voided invoice back to draft
+@api_router.post("/finance/invoices/{invoice_id}/reverse-void")
+async def reverse_voided_invoice(
+    invoice_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Reverse a voided invoice back to draft status - Admin/Finance only"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Finance can reverse voided invoices")
+    
+    # Get the voided invoice
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    if invoice.get("status") != "voided":
+        raise HTTPException(status_code=400, detail="Only voided invoices can be reversed")
+    
+    # Create audit trail entry
+    await create_audit_trail_entry(
+        action="Invoice Void Reversed",
+        record_reference=f"{invoice.get('company_name')} - {invoice.get('invoice_number')}",
+        entity_type="invoice",
+        entity_id=invoice_id,
+        changed_by=current_user,
+        reason="Void reversed by admin",
+        field_changed="status",
+        from_value="voided",
+        to_value="auto_draft"
+    )
+    
+    # Reverse the void - set back to draft and clear void fields
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {
+            "$set": {
+                "status": "auto_draft",
+                "updated_at": get_malaysia_time().isoformat()
+            },
+            "$unset": {
+                "void_reason": "",
+                "voided_at": "",
+                "voided_by": "",
+                "approved_at": "",
+                "approved_by": "",
+                "issued_at": "",
+                "issued_by": ""
+            }
+        }
+    )
+    
+    # Update session invoice_status if linked
+    if invoice.get("session_id"):
+        await db.sessions.update_one(
+            {"id": invoice.get("session_id")},
+            {"$set": {"invoice_status": "auto_draft"}}
+        )
+    
+    return {
+        "message": "Invoice void reversed successfully",
+        "invoice_number": invoice.get("invoice_number"),
+        "new_status": "auto_draft"
+    }
+
 # Edit Paid Invoice
 class EditPaidInvoiceRequest(BaseModel):
     bill_to_name: Optional[str] = None
