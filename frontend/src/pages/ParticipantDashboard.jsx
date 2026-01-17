@@ -428,12 +428,34 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
       try {
         const response = await axiosInstance.get("/finance/company-settings");
         setCompanySettings(response.data);
+        // Load active social media links
+        const activeLinks = (response.data.social_media_links || []).filter(l => l.is_active);
+        setSocialMediaLinks(activeLinks);
       } catch (error) {
         console.log("Could not load company settings");
       }
     };
     loadCompanySettings();
   }, []);
+
+  // Handle social popup dismiss
+  const handleDismissSocialPopup = async (dontShowAgain) => {
+    setShowSocialPopup(false);
+    if (dontShowAgain) {
+      try {
+        await axiosInstance.put("/users/profile", { social_popup_dismissed: true });
+      } catch (error) {
+        console.log("Could not save preference");
+      }
+    }
+  };
+
+  // Trigger social popup after feedback (called from feedback submission)
+  const triggerSocialPopupAfterFeedback = () => {
+    if (!user.social_popup_dismissed && socialMediaLinks.length > 0) {
+      setTimeout(() => setShowSocialPopup(true), 1000);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
