@@ -1668,6 +1668,18 @@ const FinanceDashboard = ({ user, onLogout }) => {
     }
   };
 
+  // Reverse voided invoice back to draft
+  const handleReverseVoidedInvoice = async (invoiceId) => {
+    if (!window.confirm('Reverse this voided invoice back to Draft status? This will clear all void information.')) return;
+    try {
+      const response = await axiosInstance.post(`/finance/invoices/${invoiceId}/reverse-void`);
+      toast.success(`Invoice ${response.data.invoice_number} reversed to Draft`);
+      loadInvoices();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to reverse voided invoice');
+    }
+  };
+
   // Filter invoices based on status
   const filteredInvoices = statusFilter === 'all' 
     ? invoices 
