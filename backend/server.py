@@ -306,7 +306,7 @@ CHECKLIST_PHOTOS_DIR.mkdir(exist_ok=True)
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    email: Optional[str] = None  # Optional - auto-generated for participants
+    email: Optional[str] = None  # Optional - auto-generated for participants (used for login)
     full_name: str
     id_number: str
     role: str
@@ -314,6 +314,9 @@ class User(BaseModel):
     company_id: Optional[str] = None
     location: Optional[str] = None
     phone_number: Optional[str] = None
+    # Real contact details (collected from participant)
+    contact_email: Optional[str] = None  # Real email provided by participant
+    contact_phone: Optional[str] = None  # Real phone provided by participant
     created_at: datetime = Field(default_factory=get_malaysia_time)
     is_active: bool = True
     # Profile verification fields for participants
