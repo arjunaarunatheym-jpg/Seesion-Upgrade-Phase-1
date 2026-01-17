@@ -1503,7 +1503,7 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
                 id="dont-show-again"
                 className="rounded"
               />
-              <label htmlFor="dont-show-again" className="text-sm text-gray-600">Don't show this again</label>
+              <label htmlFor="dont-show-again" className="text-sm text-gray-600">Don&apos;t show this again</label>
             </div>
             <div className="flex gap-2 justify-center">
               <Button variant="outline" onClick={() => {
