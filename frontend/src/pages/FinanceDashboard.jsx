@@ -2970,10 +2970,20 @@ const FinanceDashboard = ({ user, onLogout }) => {
                           </div>
                           <div className="flex gap-1 ml-2">
                             <Button variant="ghost" size="sm" onClick={() => openEditBillingParty(party)} data-testid={`edit-billing-party-${party.id}`}>
-                              <Edit className="w-3 h-3" />
+                              <Edit className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => handleDeleteBillingParty(party.id)} data-testid={`delete-billing-party-${party.id}`}>
-                              <X className="w-3 h-3" />
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50" 
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteBillingParty(party.id);
+                              }} 
+                              data-testid={`delete-billing-party-${party.id}`}
+                            >
+                              <X className="w-4 h-4" />
                             </Button>
                           </div>
                         </div>
