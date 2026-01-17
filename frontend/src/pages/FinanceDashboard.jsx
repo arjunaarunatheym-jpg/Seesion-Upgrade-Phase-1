@@ -4340,6 +4340,67 @@ const FinanceDashboard = ({ user, onLogout }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Social Media Modal */}
+      <Dialog open={showSocialMediaModal} onOpenChange={setShowSocialMediaModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingSocialMedia !== null ? 'Edit Social Media Link' : 'Add Social Media Link'}</DialogTitle>
+            <DialogDescription>Add your social media page for participants to follow</DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Platform Name *</Label>
+              <Input
+                value={socialMediaForm.platform}
+                onChange={(e) => setSocialMediaForm({...socialMediaForm, platform: e.target.value})}
+                placeholder="e.g., Facebook, Instagram, TikTok"
+              />
+            </div>
+            <div>
+              <Label>URL *</Label>
+              <Input
+                value={socialMediaForm.url}
+                onChange={(e) => setSocialMediaForm({...socialMediaForm, url: e.target.value})}
+                placeholder="https://facebook.com/yourpage"
+              />
+            </div>
+            <div>
+              <Label>Icon</Label>
+              <Select value={socialMediaForm.icon} onValueChange={(v) => setSocialMediaForm({...socialMediaForm, icon: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="facebook">📘 Facebook</SelectItem>
+                  <SelectItem value="instagram">📷 Instagram</SelectItem>
+                  <SelectItem value="tiktok">🎵 TikTok</SelectItem>
+                  <SelectItem value="youtube">▶️ YouTube</SelectItem>
+                  <SelectItem value="twitter">🐦 Twitter/X</SelectItem>
+                  <SelectItem value="linkedin">💼 LinkedIn</SelectItem>
+                  <SelectItem value="globe">🌐 Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="social-active"
+                checked={socialMediaForm.is_active}
+                onChange={(e) => setSocialMediaForm({...socialMediaForm, is_active: e.target.checked})}
+                className="rounded"
+              />
+              <Label htmlFor="social-active">Active (visible to participants)</Label>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowSocialMediaModal(false)}>Cancel</Button>
+            <Button onClick={handleSaveSocialMedia}>{editingSocialMedia !== null ? 'Update' : 'Add'}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
