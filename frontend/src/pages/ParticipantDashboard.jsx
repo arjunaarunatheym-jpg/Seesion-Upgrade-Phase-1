@@ -894,6 +894,38 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
                 )}
               </CardContent>
             </Card>
+
+            {/* Social Media Section on Certificates Tab */}
+            {socialMediaLinks.length > 0 && (
+              <Card className="mt-4 bg-gradient-to-r from-pink-50 to-purple-50">
+                <CardContent className="py-4">
+                  <p className="text-center text-sm text-gray-700 mb-3">
+                    🎉 Stay connected with us for more driving tips and updates!
+                  </p>
+                  <div className="flex justify-center gap-4">
+                    {socialMediaLinks.map((link, index) => (
+                      <a
+                        key={index}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center gap-1 hover:scale-110 transition-transform p-2 bg-white rounded-lg shadow-sm"
+                      >
+                        <span className="text-2xl">
+                          {link.icon === 'facebook' ? '📘' : 
+                           link.icon === 'instagram' ? '📷' : 
+                           link.icon === 'tiktok' ? '🎵' : 
+                           link.icon === 'youtube' ? '▶️' : 
+                           link.icon === 'twitter' ? '🐦' : 
+                           link.icon === 'linkedin' ? '💼' : '🌐'}
+                        </span>
+                        <span className="text-xs text-gray-600">{link.platform}</span>
+                      </a>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* My Details */}
