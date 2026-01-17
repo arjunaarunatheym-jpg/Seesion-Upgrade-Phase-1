@@ -40,6 +40,8 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
   const [activeTab, setActiveTab] = useState("overview");
   const [companySettings, setCompanySettings] = useState({});
   const [currentTrainingSession, setCurrentTrainingSession] = useState(null);
+  const [showSocialPopup, setShowSocialPopup] = useState(false);
+  const [socialMediaLinks, setSocialMediaLinks] = useState([]);
   
   // Tab restrictions removed - all tabs accessible
 
