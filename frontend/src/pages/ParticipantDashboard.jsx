@@ -9,8 +9,23 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { LogOut, FileText, ClipboardCheck, MessageSquare, Award, Play, Users, Clock, Download, Eye, Settings, Lock, AlertTriangle, Shield } from "lucide-react";
+import { LogOut, FileText, ClipboardCheck, MessageSquare, Award, Play, Users, Clock, Download, Eye, Settings, Lock, AlertTriangle, Shield, Globe } from "lucide-react";
+import { FaFacebook, FaInstagram, FaTiktok, FaYoutube, FaTwitter, FaLinkedin } from 'react-icons/fa';
 import IndemnityForm from "../components/IndemnityForm";
+
+// Helper function to render social media icon
+const SocialIcon = ({ icon, className = "" }) => {
+  const iconClass = `text-2xl ${className}`;
+  switch(icon) {
+    case 'facebook': return <FaFacebook className={`${iconClass} text-[#1877F2]`} />;
+    case 'instagram': return <FaInstagram className={`${iconClass} text-[#E4405F]`} />;
+    case 'tiktok': return <FaTiktok className={`${iconClass} text-black`} />;
+    case 'youtube': return <FaYoutube className={`${iconClass} text-[#FF0000]`} />;
+    case 'twitter': return <FaTwitter className={`${iconClass} text-[#1DA1F2]`} />;
+    case 'linkedin': return <FaLinkedin className={`${iconClass} text-[#0A66C2]`} />;
+    default: return <Globe className={`w-6 h-6 text-gray-500 ${className}`} />;
+  }
+};
 
 const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
   const navigate = useNavigate();
