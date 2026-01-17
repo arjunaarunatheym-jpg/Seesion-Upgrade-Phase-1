@@ -335,6 +335,8 @@ class User(BaseModel):
     indemnity_training_id: Optional[str] = None  # Training session ID at signing
     indemnity_trainer_name: Optional[str] = None  # Trainer name at signing
     indemnity_locked: Optional[bool] = False  # Once submitted, record is locked
+    # Social media popup tracking
+    social_popup_dismissed: Optional[bool] = False  # True after user dismisses social popup
 
 class UserCreate(BaseModel):
     email: Optional[str] = None  # Changed from EmailStr to str - no validation, auto-generated if needed
