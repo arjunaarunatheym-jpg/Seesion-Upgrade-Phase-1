@@ -6426,13 +6426,16 @@ async def get_assigned_participants(session_id: str, current_user: User = Depend
         return []
     
     # Calculate start index for this trainer
-    # Account for remainder distribution (first N trainers get +1)
+    # Remainder goes to LAST trainers (not first)
+    # E.g., 16 participants, 3 trainers = 5, 5, 6 (last gets extra)
+    remainder_start_index = total_trainers - remainder  # Index where remainder starts
+    
     start_index = 0
     for i in range(current_trainer_index):
-        start_index += participants_per_trainer + (1 if i < remainder else 0)
+        start_index += participants_per_trainer + (1 if i >= remainder_start_index else 0)
     
     # Calculate assigned count for this trainer
-    assigned_count = participants_per_trainer + (1 if current_trainer_index < remainder else 0)
+    assigned_count = participants_per_trainer + (1 if current_trainer_index >= remainder_start_index else 0)
     
     end_index = start_index + assigned_count
     assigned_participant_ids = participant_ids[start_index:end_index]
