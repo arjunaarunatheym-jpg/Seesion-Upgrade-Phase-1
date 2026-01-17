@@ -13,7 +13,7 @@ import {
   DollarSign, FileText, CreditCard, TrendingUp, 
   CheckCircle, Clock, AlertCircle, LogOut, RefreshCw,
   Check, X, Plus, FileX, Receipt, Edit, Printer, Settings, Download, FileSpreadsheet, Users,
-  BarChart3, Wallet, Lock, Unlock
+  BarChart3, Wallet, Lock, Unlock, RotateCcw
 } from 'lucide-react';
 import HRModule from '../components/HRModule';
 import ProfitLossLedger from '../components/ProfitLossLedger';
