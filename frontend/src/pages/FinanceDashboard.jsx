@@ -13,8 +13,9 @@ import {
   DollarSign, FileText, CreditCard, TrendingUp, 
   CheckCircle, Clock, AlertCircle, LogOut, RefreshCw,
   Check, X, Plus, FileX, Receipt, Edit, Printer, Settings, Download, FileSpreadsheet, Users,
-  BarChart3, Wallet, Lock, Unlock, RotateCcw
+  BarChart3, Wallet, Lock, Unlock, RotateCcw, Globe
 } from 'lucide-react';
+import { FaFacebook, FaInstagram, FaTiktok, FaYoutube, FaTwitter, FaLinkedin } from 'react-icons/fa';
 import HRModule from '../components/HRModule';
 import ProfitLossLedger from '../components/ProfitLossLedger';
 import PettyCash from '../components/PettyCash';
