@@ -3875,16 +3875,43 @@ const AdminDashboard = ({ user, onLogout }) => {
                     <CardTitle>All Users</CardTitle>
                     <CardDescription>View all system users grouped by company. Select users to bulk delete.</CardDescription>
                   </div>
-                  {selectedUsers.length > 0 && (
+                  <div className="flex gap-2">
                     <Button 
-                      variant="destructive" 
-                      onClick={() => setBulkDeleteDialogOpen(true)}
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          const response = await axiosInstance.get('/users/export/participants', {
+                            responseType: 'blob'
+                          });
+                          const url = window.URL.createObjectURL(new Blob([response.data]));
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.setAttribute('download', `participants_export_${new Date().toISOString().split('T')[0]}.csv`);
+                          document.body.appendChild(link);
+                          link.click();
+                          link.remove();
+                          toast.success('Participant data exported');
+                        } catch (error) {
+                          toast.error('Failed to export data');
+                        }
+                      }}
                       className="flex items-center gap-2"
+                      data-testid="export-participants-btn"
                     >
-                      <Trash2 className="w-4 h-4" />
-                      Delete Selected ({selectedUsers.length})
+                      <Download className="w-4 h-4" />
+                      Export Participants
                     </Button>
-                  )}
+                    {selectedUsers.length > 0 && (
+                      <Button 
+                        variant="destructive" 
+                        onClick={() => setBulkDeleteDialogOpen(true)}
+                        className="flex items-center gap-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Delete Selected ({selectedUsers.length})
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
