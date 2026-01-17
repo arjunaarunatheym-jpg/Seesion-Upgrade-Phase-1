@@ -2327,17 +2327,30 @@ const FinanceDashboard = ({ user, onLogout }) => {
                                   </Button>
                                 )}
                                 {invoice.status === 'voided' && (
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
-                                    className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                                    onClick={() => handleCreateReplacementInvoice(invoice.id)}
-                                    title="Create Replacement Invoice"
-                                    data-testid={`create-replacement-${invoice.id}`}
-                                  >
-                                    <Plus className="w-4 h-4 mr-1" />
-                                    Replace
-                                  </Button>
+                                  <>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                                      onClick={() => handleReverseVoidedInvoice(invoice.id)}
+                                      title="Reverse Void (back to Draft)"
+                                      data-testid={`reverse-void-${invoice.id}`}
+                                    >
+                                      <RotateCcw className="w-4 h-4 mr-1" />
+                                      Undo
+                                    </Button>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                                      onClick={() => handleCreateReplacementInvoice(invoice.id)}
+                                      title="Create Replacement Invoice"
+                                      data-testid={`create-replacement-${invoice.id}`}
+                                    >
+                                      <Plus className="w-4 h-4 mr-1" />
+                                      Replace
+                                    </Button>
+                                  </>
                                 )}
                               </div>
                             </td>
