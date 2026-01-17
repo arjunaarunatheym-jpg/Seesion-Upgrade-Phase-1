@@ -1649,10 +1649,23 @@ const FinanceDashboard = ({ user, onLogout }) => {
       approved: { color: 'bg-blue-500', label: 'Approved' },
       issued: { color: 'bg-purple-500', label: 'Issued' },
       paid: { color: 'bg-green-500', label: 'Paid' },
-      cancelled: { color: 'bg-red-500', label: 'Cancelled' }
+      cancelled: { color: 'bg-red-500', label: 'Cancelled' },
+      voided: { color: 'bg-red-700', label: 'VOIDED' }
     };
     const config = statusConfig[status] || { color: 'bg-gray-400', label: status };
     return <Badge className={`${config.color} text-white`}>{config.label}</Badge>;
+  };
+
+  // Create replacement invoice for voided invoice
+  const handleCreateReplacementInvoice = async (invoiceId) => {
+    if (!window.confirm('Create a replacement invoice? This will generate a new invoice number and copy all data from the voided invoice.')) return;
+    try {
+      const response = await axiosInstance.post(`/finance/invoices/${invoiceId}/create-replacement`);
+      toast.success(`Replacement invoice created: ${response.data.new_invoice_number}`);
+      loadInvoices();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to create replacement invoice');
+    }
   };
 
   // Filter invoices based on status
