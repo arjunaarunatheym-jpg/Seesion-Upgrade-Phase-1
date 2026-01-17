@@ -441,15 +441,15 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-blue-600" />
-              Verify Your Identity
+              Verify Your Details
             </DialogTitle>
             <DialogDescription>
-              Please verify your name and IC number to continue.
+              Please verify your information and provide your contact details.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="verify-name">Full Name (as per IC)</Label>
+              <Label htmlFor="verify-name">Full Name (as per IC) *</Label>
               <Input
                 id="verify-name"
                 value={verificationData.full_name}
@@ -458,13 +458,38 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="verify-ic">IC Number</Label>
+              <Label htmlFor="verify-ic">IC Number *</Label>
               <Input
                 id="verify-ic"
                 value={verificationData.id_number}
                 onChange={(e) => setVerificationData({ ...verificationData, id_number: e.target.value })}
                 placeholder="e.g., 901231-14-5678"
               />
+            </div>
+            <div className="border-t pt-4 mt-4">
+              <p className="text-sm text-gray-600 mb-3">Your Contact Information (for official communications)</p>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="verify-email">Personal Email</Label>
+                  <Input
+                    id="verify-email"
+                    type="email"
+                    value={verificationData.contact_email}
+                    onChange={(e) => setVerificationData({ ...verificationData, contact_email: e.target.value })}
+                    placeholder="your.email@example.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="verify-phone">Phone Number</Label>
+                  <Input
+                    id="verify-phone"
+                    type="tel"
+                    value={verificationData.contact_phone}
+                    onChange={(e) => setVerificationData({ ...verificationData, contact_phone: e.target.value })}
+                    placeholder="e.g., 012-345 6789"
+                  />
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>
