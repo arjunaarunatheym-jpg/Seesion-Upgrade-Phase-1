@@ -10423,6 +10423,96 @@ async def void_invoice(
     
     return {"message": "Invoice voided successfully", "invoice_number": invoice.get("invoice_number")}
 
+# Create replacement invoice for voided invoice
+@api_router.post("/finance/invoices/{invoice_id}/create-replacement")
+async def create_replacement_invoice(
+    invoice_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a replacement invoice for a voided invoice - only available for voided invoices"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Finance can create replacement invoices")
+    
+    # Get the voided invoice
+    voided_invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not voided_invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    if voided_invoice.get("status") != "voided":
+        raise HTTPException(status_code=400, detail="Replacement invoice can only be created for voided invoices")
+    
+    # Check if replacement already exists
+    existing_replacement = await db.invoices.find_one({
+        "replaces_invoice_id": invoice_id,
+        "status": {"$ne": "voided"}
+    }, {"_id": 0})
+    if existing_replacement:
+        raise HTTPException(status_code=400, detail=f"A replacement invoice already exists: {existing_replacement.get('invoice_number')}")
+    
+    # Generate new invoice number
+    new_invoice_number = await generate_invoice_number()
+    
+    # Create replacement invoice copying data from voided one
+    replacement_invoice = {
+        "id": str(uuid.uuid4()),
+        "invoice_number": new_invoice_number,
+        "session_id": voided_invoice.get("session_id"),
+        "company_id": voided_invoice.get("company_id"),
+        "company_name": voided_invoice.get("company_name"),
+        "programme_name": voided_invoice.get("programme_name"),
+        "training_dates": voided_invoice.get("training_dates"),
+        "venue": voided_invoice.get("venue"),
+        "pax": voided_invoice.get("pax"),
+        "line_items": voided_invoice.get("line_items", []),
+        "subtotal": voided_invoice.get("subtotal", 0),
+        "tax_rate": voided_invoice.get("tax_rate", 0),
+        "tax_amount": voided_invoice.get("tax_amount", 0),
+        "total_amount": voided_invoice.get("total_amount", 0),
+        "discount": voided_invoice.get("discount", 0),
+        "mobilisation_fee": voided_invoice.get("mobilisation_fee", 0),
+        "rounding": voided_invoice.get("rounding", 0),
+        "pricing_type": voided_invoice.get("pricing_type"),
+        "bill_to_name": voided_invoice.get("bill_to_name"),
+        "bill_to_address": voided_invoice.get("bill_to_address"),
+        "bill_to_reg_no": voided_invoice.get("bill_to_reg_no"),
+        "your_reference": voided_invoice.get("your_reference", ""),
+        "status": "auto_draft",
+        "replaces_invoice_id": invoice_id,
+        "replaces_invoice_number": voided_invoice.get("invoice_number"),
+        "created_at": get_malaysia_time().isoformat(),
+        "updated_at": get_malaysia_time().isoformat(),
+        "version": 1
+    }
+    
+    await db.invoices.insert_one(replacement_invoice)
+    
+    # Update session with new invoice reference
+    if voided_invoice.get("session_id"):
+        await db.sessions.update_one(
+            {"id": voided_invoice.get("session_id")},
+            {"$set": {
+                "invoice_id": replacement_invoice["id"],
+                "invoice_number": new_invoice_number,
+                "invoice_status": "auto_draft"
+            }}
+        )
+    
+    # Log the action
+    await log_finance_action(
+        entity_type="invoice",
+        entity_id=replacement_invoice["id"],
+        action="created",
+        changed_by=current_user.id,
+        after_value={"invoice_number": new_invoice_number, "replaces": voided_invoice.get("invoice_number")}
+    )
+    
+    return {
+        "message": "Replacement invoice created successfully",
+        "new_invoice_id": replacement_invoice["id"],
+        "new_invoice_number": new_invoice_number,
+        "replaces_invoice_number": voided_invoice.get("invoice_number")
+    }
+
 # Edit Paid Invoice
 class EditPaidInvoiceRequest(BaseModel):
     bill_to_name: Optional[str] = None
