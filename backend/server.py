@@ -13640,9 +13640,9 @@ async def get_profit_loss_by_programme(
         except:
             pass
     
-    # Process marketing commissions
+    # Process marketing commissions - include pending for accrual accounting
     marketing_comms = await db.marketing_commissions.find({
-        "status": {"$in": ["approved", "paid"]}
+        "status": {"$in": ["pending", "approved", "paid"]}
     }, {"_id": 0}).to_list(10000)
     for mc in marketing_comms:
         try:
