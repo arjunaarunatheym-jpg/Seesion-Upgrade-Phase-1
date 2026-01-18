@@ -690,6 +690,23 @@ const AssistantAdminDashboard = ({ user, onLogout }) => {
                           <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
                         </label>
                       </div>
+
+                      {/* Clock Out */}
+                      <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                        <div>
+                          <p className="font-semibold text-gray-900">Clock Out</p>
+                          <p className="text-sm text-gray-600">Release clock out for participants</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={sessionAccess.some(a => a.can_clock_out)}
+                            onChange={(e) => handleToggleAccess('clock_out', e.target.checked)}
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
                     </div>
 
                     {/* Current Status */}
@@ -698,7 +715,7 @@ const AssistantAdminDashboard = ({ user, onLogout }) => {
                         <CardTitle className="text-base">Current Access Status</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                           <div className="flex items-center justify-between">
                             <span>Pre-Test:</span>
                             <span className={`font-medium ${sessionAccess.some(a => a.can_access_pre_test) ? 'text-green-600' : 'text-red-600'}`}>
@@ -715,6 +732,12 @@ const AssistantAdminDashboard = ({ user, onLogout }) => {
                             <span>Feedback:</span>
                             <span className={`font-medium ${sessionAccess.some(a => a.can_access_feedback) ? 'text-green-600' : 'text-red-600'}`}>
                               {sessionAccess.some(a => a.can_access_feedback) ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Clock Out:</span>
+                            <span className={`font-medium ${sessionAccess.some(a => a.can_clock_out) ? 'text-green-600' : 'text-red-600'}`}>
+                              {sessionAccess.some(a => a.can_clock_out) ? 'Enabled' : 'Disabled'}
                             </span>
                           </div>
                         </div>
@@ -740,6 +763,9 @@ const AssistantAdminDashboard = ({ user, onLogout }) => {
                               </Badge>
                               <Badge className={access.can_access_feedback ? 'bg-purple-500' : 'bg-gray-300'}>
                                 Feedback {access.can_access_feedback ? '✓' : '✗'}
+                              </Badge>
+                              <Badge className={access.can_clock_out ? 'bg-blue-500' : 'bg-gray-300'}>
+                                Clock Out {access.can_clock_out ? '✓' : '✗'}
                               </Badge>
                             </div>
                           </div>
