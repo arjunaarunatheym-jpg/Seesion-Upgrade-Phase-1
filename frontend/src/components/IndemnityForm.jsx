@@ -142,18 +142,18 @@ const IndemnityForm = ({
           style={{ maxHeight: 'calc(95vh - 300px)' }}
         >
           {/* Auto-filled Participant Info */}
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
-              <UserCheck className="w-5 h-5" />
+          <div className="bg-blue-50 p-3 sm:p-4 rounded-lg border border-blue-200">
+            <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2 text-sm sm:text-base">
+              <UserCheck className="w-4 h-4 sm:w-5 sm:h-5" />
               Participant Information / Maklumat Peserta
             </h3>
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
               <div><span className="text-gray-600">Full Name:</span> <strong>{participant?.full_name || '-'}</strong></div>
               <div><span className="text-gray-600">NRIC/Passport:</span> <strong>{participant?.id_number || '-'}</strong></div>
-              <div><span className="text-gray-600">Contact:</span> <strong>{participant?.phone_number || '-'}</strong></div>
-              <div><span className="text-gray-600">Email:</span> <strong>{participant?.email || '-'}</strong></div>
+              <div><span className="text-gray-600">Contact:</span> <strong>{participant?.contact_phone || participant?.phone_number || '-'}</strong></div>
+              <div className="break-all"><span className="text-gray-600">Email:</span> <strong>{participant?.contact_email || participant?.email || '-'}</strong></div>
               {participant?.company_name && (
-                <div className="col-span-2"><span className="text-gray-600">Employer:</span> <strong>{participant.company_name}</strong></div>
+                <div className="col-span-1 sm:col-span-2"><span className="text-gray-600">Employer:</span> <strong>{participant.company_name}</strong></div>
               )}
             </div>
           </div>
