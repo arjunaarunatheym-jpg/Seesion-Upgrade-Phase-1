@@ -698,7 +698,7 @@ const TrainerDashboard = ({ user, onLogout }) => {
                         <CardTitle className="text-base">Current Access Status</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                           <div className="flex items-center justify-between">
                             <span>Pre-Test:</span>
                             <span className={`font-medium ${sessionAccess.some(a => a.can_access_pre_test) ? 'text-green-600' : 'text-red-600'}`}>
@@ -715,6 +715,12 @@ const TrainerDashboard = ({ user, onLogout }) => {
                             <span>Feedback:</span>
                             <span className={`font-medium ${sessionAccess.some(a => a.can_access_feedback) ? 'text-green-600' : 'text-red-600'}`}>
                               {sessionAccess.some(a => a.can_access_feedback) ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Clock Out:</span>
+                            <span className={`font-medium ${sessionAccess.some(a => a.can_clock_out) ? 'text-green-600' : 'text-red-600'}`}>
+                              {sessionAccess.some(a => a.can_clock_out) ? 'Enabled' : 'Disabled'}
                             </span>
                           </div>
                         </div>
