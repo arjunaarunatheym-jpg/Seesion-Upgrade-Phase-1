@@ -434,6 +434,10 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
       }
       
       toast.success("Welcome! Your indemnity form has been signed and locked.");
+      
+      // Redirect to My Details tab after indemnity submission
+      setActiveTab("details");
+      
       loadData();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to accept indemnity");
