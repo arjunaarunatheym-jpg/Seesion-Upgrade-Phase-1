@@ -1061,6 +1061,9 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
                                 {!attendance.clock_in && (
                                   <span className="ml-2 text-xs text-gray-500">(Clock in first)</span>
                                 )}
+                                {attendance.clock_in && !canClockOut && !attendance.clock_out && (
+                                  <span className="ml-2 text-xs text-orange-500">(Not yet released by coordinator)</span>
+                                )}
                               </label>
                             </div>
                           </div>
