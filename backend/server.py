@@ -529,6 +529,7 @@ class UpdateParticipantAccess(BaseModel):
     can_access_post_test: Optional[bool] = None
     can_access_checklist: Optional[bool] = None
     can_access_feedback: Optional[bool] = None
+    can_clock_out: Optional[bool] = None
 
 class TestQuestion(BaseModel):
     question: str
