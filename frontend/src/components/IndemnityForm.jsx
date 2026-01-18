@@ -90,20 +90,21 @@ const IndemnityForm = ({
 
   // Section checkbox component
   const SectionCheckbox = ({ id, label, checked, onChange }) => (
-    <div className="flex items-center space-x-3 py-2 px-3 bg-white rounded border hover:bg-gray-50">
+    <div className="flex items-center space-x-2 sm:space-x-3 py-2 px-2 sm:px-3 bg-white rounded border hover:bg-gray-50">
       <Checkbox 
         id={id}
         checked={checked}
         onCheckedChange={onChange}
         disabled={!hasScrolledToBottom}
+        className="h-4 w-4 sm:h-5 sm:w-5"
       />
       <label 
         htmlFor={id}
-        className={`text-sm font-medium cursor-pointer ${!hasScrolledToBottom ? 'text-gray-400' : 'text-gray-700'}`}
+        className={`text-xs sm:text-sm font-medium cursor-pointer flex-1 ${!hasScrolledToBottom ? 'text-gray-400' : 'text-gray-700'}`}
       >
         {label}
       </label>
-      {checked && <CheckCircle className="w-4 h-4 text-green-500 ml-auto" />}
+      {checked && <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />}
     </div>
   );
 
