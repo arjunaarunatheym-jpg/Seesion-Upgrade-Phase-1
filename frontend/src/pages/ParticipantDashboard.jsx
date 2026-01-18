@@ -1016,7 +1016,7 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
 
                             {/* Clock Out Checkbox */}
                             <div className={`flex items-center gap-3 p-3 rounded-lg border ${
-                              attendance.clock_in 
+                              attendance.clock_in && canClockOut
                                 ? 'bg-blue-50 border-blue-200' 
                                 : 'bg-gray-100 border-gray-200 opacity-50'
                             }`}>
@@ -1025,15 +1025,15 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
                                 id={`clock-out-${session.id}`}
                                 checked={!!attendance.clock_out}
                                 onChange={() => {
-                                  if (attendance.clock_in && !attendance.clock_out) {
+                                  if (attendance.clock_in && !attendance.clock_out && canClockOut) {
                                     handleClockOut(session.id);
                                   }
                                 }}
-                                disabled={!attendance.clock_in}
+                                disabled={!attendance.clock_in || !canClockOut}
                                 className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                                 data-testid={`clock-out-${session.id}`}
                               />
-                              <label htmlFor={`clock-out-${session.id}`} className={`flex-1 ${attendance.clock_in ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                              <label htmlFor={`clock-out-${session.id}`} className={`flex-1 ${attendance.clock_in && canClockOut ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
                                 <span className="font-medium text-gray-900">Clock Out</span>
                                 {attendance.clock_out && (
                                   <span className="ml-2 text-sm text-blue-600">
