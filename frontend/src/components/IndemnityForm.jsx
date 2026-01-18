@@ -110,26 +110,26 @@ const IndemnityForm = ({
   return (
     <Dialog open={open} onOpenChange={() => {}}>
       <DialogContent 
-        className="sm:max-w-3xl max-h-[95vh] overflow-hidden flex flex-col" 
+        className="w-[95vw] sm:max-w-3xl max-h-[95vh] overflow-hidden flex flex-col p-3 sm:p-6" 
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Shield className="w-6 h-6 text-blue-600" />
+          <DialogTitle className="flex items-center gap-2 text-base sm:text-xl">
+            <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
             PARTICIPANT INDEMNITY & DECLARATION
           </DialogTitle>
-          <DialogDescription className="text-base">
+          <DialogDescription className="text-sm sm:text-base">
             AKUAN & INDEMNITI PESERTA
           </DialogDescription>
         </DialogHeader>
 
         {/* Scroll indicator */}
         {!hasScrolledToBottom && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2 flex-shrink-0">
-            <AlertTriangle className="w-5 h-5 text-amber-600" />
-            <span className="text-sm text-amber-800">
-              Please scroll to the bottom to read the entire form before accepting
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 sm:p-3 flex items-center gap-2 flex-shrink-0">
+            <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600 flex-shrink-0" />
+            <span className="text-xs sm:text-sm text-amber-800">
+              Please scroll to read the entire form before accepting
             </span>
           </div>
         )}
@@ -138,8 +138,8 @@ const IndemnityForm = ({
         <div 
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto space-y-6 pr-2"
-          style={{ maxHeight: 'calc(95vh - 300px)' }}
+          className="flex-1 overflow-y-auto space-y-4 sm:space-y-6 pr-1 sm:pr-2"
+          style={{ maxHeight: 'calc(95vh - 280px)' }}
         >
           {/* Auto-filled Participant Info */}
           <div className="bg-blue-50 p-3 sm:p-4 rounded-lg border border-blue-200">
