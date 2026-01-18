@@ -8,7 +8,7 @@ import requests
 import json
 from datetime import datetime
 
-BASE_URL = "https://vendor-billing-hub.preview.emergentagent.com/api"
+BASE_URL = "https://financeflow-209.preview.emergentagent.com/api"
 ADMIN_EMAIL = "arjuna@mddrc.com.my"
 ADMIN_PASSWORD = "Dana102229"
 

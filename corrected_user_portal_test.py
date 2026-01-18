@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import uuid
 
 # Configuration
-BASE_URL = "https://vendor-billing-hub.preview.emergentagent.com/api"
+BASE_URL = "https://financeflow-209.preview.emergentagent.com/api"
 
 # Corrected Test Credentials based on actual database users
 TEST_CREDENTIALS = {
