@@ -337,56 +337,55 @@ const IndemnityForm = ({
           </div>
 
           {/* Digital Signature Section */}
-          <div className="border-2 border-gray-300 rounded-lg p-4 bg-gray-50">
-            <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <FileText className="w-5 h-5" />
+          <div className="border-2 border-gray-300 rounded-lg p-3 sm:p-4 bg-gray-50">
+            <h3 className="font-bold text-gray-900 mb-3 sm:mb-4 flex items-center gap-2 text-sm sm:text-base">
+              <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
               Digital Signature / Tandatangan Digital
             </h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-3 sm:gap-4">
               <div>
-                <Label htmlFor="signed_name">Full Name (as signature) / Nama Penuh</Label>
+                <Label htmlFor="signed_name" className="text-xs sm:text-sm">Full Name (as signature) / Nama Penuh</Label>
                 <Input 
                   id="signed_name"
                   value={signatureData.signed_name}
                   onChange={(e) => setSignatureData({...signatureData, signed_name: e.target.value})}
                   placeholder="Type your full name"
-                  className="mt-1 bg-white"
+                  className="mt-1 bg-white text-sm"
                   disabled={!hasScrolledToBottom}
                 />
               </div>
               <div>
-                <Label htmlFor="signed_ic">NRIC / Passport Number</Label>
+                <Label htmlFor="signed_ic" className="text-xs sm:text-sm">NRIC / Passport Number</Label>
                 <Input 
                   id="signed_ic"
                   value={signatureData.signed_ic}
                   onChange={(e) => setSignatureData({...signatureData, signed_ic: e.target.value})}
                   placeholder="Your IC/Passport number"
-                  className="mt-1 bg-white"
+                  className="mt-1 bg-white text-sm"
                   disabled={!hasScrolledToBottom}
                 />
               </div>
-            </div>
-            
-            <div className="mt-4 w-full md:w-1/2">
-              <Label htmlFor="signed_date">Date / Tarikh</Label>
-              <Input 
-                id="signed_date"
-                type="date"
-                value={signatureData.signed_date}
-                onChange={(e) => setSignatureData({...signatureData, signed_date: e.target.value})}
-                className="mt-1 bg-white"
-                disabled={!hasScrolledToBottom}
-              />
+              <div>
+                <Label htmlFor="signed_date" className="text-xs sm:text-sm">Date / Tarikh</Label>
+                <Input 
+                  id="signed_date"
+                  type="date"
+                  value={signatureData.signed_date}
+                  onChange={(e) => setSignatureData({...signatureData, signed_date: e.target.value})}
+                  className="mt-1 bg-white text-sm"
+                  disabled={!hasScrolledToBottom}
+                />
+              </div>
             </div>
           </div>
         </div>
 
         {/* Footer with validation status and submit button */}
-        <DialogFooter className="flex-shrink-0 border-t pt-4">
-          <div className="w-full space-y-3">
+        <DialogFooter className="flex-shrink-0 border-t pt-3 sm:pt-4">
+          <div className="w-full space-y-2 sm:space-y-3">
             {/* Validation checklist */}
-            <div className="flex flex-wrap gap-2 text-sm">
+            <div className="flex flex-wrap gap-1 sm:gap-2 text-xs sm:text-sm">
               <span className={`px-2 py-1 rounded ${hasScrolledToBottom ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
                 {hasScrolledToBottom ? '✓' : '○'} Scroll Complete
               </span>
@@ -401,7 +400,7 @@ const IndemnityForm = ({
             <Button 
               onClick={handleSubmit}
               disabled={!isFormValid || isSubmitting}
-              className="w-full h-12 text-lg"
+              className="w-full h-10 sm:h-12 text-sm sm:text-lg"
               style={{ 
                 backgroundColor: isFormValid ? (companySettings?.primary_color || '#1e40af') : undefined 
               }}
