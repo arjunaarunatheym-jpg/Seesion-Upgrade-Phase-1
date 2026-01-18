@@ -13305,9 +13305,10 @@ async def get_profit_loss_report(
     # Get ALL session expenses - we'll filter by session date using session_date_map
     all_session_expenses = await db.session_expenses.find({}, {"_id": 0}).to_list(10000)
     
-    # Get ALL marketing commissions with approved/paid status - we'll filter by session date
+    # Get ALL marketing commissions - include pending, approved, and paid for accrual accounting
+    # Expense should be recognized when the session occurs, not when payment is made
     all_marketing_commissions = await db.marketing_commissions.find({
-        "status": {"$in": ["approved", "paid"]}
+        "status": {"$in": ["pending", "approved", "paid"]}
     }, {"_id": 0}).to_list(10000)
     
     # Get petty cash expenses - only approved transactions
