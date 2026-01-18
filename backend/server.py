@@ -4720,6 +4720,15 @@ async def clock_out(attendance_data: AttendanceClockOut, current_user: User = De
     if current_user.role != "participant":
         raise HTTPException(status_code=403, detail="Only participants can clock out")
     
+    # Check if clock out has been released by coordinator
+    access = await db.participant_access.find_one({
+        "participant_id": current_user.id,
+        "session_id": attendance_data.session_id
+    }, {"_id": 0})
+    
+    if not access or not access.get("can_clock_out"):
+        raise HTTPException(status_code=403, detail="Clock out not yet released by coordinator")
+    
     # Use Malaysian time
     now = get_malaysia_time_str()
     
