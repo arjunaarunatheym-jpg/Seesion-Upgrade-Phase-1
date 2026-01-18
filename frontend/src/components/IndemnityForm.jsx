@@ -160,18 +160,18 @@ const IndemnityForm = ({
 
           {/* Training Session Info (if available) */}
           {trainingSession && (
-            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-              <h3 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
-                <Car className="w-5 h-5" />
+            <div className="bg-green-50 p-3 sm:p-4 rounded-lg border border-green-200">
+              <h3 className="font-semibold text-green-900 mb-3 flex items-center gap-2 text-sm sm:text-base">
+                <Car className="w-4 h-4 sm:w-5 sm:h-5" />
                 Training Session / Sesi Latihan
               </h3>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
                 <div><span className="text-gray-600">Programme:</span> <strong>{trainingSession.name || '-'}</strong></div>
                 <div><span className="text-gray-600">Type:</span> <strong>{trainingSession.type || 'Driving/Riding'}</strong></div>
                 <div><span className="text-gray-600">Date:</span> <strong>{trainingSession.start_date || '-'}</strong></div>
                 <div><span className="text-gray-600">Location:</span> <strong>{trainingSession.venue || '-'}</strong></div>
                 {trainingSession.trainer_name && (
-                  <div className="col-span-2"><span className="text-gray-600">Facilitator:</span> <strong>{trainingSession.trainer_name}</strong></div>
+                  <div className="col-span-1 sm:col-span-2"><span className="text-gray-600">Facilitator:</span> <strong>{trainingSession.trainer_name}</strong></div>
                 )}
               </div>
             </div>
