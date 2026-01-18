@@ -511,6 +511,7 @@ class ParticipantAccess(BaseModel):
     can_access_post_test: bool = False
     can_access_checklist: bool = False
     can_access_feedback: bool = False
+    can_clock_out: bool = False  # Release control for clock out
     pre_test_completed: bool = False
     post_test_completed: bool = False
     checklist_submitted: bool = False
