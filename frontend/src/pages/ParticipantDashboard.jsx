@@ -956,6 +956,8 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
                 {sessions.map((session) => {
                   const vehicleInfo = vehicleDetails[session.id];
                   const attendance = attendanceToday[session.id] || {};
+                  const access = participantAccess[session.id] || {};
+                  const canClockOut = access.can_clock_out || false;
 
                   return (
                     <Card key={session.id}>
