@@ -2922,7 +2922,8 @@ async def toggle_session_access(session_id: str, access_data: dict, current_user
         "pre_test": "can_access_pre_test",
         "post_test": "can_access_post_test",
         "feedback": "can_access_feedback",
-        "checklist": "can_access_checklist"
+        "checklist": "can_access_checklist",
+        "clock_out": "can_clock_out"
     }
     
     if access_type not in field_mapping:
