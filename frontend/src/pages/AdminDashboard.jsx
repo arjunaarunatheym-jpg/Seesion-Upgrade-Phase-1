@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { axiosInstance } from "../App";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ import ChecklistManagement from "./ChecklistManagement";
 import Settings from "./Settings";
 import DataManagement from "../components/DataManagement";
 import { useTheme } from "../context/ThemeContext";
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import { SearchBar } from "../components/SearchBar";
 import SessionCosting from "../components/SessionCosting";
 import IndemnityFormPrint from "../components/IndemnityFormPrint";
