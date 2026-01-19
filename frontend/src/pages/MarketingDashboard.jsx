@@ -428,6 +428,27 @@ const MarketingDashboard = ({ user, onLogout }) => {
             <p className="text-sm text-gray-600">Welcome, {user.full_name}</p>
           </div>
           <div className="flex gap-2">
+            {/* Back button for coordinators/trainers */}
+            {(user.role === 'coordinator' || user.role === 'trainer' || user.role === 'supervisor') && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => window.location.href = `/${user.role}`}
+                className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
+              >
+                <Users className="w-4 h-4 mr-1" /> Back to {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+              </Button>
+            )}
+            {user.role === 'admin' && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => window.location.href = '/admin'}
+                className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
+              >
+                <Users className="w-4 h-4 mr-1" /> Back to Admin
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={loadData}>
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
