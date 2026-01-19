@@ -1119,10 +1119,24 @@ const MarketingDashboard = ({ user, onLogout }) => {
                 <div className="bg-green-50 p-3 rounded-lg">
                   <h4 className="font-semibold text-green-900 mb-2">Programme</h4>
                   <p className="font-medium">{viewQuotation.programme_name}</p>
-                  <p className="text-sm">{viewQuotation.num_participants} pax @ {formatCurrency(viewQuotation.rate_per_pax)}</p>
+                  <p className="text-sm">
+                    {viewQuotation.pricing_type === 'per_group' 
+                      ? `Group price: ${formatCurrency(viewQuotation.group_price)}`
+                      : `${viewQuotation.num_participants} pax @ ${formatCurrency(viewQuotation.rate_per_pax)}`
+                    }
+                  </p>
                   <p className="text-sm font-bold mt-2">Total: {formatCurrency(viewQuotation.total_amount)}</p>
                 </div>
               </div>
+              
+              {/* Training details if accepted */}
+              {viewQuotation.status === 'accepted' && viewQuotation.training_date && (
+                <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+                  <h4 className="font-semibold text-emerald-900 mb-2">Training Details</h4>
+                  <p className="text-sm"><strong>Date:</strong> {viewQuotation.training_date}</p>
+                  <p className="text-sm"><strong>Venue:</strong> {viewQuotation.venue}</p>
+                </div>
+              )}
               
               <div className="bg-yellow-50 p-3 rounded-lg">
                 <p className="text-sm"><strong>Valid Until:</strong> {new Date(viewQuotation.valid_until).toLocaleDateString()}</p>
@@ -1151,11 +1165,58 @@ const MarketingDashboard = ({ user, onLogout }) => {
           )}
           <DialogFooter>
             {viewQuotation && ['approved', 'sent', 'accepted'].includes(viewQuotation.status) && (
-              <Button onClick={() => generatePDF(viewQuotation)}>
-                <Printer className="w-4 h-4 mr-2" /> Print / Download PDF
+              <Button onClick={() => handleDownloadPdf(viewQuotation.id)} disabled={downloadingPdf}>
+                <Download className="w-4 h-4 mr-2" /> {downloadingPdf ? 'Downloading...' : 'Download PDF Package'}
               </Button>
             )}
             <Button variant="outline" onClick={() => setShowViewDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Accept Quotation Dialog - capture training date and venue */}
+      <Dialog open={showAcceptDialog} onOpenChange={setShowAcceptDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mark Quotation as Accepted</DialogTitle>
+            <DialogDescription>
+              Enter the confirmed training date and venue for this quotation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {acceptingQuotation && (
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="font-medium">{acceptingQuotation.quotation_number}</p>
+                <p className="text-sm text-gray-600">{acceptingQuotation.client_name} - {acceptingQuotation.programme_name}</p>
+                <p className="text-sm font-bold">{formatCurrency(acceptingQuotation.total_amount)}</p>
+              </div>
+            )}
+            <div>
+              <Label htmlFor="training_date">Training Date *</Label>
+              <Input
+                id="training_date"
+                type="date"
+                value={acceptForm.training_date}
+                onChange={(e) => setAcceptForm({...acceptForm, training_date: e.target.value})}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="venue">Venue / Location *</Label>
+              <Input
+                id="venue"
+                placeholder="Enter training venue"
+                value={acceptForm.venue}
+                onChange={(e) => setAcceptForm({...acceptForm, venue: e.target.value})}
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAcceptDialog(false)}>Cancel</Button>
+            <Button onClick={handleAcceptQuotation} className="bg-green-600 hover:bg-green-700">
+              <CheckCircle className="w-4 h-4 mr-2" /> Confirm Acceptance
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
