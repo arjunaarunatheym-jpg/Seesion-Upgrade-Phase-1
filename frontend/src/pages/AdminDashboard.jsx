@@ -354,6 +354,14 @@ const AdminDashboard = ({ user, onLogout }) => {
         console.log('Description items not loaded:', e.message);
       }
       
+      // Load all clients (admin only)
+      try {
+        const clientsRes = await axiosInstance.get(`/marketing/clients/all?_t=${timestamp}`);
+        setAllClients(clientsRes.data || []);
+      } catch (e) {
+        console.log('All clients not loaded:', e.message);
+      }
+      
       // Load finance summary with year filter
       await loadFinanceSummaryByYear(financeYear);
     } catch (error) {
