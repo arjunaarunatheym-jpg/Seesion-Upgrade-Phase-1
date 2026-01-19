@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -27,6 +27,8 @@ import html
 from collections import defaultdict
 import time
 import hashlib
+from io import BytesIO
+from fpdf import FPDF
 
 # ==================== SECURITY CONFIGURATION ====================
 # Rate limiting storage (in-memory, consider Redis for production)
