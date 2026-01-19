@@ -240,6 +240,26 @@ const AdminDashboard = ({ user, onLogout }) => {
   });
   const [pdfTemplatesLoading, setPdfTemplatesLoading] = useState(false);
   const [showPdfTemplatesDialog, setShowPdfTemplatesDialog] = useState(false);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  
+  // Quill editor configuration for rich text editing
+  const quillModules = useMemo(() => ({
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+      [{ 'indent': '-1'}, { 'indent': '+1' }],
+      [{ 'align': [] }],
+      ['clean']
+    ],
+  }), []);
+  
+  const quillFormats = [
+    'header',
+    'bold', 'italic', 'underline', 'strike',
+    'list', 'bullet', 'indent',
+    'align'
+  ];
 
   // Finance user form
   const [financeForm, setFinanceForm] = useState({
