@@ -70,6 +70,17 @@ const MarketingDashboard = ({ user, onLogout }) => {
   // Search/filter
   const [clientSearch, setClientSearch] = useState('');
   const [quotationFilter, setQuotationFilter] = useState('all');
+  
+  // Accept quotation dialog (requires training date and venue)
+  const [showAcceptDialog, setShowAcceptDialog] = useState(false);
+  const [acceptingQuotation, setAcceptingQuotation] = useState(null);
+  const [acceptForm, setAcceptForm] = useState({
+    training_date: '',
+    venue: ''
+  });
+  
+  // PDF download loading state
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     loadData();
