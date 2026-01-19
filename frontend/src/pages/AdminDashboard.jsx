@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { LogOut, Building2, Users, Calendar, MessageSquare, BookOpen, Plus, Trash2, Edit, UserPlus, UserCog, ClipboardList, ClipboardCheck, Settings as SettingsIcon, FileText, Download, Search, Book, Award, Eye, Upload, CheckCircle, XCircle, Clock, AlertCircle, DollarSign, Printer } from "lucide-react";
+import { LogOut, Building2, Users, Calendar, MessageSquare, BookOpen, Plus, Trash2, Edit, UserPlus, UserCog, ClipboardList, ClipboardCheck, Settings as SettingsIcon, FileText, Download, Search, Book, Award, Eye, Upload, CheckCircle, XCircle, Clock, AlertCircle, DollarSign, Printer, Bold, Italic, Underline, List } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import TestManagement from "./TestManagement";
 import FeedbackManagement from "./FeedbackManagement";
@@ -18,8 +18,6 @@ import ChecklistManagement from "./ChecklistManagement";
 import Settings from "./Settings";
 import DataManagement from "../components/DataManagement";
 import { useTheme } from "../context/ThemeContext";
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
 import { SearchBar } from "../components/SearchBar";
 import SessionCosting from "../components/SessionCosting";
 import IndemnityFormPrint from "../components/IndemnityFormPrint";
