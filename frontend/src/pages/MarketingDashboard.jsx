@@ -819,49 +819,97 @@ const MarketingDashboard = ({ user, onLogout }) => {
 
       {/* Quotation Dialog */}
       <Dialog open={showQuotationDialog} onOpenChange={setShowQuotationDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingQuotation ? 'Edit Quotation' : 'Create New Quotation'}</DialogTitle>
             <DialogDescription>Enter quotation details</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-            <div>
-              <Label>Client *</Label>
-              <Select value={quotationForm.client_id} onValueChange={v => setQuotationForm({...quotationForm, client_id: v})}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select client" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.company_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {clients.length === 0 && <p className="text-xs text-red-500 mt-1">Please add a client first</p>}
-            </div>
-            <div>
-              <Label>Programme *</Label>
-              <Select value={quotationForm.programme_id} onValueChange={v => setQuotationForm({...quotationForm, programme_id: v})}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select programme" />
-                </SelectTrigger>
-                <SelectContent>
-                  {programmes.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2">
+            {/* Client & Programme */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>No. of Participants</Label>
-                <Input type="number" min="1" value={quotationForm.num_participants} onChange={e => setQuotationForm({...quotationForm, num_participants: parseInt(e.target.value) || 1})} />
+                <Label>Client *</Label>
+                <Select value={quotationForm.client_id} onValueChange={v => setQuotationForm({...quotationForm, client_id: v})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.company_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {clients.length === 0 && <p className="text-xs text-red-500 mt-1">Please add a client first</p>}
               </div>
               <div>
-                <Label>Rate per Pax (RM) *</Label>
-                <Input type="number" min="0" step="0.01" value={quotationForm.rate_per_pax} onChange={e => setQuotationForm({...quotationForm, rate_per_pax: parseFloat(e.target.value) || 0})} />
+                <Label>Programme *</Label>
+                <Select value={quotationForm.programme_id} onValueChange={v => setQuotationForm({...quotationForm, programme_id: v})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select programme" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {programmes.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
+            {/* Pricing Type Selection */}
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <Label className="text-blue-900 font-semibold">Pricing Type *</Label>
+              <div className="flex gap-4 mt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="pricing_type"
+                    value="per_pax"
+                    checked={quotationForm.pricing_type === 'per_pax'}
+                    onChange={() => setQuotationForm({...quotationForm, pricing_type: 'per_pax'})}
+                    className="w-4 h-4"
+                  />
+                  <span>Per Pax (Rate × Participants)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="pricing_type"
+                    value="per_group"
+                    checked={quotationForm.pricing_type === 'per_group'}
+                    onChange={() => setQuotationForm({...quotationForm, pricing_type: 'per_group'})}
+                    className="w-4 h-4"
+                  />
+                  <span>Per Group (Fixed Price)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Pricing Fields based on type */}
+            {quotationForm.pricing_type === 'per_pax' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>No. of Participants</Label>
+                  <Input type="number" min="1" value={quotationForm.num_participants} onChange={e => setQuotationForm({...quotationForm, num_participants: parseInt(e.target.value) || 1})} />
+                </div>
+                <div>
+                  <Label>Rate per Pax (RM) *</Label>
+                  <Input type="number" min="0" step="0.01" value={quotationForm.rate_per_pax} onChange={e => setQuotationForm({...quotationForm, rate_per_pax: parseFloat(e.target.value) || 0})} />
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Max Participants (for reference)</Label>
+                  <Input type="number" min="1" value={quotationForm.num_participants} onChange={e => setQuotationForm({...quotationForm, num_participants: parseInt(e.target.value) || 1})} />
+                </div>
+                <div>
+                  <Label>Group Price (RM) *</Label>
+                  <Input type="number" min="0" step="0.01" value={quotationForm.group_price} onChange={e => setQuotationForm({...quotationForm, group_price: parseFloat(e.target.value) || 0})} />
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>SST (%)</Label>
@@ -875,25 +923,75 @@ const MarketingDashboard = ({ user, onLogout }) => {
             
             {/* Calculated amounts */}
             <div className="bg-gray-50 p-3 rounded-lg">
-              <div className="flex justify-between text-sm">
-                <span>Subtotal:</span>
-                <span>{formatCurrency(quotationForm.num_participants * quotationForm.rate_per_pax)}</span>
-              </div>
-              {quotationForm.sst_percent > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span>SST ({quotationForm.sst_percent}%):</span>
-                  <span>{formatCurrency(quotationForm.num_participants * quotationForm.rate_per_pax * quotationForm.sst_percent / 100)}</span>
+              {(() => {
+                const subtotal = quotationForm.pricing_type === 'per_group' 
+                  ? quotationForm.group_price 
+                  : quotationForm.num_participants * quotationForm.rate_per_pax;
+                const sst = subtotal * quotationForm.sst_percent / 100;
+                const total = subtotal + sst;
+                return (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span>Subtotal:</span>
+                      <span>{formatCurrency(subtotal)}</span>
+                    </div>
+                    {quotationForm.sst_percent > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span>SST ({quotationForm.sst_percent}%):</span>
+                        <span>{formatCurrency(sst)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold border-t mt-2 pt-2">
+                      <span>Total:</span>
+                      <span>{formatCurrency(total)}</span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Description Items (if any exist) */}
+            {descriptionItems.length > 0 && (
+              <div className="border rounded-lg p-3">
+                <Label className="font-semibold">Include in Quotation</Label>
+                <div className="mt-2 space-y-2 max-h-40 overflow-y-auto">
+                  {descriptionItems.map(item => (
+                    <label key={item.id} className="flex items-start gap-2 cursor-pointer p-2 hover:bg-gray-50 rounded">
+                      <input
+                        type="checkbox"
+                        checked={quotationForm.description_items.includes(item.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setQuotationForm({...quotationForm, description_items: [...quotationForm.description_items, item.id]});
+                          } else {
+                            setQuotationForm({...quotationForm, description_items: quotationForm.description_items.filter(id => id !== item.id)});
+                          }
+                        }}
+                        className="w-4 h-4 mt-1"
+                      />
+                      <div>
+                        <span className="font-medium">{item.name}</span>
+                        <p className="text-xs text-gray-500">{item.description}</p>
+                      </div>
+                    </label>
+                  ))}
                 </div>
-              )}
-              <div className="flex justify-between font-bold border-t mt-2 pt-2">
-                <span>Total:</span>
-                <span>{formatCurrency(quotationForm.num_participants * quotationForm.rate_per_pax * (1 + quotationForm.sst_percent / 100))}</span>
               </div>
+            )}
+
+            <div>
+              <Label>Custom Description (optional)</Label>
+              <Textarea 
+                value={quotationForm.custom_description} 
+                onChange={e => setQuotationForm({...quotationForm, custom_description: e.target.value})} 
+                rows={2} 
+                placeholder="Additional description to include..." 
+              />
             </div>
             
             <div>
-              <Label>Remarks</Label>
-              <Textarea value={quotationForm.remarks} onChange={e => setQuotationForm({...quotationForm, remarks: e.target.value})} rows={2} placeholder="Any additional notes..." />
+              <Label>Remarks (internal notes)</Label>
+              <Textarea value={quotationForm.remarks} onChange={e => setQuotationForm({...quotationForm, remarks: e.target.value})} rows={2} placeholder="Internal notes..." />
             </div>
             <div>
               <Label>Terms & Conditions</Label>
