@@ -717,8 +717,22 @@ class Quotation(BaseModel):
     approved_by: Optional[str] = None
     approved_at: Optional[str] = None
     sent_at: Optional[str] = None
+    # Accepted quotation fields - added after client accepts
+    training_date: Optional[str] = None  # Date of training (when accepted)
+    venue: Optional[str] = None  # Training venue (when accepted)
+    accepted_at: Optional[str] = None  # When client accepted
     created_at: datetime = Field(default_factory=get_malaysia_time)
     updated_at: datetime = Field(default_factory=get_malaysia_time)
+
+
+# Quotation PDF Template model - admin managed templates for cover letter, terms
+class QuotationPDFTemplate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = "quotation_pdf_templates"  # Singleton
+    cover_letter: str = ""  # HTML/text for cover letter page
+    terms_conditions_pages: str = ""  # HTML/text for terms & conditions (pages 3-6)
+    updated_at: datetime = Field(default_factory=get_malaysia_time)
+    updated_by: Optional[str] = None
 
 class QuotationCreate(BaseModel):
     client_id: str
