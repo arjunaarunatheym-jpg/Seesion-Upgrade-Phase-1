@@ -600,7 +600,10 @@ A full-featured quotation management system for the marketing team, allowing the
   - Venue / Location (text input)
 - Training details saved to quotation and shown in PDF
 
-#### 5. Multi-Page PDF Generation ✅ NEW
+#### 5. Multi-Page PDF Generation ✅ UPDATED
+- **Uniform Header/Footer**: Same style as invoices across all pages
+- **Text Wrapping**: Description column properly wraps long programme names
+  
 - **Page 1: Cover Letter**
   - Company header with logo
   - Recipient details (client name, address)
@@ -608,16 +611,28 @@ A full-featured quotation management system for the marketing team, allowing the
   - Signature block
   
 - **Page 2: Quotation Details**
-  - Quotation number, date, validity
+  - Quotation number, date, validity in info box
   - Client info box
   - Training details (date/venue) if accepted
-  - Pricing table with programme, qty, rate, amount
-  - Description items
+  - Pricing table with text-wrapped description
+  - Description items (properly wrapped)
   - SST if applicable
   - Total amount
   - Prepared/Approved signatures
   
-- **Pages 3-6: Terms & Conditions**
+- **Pages 3-5: Terms & Conditions**
+  - Admin-customizable content via rich text editor
+  - Paginated automatically based on content length
+  
+- **Page 6: Registration Form** ✅ NEW (replaces Attendance List)
+  - Account Manager & Order Details box
+  - Tick boxes: New Registration, Company, Individual
+  - Course Information section (auto-populated)
+  - Participant's Particulars table (Full Name, Corporate Email, Tel/Mobile, IC/Passport, Fees, Signature)
+  - PDPA Consent section
+  - Authorized Signatory & Company Stamp section
+
+#### 6. Admin PDF Templates Management ✅ UPDATED
   - Custom content from admin template
   - Paginated automatically
 
