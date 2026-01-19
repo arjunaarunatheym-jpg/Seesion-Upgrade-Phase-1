@@ -794,49 +794,49 @@ const MarketingDashboard = ({ user, onLogout }) => {
                               
                               {q.status === 'draft' && (
                                 <>
-                                  <Button variant="ghost" size="sm" onClick={() => openEditQuotation(q)} title="Edit">
-                                    <Edit className="w-4 h-4" />
+                                  <Button variant="ghost" size="sm" onClick={() => openEditQuotation(q)} title="Edit" className="h-7 w-7 sm:h-8 sm:w-8 p-0">
+                                    <Edit className="w-3 h-3 sm:w-4 sm:h-4" />
                                   </Button>
-                                  <Button variant="ghost" size="sm" onClick={() => handleSubmitForApproval(q.id)} title="Submit for Approval" className="text-yellow-600">
-                                    <Send className="w-4 h-4" />
+                                  <Button variant="ghost" size="sm" onClick={() => handleSubmitForApproval(q.id)} title="Submit for Approval" className="text-yellow-600 h-7 w-7 sm:h-8 sm:w-8 p-0">
+                                    <Send className="w-3 h-3 sm:w-4 sm:h-4" />
                                   </Button>
                                 </>
                               )}
                               
                               {q.status === 'rejected' && (
-                                <Button variant="ghost" size="sm" onClick={() => openEditQuotation(q)} title="Revise">
-                                  <Edit className="w-4 h-4" />
+                                <Button variant="ghost" size="sm" onClick={() => openEditQuotation(q)} title="Revise" className="h-7 w-7 sm:h-8 sm:w-8 p-0">
+                                  <Edit className="w-3 h-3 sm:w-4 sm:h-4" />
                                 </Button>
                               )}
                               
                               {q.status === 'approved' && (
                                 <>
-                                  <Button variant="ghost" size="sm" onClick={() => handleDownloadPdf(q.id)} title="Download PDF" className="text-blue-600" disabled={downloadingPdf}>
-                                    <Download className="w-4 h-4" />
+                                  <Button variant="ghost" size="sm" onClick={() => handleDownloadPdf(q.id)} title="Download PDF" className="text-blue-600 h-7 w-7 sm:h-8 sm:w-8 p-0" disabled={downloadingPdf}>
+                                    <Download className="w-3 h-3 sm:w-4 sm:h-4" />
                                   </Button>
-                                  <Button variant="ghost" size="sm" onClick={() => handleMarkSent(q.id)} title="Mark as Sent" className="text-green-600">
-                                    <Send className="w-4 h-4" />
+                                  <Button variant="ghost" size="sm" onClick={() => handleMarkSent(q.id)} title="Mark as Sent" className="text-green-600 h-7 w-7 sm:h-8 sm:w-8 p-0">
+                                    <Send className="w-3 h-3 sm:w-4 sm:h-4" />
                                   </Button>
                                 </>
                               )}
                               
                               {q.status === 'sent' && (
                                 <>
-                                  <Button variant="ghost" size="sm" onClick={() => handleDownloadPdf(q.id)} title="Download PDF" className="text-blue-600" disabled={downloadingPdf}>
-                                    <Download className="w-4 h-4" />
+                                  <Button variant="ghost" size="sm" onClick={() => handleDownloadPdf(q.id)} title="Download PDF" className="text-blue-600 h-7 w-7 sm:h-8 sm:w-8 p-0" disabled={downloadingPdf}>
+                                    <Download className="w-3 h-3 sm:w-4 sm:h-4" />
                                   </Button>
-                                  <Button variant="ghost" size="sm" onClick={() => handleClientResponse(q.id, 'accepted')} title="Client Accepted" className="text-green-600">
-                                    <CheckCircle className="w-4 h-4" />
+                                  <Button variant="ghost" size="sm" onClick={() => handleClientResponse(q.id, 'accepted')} title="Client Accepted" className="text-green-600 h-7 w-7 sm:h-8 sm:w-8 p-0">
+                                    <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4" />
                                   </Button>
-                                  <Button variant="ghost" size="sm" onClick={() => handleClientResponse(q.id, 'declined')} title="Client Declined" className="text-red-600">
-                                    <XCircle className="w-4 h-4" />
+                                  <Button variant="ghost" size="sm" onClick={() => handleClientResponse(q.id, 'declined')} title="Client Declined" className="text-red-600 h-7 w-7 sm:h-8 sm:w-8 p-0">
+                                    <XCircle className="w-3 h-3 sm:w-4 sm:h-4" />
                                   </Button>
                                 </>
                               )}
                               
                               {q.status === 'accepted' && (
-                                <Button variant="ghost" size="sm" onClick={() => handleDownloadPdf(q.id)} title="Download Final PDF" className="text-emerald-600" disabled={downloadingPdf}>
-                                  <Download className="w-4 h-4" />
+                                <Button variant="ghost" size="sm" onClick={() => handleDownloadPdf(q.id)} title="Download Final PDF" className="text-emerald-600 h-7 w-7 sm:h-8 sm:w-8 p-0" disabled={downloadingPdf}>
+                                  <Download className="w-3 h-3 sm:w-4 sm:h-4" />
                                 </Button>
                               )}
                             </div>
@@ -848,7 +848,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
                 </div>
                 
                 {filteredQuotations.length === 0 && (
-                  <p className="text-center text-gray-500 py-8">No quotations found.</p>
+                  <p className="text-center text-gray-500 py-6 sm:py-8 text-sm">No quotations found.</p>
                 )}
               </CardContent>
             </Card>
