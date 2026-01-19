@@ -16726,12 +16726,6 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.set_text_color(150, 150, 150)
     pdf.cell_safe(76, 4, "Company Stamp", align='C')
     
-    # Thank you message at bottom
-    pdf.set_y(-35)
-    pdf.set_font_safe('I', 8)
-    pdf.set_text_color(100, 100, 100)
-    pdf.cell_safe(0, 5, f"Thank you for choosing {company_settings.get('company_name', 'us')} as your training provider.", align='C', ln=True)
-    
     # Generate PDF bytes
     pdf_bytes = pdf.output()
     
