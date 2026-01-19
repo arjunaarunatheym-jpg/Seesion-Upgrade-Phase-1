@@ -808,7 +808,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
                               
                               {q.status === 'approved' && (
                                 <>
-                                  <Button variant="ghost" size="sm" onClick={() => viewQuotationDetails(q.id)} title="Download PDF" className="text-blue-600">
+                                  <Button variant="ghost" size="sm" onClick={() => handleDownloadPdf(q.id)} title="Download PDF" className="text-blue-600" disabled={downloadingPdf}>
                                     <Download className="w-4 h-4" />
                                   </Button>
                                   <Button variant="ghost" size="sm" onClick={() => handleMarkSent(q.id)} title="Mark as Sent" className="text-green-600">
@@ -819,6 +819,9 @@ const MarketingDashboard = ({ user, onLogout }) => {
                               
                               {q.status === 'sent' && (
                                 <>
+                                  <Button variant="ghost" size="sm" onClick={() => handleDownloadPdf(q.id)} title="Download PDF" className="text-blue-600" disabled={downloadingPdf}>
+                                    <Download className="w-4 h-4" />
+                                  </Button>
                                   <Button variant="ghost" size="sm" onClick={() => handleClientResponse(q.id, 'accepted')} title="Client Accepted" className="text-green-600">
                                     <CheckCircle className="w-4 h-4" />
                                   </Button>
@@ -826,6 +829,12 @@ const MarketingDashboard = ({ user, onLogout }) => {
                                     <XCircle className="w-4 h-4" />
                                   </Button>
                                 </>
+                              )}
+                              
+                              {q.status === 'accepted' && (
+                                <Button variant="ghost" size="sm" onClick={() => handleDownloadPdf(q.id)} title="Download Final PDF" className="text-emerald-600" disabled={downloadingPdf}>
+                                  <Download className="w-4 h-4" />
+                                </Button>
                               )}
                             </div>
                           </td>
