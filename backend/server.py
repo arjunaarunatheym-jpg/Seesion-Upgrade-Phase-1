@@ -15462,6 +15462,89 @@ async def delete_marketing_client(client_id: str, current_user: User = Depends(g
     return {"message": "Client deleted successfully"}
 
 
+@api_router.get("/marketing/clients/export")
+async def export_all_clients(current_user: User = Depends(get_current_user)):
+    """Admin only - Export all clients with marketer info as CSV"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Get all clients
+    clients = await db.marketing_clients.find({}, {"_id": 0}).to_list(1000)
+    
+    # Get all users for marketer names
+    users = await db.users.find({}, {"_id": 0, "id": 1, "full_name": 1}).to_list(1000)
+    user_map = {u["id"]: u["full_name"] for u in users}
+    
+    # Build CSV
+    import csv
+    from io import StringIO
+    
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Header
+    writer.writerow([
+        "Company Name",
+        "Contact Person",
+        "Email",
+        "Phone",
+        "Address",
+        "Marketer",
+        "Created Date"
+    ])
+    
+    # Data rows
+    for client in clients:
+        marketer_id = client.get("created_by", "")
+        marketer_name = user_map.get(marketer_id, "Unknown")
+        created_at = client.get("created_at", "")
+        if isinstance(created_at, datetime):
+            created_at = created_at.strftime("%Y-%m-%d")
+        
+        writer.writerow([
+            client.get("company_name", ""),
+            client.get("contact_person", ""),
+            client.get("contact_email", ""),
+            client.get("contact_phone", ""),
+            client.get("company_address", "").replace("\n", ", "),
+            marketer_name,
+            created_at
+        ])
+    
+    csv_content = output.getvalue()
+    output.close()
+    
+    # Return as streaming response
+    return StreamingResponse(
+        BytesIO(csv_content.encode('utf-8')),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="marketing_clients_{datetime.now().strftime("%Y%m%d")}.csv"'
+        }
+    )
+
+
+@api_router.get("/marketing/clients/all")
+async def get_all_clients_admin(current_user: User = Depends(get_current_user)):
+    """Admin only - Get all clients with marketer info"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Get all clients
+    clients = await db.marketing_clients.find({}, {"_id": 0}).to_list(1000)
+    
+    # Get all users for marketer names
+    users = await db.users.find({}, {"_id": 0, "id": 1, "full_name": 1}).to_list(1000)
+    user_map = {u["id"]: u["full_name"] for u in users}
+    
+    # Enrich clients with marketer names
+    for client in clients:
+        marketer_id = client.get("created_by", "")
+        client["marketer_name"] = user_map.get(marketer_id, "Unknown")
+    
+    return clients
+
+
 @api_router.get("/marketing/quotations")
 async def get_quotations(status: str = None, current_user: User = Depends(get_current_user)):
     """Get quotations - marketers see only their own, admin sees all"""
