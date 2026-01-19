@@ -224,6 +224,7 @@ const AdminDashboard = ({ user, onLogout }) => {
   // Quotations state
   const [quotations, setQuotations] = useState([]);
   const [descriptionItems, setDescriptionItems] = useState([]);
+  const [allClients, setAllClients] = useState([]);
   const [pendingQuotations, setPendingQuotations] = useState([]);
   const [quotationFilter, setQuotationFilter] = useState("pending_approval");
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
