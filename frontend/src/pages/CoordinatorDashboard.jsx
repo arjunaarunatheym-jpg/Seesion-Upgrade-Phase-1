@@ -984,10 +984,23 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
               <p className="text-sm text-gray-600">Welcome, {user.full_name}</p>
             </div>
           </div>
-          <Button onClick={onLogout} variant="outline" className="flex items-center gap-2">
-            <LogOut className="w-4 h-4" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Marketing Portal link for users with marketing role */}
+            {(user.additional_roles?.includes('marketing') || user.role === 'marketing') && (
+              <Button 
+                onClick={() => window.location.href = '/marketing'} 
+                variant="outline" 
+                className="flex items-center gap-2 bg-orange-50 border-orange-300 text-orange-700 hover:bg-orange-100"
+              >
+                <FileText className="w-4 h-4" />
+                Marketing
+              </Button>
+            )}
+            <Button onClick={onLogout} variant="outline" className="flex items-center gap-2">
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
+          </div>
         </div>
       </header>
 
