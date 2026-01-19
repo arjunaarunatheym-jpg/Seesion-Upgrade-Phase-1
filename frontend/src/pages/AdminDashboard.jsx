@@ -409,6 +409,32 @@ const AdminDashboard = ({ user, onLogout }) => {
     }
   };
 
+  // PDF Templates management
+  const loadPdfTemplates = async () => {
+    try {
+      const res = await axiosInstance.get('/marketing/pdf-templates');
+      setPdfTemplates({
+        cover_letter: res.data.cover_letter || "",
+        terms_conditions_pages: res.data.terms_conditions_pages || ""
+      });
+    } catch (e) {
+      console.log('PDF templates not loaded:', e.message);
+    }
+  };
+
+  const savePdfTemplates = async () => {
+    setPdfTemplatesLoading(true);
+    try {
+      await axiosInstance.put('/marketing/pdf-templates', pdfTemplates);
+      toast.success('PDF templates saved successfully');
+      setShowPdfTemplatesDialog(false);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save templates');
+    } finally {
+      setPdfTemplatesLoading(false);
+    }
+  };
+
   const filteredQuotations = quotations.filter(q => {
     if (quotationFilter === 'all') return true;
     return q.status === quotationFilter;
