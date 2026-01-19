@@ -562,20 +562,20 @@ const MarketingDashboard = ({ user, onLogout }) => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="dashboard" data-testid="dashboard-tab">
-              <BarChart3 className="w-4 h-4 mr-2" /> Dashboard
+          <TabsList className="mb-4 sm:mb-6 flex flex-wrap gap-1">
+            <TabsTrigger value="dashboard" data-testid="dashboard-tab" className="text-xs sm:text-sm px-2 sm:px-3">
+              <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Dashboard</span><span className="sm:hidden">Home</span>
             </TabsTrigger>
-            <TabsTrigger value="clients" data-testid="clients-tab">
-              <Building className="w-4 h-4 mr-2" /> My Clients
+            <TabsTrigger value="clients" data-testid="clients-tab" className="text-xs sm:text-sm px-2 sm:px-3">
+              <Building className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Clients
             </TabsTrigger>
-            <TabsTrigger value="quotations" data-testid="quotations-tab">
-              <FileText className="w-4 h-4 mr-2" /> Quotations
+            <TabsTrigger value="quotations" data-testid="quotations-tab" className="text-xs sm:text-sm px-2 sm:px-3">
+              <FileText className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Quotations
             </TabsTrigger>
-            <TabsTrigger value="earnings" data-testid="earnings-tab">
-              <Wallet className="w-4 h-4 mr-2" /> My Earnings
+            <TabsTrigger value="earnings" data-testid="earnings-tab" className="text-xs sm:text-sm px-2 sm:px-3">
+              <Wallet className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Earnings
             </TabsTrigger>
           </TabsList>
 
