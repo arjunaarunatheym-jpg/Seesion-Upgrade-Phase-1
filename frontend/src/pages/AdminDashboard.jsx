@@ -230,6 +230,14 @@ const AdminDashboard = ({ user, onLogout }) => {
   const [selectedQuotation, setSelectedQuotation] = useState(null);
   const [rejectRemarks, setRejectRemarks] = useState("");
   const [viewQuotationDialog, setViewQuotationDialog] = useState(false);
+  
+  // PDF Templates state
+  const [pdfTemplates, setPdfTemplates] = useState({
+    cover_letter: "",
+    terms_conditions_pages: ""
+  });
+  const [pdfTemplatesLoading, setPdfTemplatesLoading] = useState(false);
+  const [showPdfTemplatesDialog, setShowPdfTemplatesDialog] = useState(false);
 
   // Finance user form
   const [financeForm, setFinanceForm] = useState({
