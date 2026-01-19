@@ -15601,8 +15601,12 @@ async def create_quotation(quotation_data: QuotationCreate, current_user: User =
     if not programme:
         raise HTTPException(status_code=404, detail="Programme not found")
     
-    # Calculate amounts
-    subtotal = quotation_data.num_participants * quotation_data.rate_per_pax
+    # Calculate amounts based on pricing type
+    if quotation_data.pricing_type == "per_group":
+        subtotal = quotation_data.group_price
+    else:  # per_pax
+        subtotal = quotation_data.num_participants * quotation_data.rate_per_pax
+    
     sst_amount = subtotal * (quotation_data.sst_percent / 100)
     total_amount = subtotal + sst_amount
     
@@ -15618,14 +15622,18 @@ async def create_quotation(quotation_data: QuotationCreate, current_user: User =
         client_id=quotation_data.client_id,
         programme_id=quotation_data.programme_id,
         programme_name=programme.get("name", "Unknown Programme"),
+        pricing_type=quotation_data.pricing_type,
         num_participants=quotation_data.num_participants,
         rate_per_pax=quotation_data.rate_per_pax,
+        group_price=quotation_data.group_price,
         subtotal=subtotal,
         sst_percent=quotation_data.sst_percent,
         sst_amount=sst_amount,
         total_amount=total_amount,
         validity_days=quotation_data.validity_days,
         valid_until=valid_until,
+        description_items=quotation_data.description_items,
+        custom_description=quotation_data.custom_description,
         remarks=quotation_data.remarks,
         terms_conditions=quotation_data.terms_conditions,
         status="draft",
