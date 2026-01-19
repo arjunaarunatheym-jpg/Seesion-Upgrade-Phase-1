@@ -5416,7 +5416,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
       {/* PDF Templates Edit Dialog */}
       <Dialog open={showPdfTemplatesDialog} onOpenChange={setShowPdfTemplatesDialog}>
-        <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit PDF Templates</DialogTitle>
             <DialogDescription>
@@ -5445,37 +5445,37 @@ We trust our proposal meets your requirements and look forward to being of servi
               </div>
               
               <div>
-                <div className="flex justify-between items-center mb-2">
-                  <div>
-                    <Label className="text-lg font-semibold">Terms & Conditions (Pages 3+)</Label>
-                    <p className="text-sm text-gray-500">
-                      Use the toolbar for formatting: bold, italic, underline, lists, headings
-                    </p>
-                  </div>
-                </div>
-                <div className="border rounded-md">
-                  <ReactQuill
-                    theme="snow"
-                    value={pdfTemplates.terms_conditions_pages}
-                    onChange={(value) => setPdfTemplates({ ...pdfTemplates, terms_conditions_pages: value })}
-                    modules={quillModules}
-                    formats={quillFormats}
-                    placeholder="TERMS AND CONDITIONS
+                <Label className="text-lg font-semibold">Terms & Conditions (Pages 3+)</Label>
+                <p className="text-sm text-gray-500 mb-2">
+                  Enter your terms and conditions. Use clear numbering for sections (1., 1.1, 2., etc.)
+                </p>
+                <Textarea
+                  value={pdfTemplates.terms_conditions_pages}
+                  onChange={(e) => setPdfTemplates({ ...pdfTemplates, terms_conditions_pages: e.target.value })}
+                  placeholder="TERMS AND CONDITIONS
 
 1. PAYMENT TERMS
 1.1 Payment is due upon receipt of invoice.
 1.2 A 50% deposit is required upon confirmation of training.
+1.3 Full payment must be made before the training date.
 
 2. CANCELLATION POLICY
 2.1 Cancellation within 7 days of training will incur a 50% cancellation fee.
+2.2 No refunds for cancellations made within 48 hours of training.
 
 3. GENERAL CONDITIONS
-3.1 All prices are in Malaysian Ringgit (RM)."
-                    style={{ minHeight: '300px' }}
-                  />
-                </div>
+3.1 All prices quoted are in Malaysian Ringgit (RM).
+3.2 Prices are subject to SST where applicable.
+3.3 This quotation is valid for 30 days from the date of issue.
+
+4. LIABILITY
+4.1 The training provider shall not be liable for any indirect damages.
+4.2 Maximum liability is limited to the course fees paid."
+                  rows={16}
+                  className="font-mono text-sm"
+                />
                 <p className="text-xs text-gray-400 mt-1">
-                  Note: Rich formatting (bold, headers, lists) will be converted to plain text in the PDF while preserving structure.
+                  Content will be paginated automatically across multiple pages in the PDF.
                 </p>
               </div>
             </div>
@@ -5489,10 +5489,9 @@ We trust our proposal meets your requirements and look forward to being of servi
               </div>
               <div className="bg-gray-100 p-4 rounded-lg">
                 <h4 className="font-semibold mb-2">Terms & Conditions Preview</h4>
-                <div 
-                  className="bg-white p-4 border rounded text-sm prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: pdfTemplates.terms_conditions_pages || "(No terms content)" }}
-                />
+                <div className="bg-white p-4 border rounded whitespace-pre-wrap text-sm">
+                  {pdfTemplates.terms_conditions_pages || "(No terms content)"}
+                </div>
               </div>
             </div>
           )}
