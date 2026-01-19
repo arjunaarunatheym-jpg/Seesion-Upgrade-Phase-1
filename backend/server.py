@@ -8933,7 +8933,9 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
 @api_router.get("/finance/company-settings")
 async def get_company_settings(current_user: User = Depends(get_current_user)):
     """Get company settings for invoices/receipts"""
-    if current_user.role not in ["admin", "super_admin", "finance"]:
+    # Allow marketing users to read company settings (for quotation PDF)
+    has_marketing = "marketing" in (current_user.additional_roles or []) or current_user.role == "marketing"
+    if current_user.role not in ["admin", "super_admin", "finance"] and not has_marketing:
         raise HTTPException(status_code=403, detail="Access denied")
     
     settings = await db.company_settings.find_one({"id": "company_settings"}, {"_id": 0})
