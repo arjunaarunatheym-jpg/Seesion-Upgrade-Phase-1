@@ -42,15 +42,20 @@ const MarketingDashboard = ({ user, onLogout }) => {
   const [quotations, setQuotations] = useState([]);
   const [programmes, setProgrammes] = useState([]);
   const [defaultTerms, setDefaultTerms] = useState('');
+  const [descriptionItems, setDescriptionItems] = useState([]);
   const [showQuotationDialog, setShowQuotationDialog] = useState(false);
   const [editingQuotation, setEditingQuotation] = useState(null);
   const [quotationForm, setQuotationForm] = useState({
     client_id: '',
     programme_id: '',
+    pricing_type: 'per_pax',
     num_participants: 1,
     rate_per_pax: 0,
+    group_price: 0,
     sst_percent: 0,
     validity_days: 30,
+    description_items: [],
+    custom_description: '',
     remarks: '',
     terms_conditions: ''
   });
@@ -73,13 +78,14 @@ const MarketingDashboard = ({ user, onLogout }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statsRes, clientsRes, quotationsRes, programmesRes, termsRes, settingsRes] = await Promise.all([
+      const [statsRes, clientsRes, quotationsRes, programmesRes, termsRes, settingsRes, descItemsRes] = await Promise.all([
         axiosInstance.get('/marketing/stats'),
         axiosInstance.get('/marketing/clients'),
         axiosInstance.get('/marketing/quotations'),
         axiosInstance.get('/marketing/programmes'),
         axiosInstance.get('/marketing/default-terms'),
-        axiosInstance.get('/finance/company-settings')
+        axiosInstance.get('/finance/company-settings'),
+        axiosInstance.get('/marketing/description-items')
       ]);
       
       setStats(statsRes.data || {});
@@ -88,6 +94,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
       setProgrammes(programmesRes.data || []);
       setDefaultTerms(termsRes.data?.terms || '');
       setCompanySettings(settingsRes.data);
+      setDescriptionItems(descItemsRes.data || []);
     } catch (error) {
       console.error('Failed to load data:', error);
       toast.error('Failed to load data');
