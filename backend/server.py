@@ -16562,7 +16562,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     
     # Form Title
     pdf.set_font_safe('B', 14)
-    pdf.set_text_color(26, 54, 93)
+    pdf.set_text_color(*pdf.primary_color)
     pdf.cell_safe(0, 8, "REGISTRATION FORM", align='C', ln=True)
     pdf.ln(2)
     
@@ -16578,94 +16578,113 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.set_text_color(0, 0, 0)
     
     y_box = pdf.get_y()
-    pdf.rect(10, y_box, 190, 18, 'D')
+    pdf.rect(10, y_box, 190, 16, 'D')
     
+    # Row 1
     pdf.set_xy(12, y_box + 2)
-    pdf.cell_safe(60, 5, f"Account Manager: {marketer.get('full_name', '') if marketer else ''}")
-    pdf.set_xy(100, y_box + 2)
+    marketer_name = (marketer.get('full_name', '') if marketer else '')[:25]
+    pdf.cell_safe(95, 5, f"Account Manager: {marketer_name}")
+    pdf.set_xy(107, y_box + 2)
     pdf.cell_safe(90, 5, f"Quotation No: {quotation.get('quotation_number', '')}")
     
+    # Row 2
     pdf.set_xy(12, y_box + 8)
-    pdf.cell_safe(60, 5, f"Purchase Order: ________________")
-    pdf.set_xy(100, y_box + 8)
+    pdf.cell_safe(95, 5, "Purchase Order: ___________________")
+    pdf.set_xy(107, y_box + 8)
     pdf.cell_safe(90, 5, f"Date: {created_date.strftime('%d %B %Y')}")
     
-    pdf.set_y(y_box + 22)
+    pdf.set_y(y_box + 20)
     
-    # Tick Relevant Box section
+    # Tick Relevant Box section - better spaced
     pdf.set_font_safe('B', 8)
-    pdf.cell_safe(40, 5, "Please tick relevant:")
+    pdf.cell_safe(35, 5, "Please tick relevant:")
     pdf.set_font_safe('', 8)
-    pdf.rect(52, pdf.get_y(), 3, 3)
-    pdf.cell_safe(20, 5, "   New Registration")
-    pdf.rect(80, pdf.get_y(), 3, 3)
-    pdf.cell_safe(20, 5, "   Company")
-    pdf.rect(108, pdf.get_y(), 3, 3)
-    pdf.cell_safe(20, 5, "   Individual", ln=True)
+    x_pos = pdf.get_x()
+    y_pos = pdf.get_y()
+    pdf.rect(x_pos, y_pos + 1, 3, 3)
+    pdf.cell_safe(30, 5, "   New Registration")
+    x_pos = pdf.get_x()
+    pdf.rect(x_pos, y_pos + 1, 3, 3)
+    pdf.cell_safe(25, 5, "   Company")
+    x_pos = pdf.get_x()
+    pdf.rect(x_pos, y_pos + 1, 3, 3)
+    pdf.cell_safe(25, 5, "   Individual", ln=True)
     pdf.ln(3)
     
     # Course Information Section
-    pdf.set_fill_color(232, 244, 253)
+    pdf.set_fill_color(*pdf.secondary_color)
     pdf.set_font_safe('B', 9)
+    pdf.set_text_color(255, 255, 255)
     pdf.cell_safe(0, 6, "COURSE INFORMATION", fill=True, ln=True)
     
     pdf.set_font_safe('', 8)
     pdf.set_text_color(0, 0, 0)
     
-    # Two column layout for course info
+    # Two column layout - use smaller font for values to prevent overflow
     col1_w = 95
     col2_w = 95
     
-    pdf.cell_safe(col1_w, 5, f"Course Title: {quotation.get('programme_name', '')[:50]}", border='LTR')
-    pdf.cell_safe(col2_w, 5, f"Course Date: {quotation.get('training_date', '_____________')}", border='LTR', ln=True)
+    # Truncate values to fit
+    prog_name = sanitize_text_for_pdf(quotation.get('programme_name', ''))[:40]
+    org_name = sanitize_text_for_pdf(client.get('company_name', ''))[:30]
+    address = client.get('company_address', '').split('\n')[0][:30] if client.get('company_address') else ''
+    contact = sanitize_text_for_pdf(client.get('contact_person', ''))[:25]
+    email = sanitize_text_for_pdf(client.get('contact_email', ''))[:30]
+    phone = sanitize_text_for_pdf(client.get('contact_phone', ''))[:15]
     
-    pdf.cell_safe(col1_w, 5, f"Name of Organization: {client.get('company_name', '')[:35]}", border='LR')
-    pdf.cell_safe(col2_w, 5, f"Company Tax ID: __________________", border='LR', ln=True)
+    pdf.set_font_safe('', 7)
+    pdf.cell_safe(col1_w, 5, f"Course Title: {prog_name}", border='LTR')
+    pdf.cell_safe(col2_w, 5, f"Course Date: {quotation.get('training_date', '______________')}", border='LTR', ln=True)
     
-    pdf.cell_safe(col1_w, 5, f"Billing Address: {client.get('company_address', '').split(chr(10))[0][:35] if client.get('company_address') else ''}", border='LR')
-    pdf.cell_safe(col2_w, 5, f"Company Reg No: __________________", border='LR', ln=True)
+    pdf.cell_safe(col1_w, 5, f"Organization: {org_name}", border='LR')
+    pdf.cell_safe(col2_w, 5, "Company Tax ID: ________________", border='LR', ln=True)
     
-    pdf.cell_safe(col1_w, 5, f"Requester's Name: {client.get('contact_person', '')}", border='LR')
-    pdf.cell_safe(col2_w, 5, f"Requester's Designation: __________", border='LR', ln=True)
+    pdf.cell_safe(col1_w, 5, f"Billing Address: {address}", border='LR')
+    pdf.cell_safe(col2_w, 5, "Company Reg No: ________________", border='LR', ln=True)
     
-    pdf.cell_safe(col1_w, 5, f"Email: {client.get('contact_email', '')}", border='LR')
-    pdf.cell_safe(col2_w, 5, f"Tel: {client.get('contact_phone', '')}", border='LR', ln=True)
+    pdf.cell_safe(col1_w, 5, f"Requester: {contact}", border='LR')
+    pdf.cell_safe(col2_w, 5, "Designation: ___________________", border='LR', ln=True)
     
-    pdf.cell_safe(col1_w, 5, "Payment Terms: ____________________", border='LRB')
-    pdf.cell_safe(col2_w, 5, f"Finance Email: ____________________", border='LRB', ln=True)
+    pdf.cell_safe(col1_w, 5, f"Email: {email}", border='LR')
+    pdf.cell_safe(col2_w, 5, f"Tel: {phone}", border='LR', ln=True)
+    
+    pdf.cell_safe(col1_w, 5, "Payment Terms: _________________", border='LRB')
+    pdf.cell_safe(col2_w, 5, "Finance Email: _________________", border='LRB', ln=True)
     
     pdf.ln(3)
     
     # Participant's Particulars Table
-    pdf.set_fill_color(26, 54, 93)
+    pdf.set_fill_color(*pdf.secondary_color)
     pdf.set_font_safe('B', 8)
     pdf.set_text_color(255, 255, 255)
     pdf.cell_safe(0, 6, "PARTICIPANT'S PARTICULARS", fill=True, ln=True)
     
-    # Table header
-    pdf.set_font_safe('B', 7)
-    pdf.cell_safe(45, 6, "Full Name", border=1, fill=True)
-    pdf.cell_safe(45, 6, "Corporate Email", border=1, fill=True)
-    pdf.cell_safe(25, 6, "Tel/Mobile", border=1, fill=True)
-    pdf.cell_safe(30, 6, "IC/Passport No", border=1, fill=True)
-    pdf.cell_safe(25, 6, "Fees (RM)", border=1, fill=True, align='R')
-    pdf.cell_safe(20, 6, "Signature", border=1, fill=True, align='C', ln=True)
+    # Table header - adjusted column widths for mobile/print
+    pdf.set_font_safe('B', 6)
+    pdf.cell_safe(8, 6, "No", border=1, fill=True, align='C')
+    pdf.cell_safe(40, 6, "Full Name", border=1, fill=True)
+    pdf.cell_safe(40, 6, "Corporate Email", border=1, fill=True)
+    pdf.cell_safe(22, 6, "Tel/Mobile", border=1, fill=True)
+    pdf.cell_safe(28, 6, "IC/Passport", border=1, fill=True)
+    pdf.cell_safe(22, 6, "Fees (RM)", border=1, fill=True, align='C')
+    pdf.cell_safe(30, 6, "Signature", border=1, fill=True, align='C', ln=True)
     
     pdf.set_text_color(0, 0, 0)
     pdf.set_font_safe('', 7)
     
-    # Empty rows for participants
-    num_rows = min(quotation.get("num_participants", 5), 8)  # Max 8 rows per page
+    # Empty rows for participants - more rows
+    num_rows = min(max(quotation.get("num_participants", 5), 5), 10)
     for i in range(num_rows):
-        pdf.cell_safe(45, 8, f"{i+1}. ", border=1)
-        pdf.cell_safe(45, 8, "", border=1)
-        pdf.cell_safe(25, 8, "", border=1)
-        pdf.cell_safe(30, 8, "", border=1)
-        pdf.cell_safe(25, 8, "", border=1, align='R')
-        pdf.cell_safe(20, 8, "", border=1, ln=True)
+        pdf.cell_safe(8, 8, str(i+1), border=1, align='C')
+        pdf.cell_safe(40, 8, "", border=1)
+        pdf.cell_safe(40, 8, "", border=1)
+        pdf.cell_safe(22, 8, "", border=1)
+        pdf.cell_safe(28, 8, "", border=1)
+        pdf.cell_safe(22, 8, "", border=1)
+        pdf.cell_safe(30, 8, "", border=1, ln=True)
     
     pdf.ln(2)
-    pdf.set_font_safe('I', 7)
+    pdf.set_font_safe('I', 6)
     pdf.cell_safe(0, 4, "(Please attach another copy if the space above is insufficient)", align='C', ln=True)
     
     # PDPA Consent (if space available)
