@@ -5384,70 +5384,106 @@ const AdminDashboard = ({ user, onLogout }) => {
 
       {/* PDF Templates Edit Dialog */}
       <Dialog open={showPdfTemplatesDialog} onOpenChange={setShowPdfTemplatesDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit PDF Templates</DialogTitle>
             <DialogDescription>
-              Customize the content that appears in quotation PDF documents.
-              Use placeholders like {"{{programme_name}}"}, {"{{company_name}}"}, {"{{contact_person}}"}, {"{{quotation_number}}"} for dynamic content.
+              Customize the content for quotation PDFs. Use placeholders: {"{{programme_name}}"}, {"{{company_name}}"}, {"{{contact_person}}"}, {"{{quotation_number}}"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-6">
-            <div>
-              <Label className="text-lg font-semibold">Cover Letter (Page 1)</Label>
-              <p className="text-sm text-gray-500 mb-2">
-                This content appears after the salutation on page 1. The company header and recipient address are auto-generated.
-              </p>
-              <Textarea
-                value={pdfTemplates.cover_letter}
-                onChange={(e) => setPdfTemplates({ ...pdfTemplates, cover_letter: e.target.value })}
-                placeholder="Enter cover letter content. Example:
-
-RE: QUOTATION FOR {{programme_name}}
+          
+          {!showPdfPreview ? (
+            <div className="space-y-6">
+              <div>
+                <Label className="text-lg font-semibold">Cover Letter (Page 1)</Label>
+                <p className="text-sm text-gray-500 mb-2">
+                  Content after the salutation. Company header and recipient are auto-generated.
+                </p>
+                <Textarea
+                  value={pdfTemplates.cover_letter}
+                  onChange={(e) => setPdfTemplates({ ...pdfTemplates, cover_letter: e.target.value })}
+                  placeholder="RE: QUOTATION FOR {{programme_name}}
 
 Thank you for your interest in our training programmes. We are pleased to submit our quotation for the {{programme_name}} as per your request.
 
 We trust our proposal meets your requirements and look forward to being of service to {{company_name}}."
-                rows={10}
-                className="font-mono text-sm"
-              />
-            </div>
-            
-            <div>
-              <Label className="text-lg font-semibold">Terms & Conditions (Pages 3-6)</Label>
-              <p className="text-sm text-gray-500 mb-2">
-                This content will be spread across pages 3-6 of the PDF. Use clear numbering for terms.
-              </p>
-              <Textarea
-                value={pdfTemplates.terms_conditions_pages}
-                onChange={(e) => setPdfTemplates({ ...pdfTemplates, terms_conditions_pages: e.target.value })}
-                placeholder="Enter terms and conditions. Example:
-
-TERMS AND CONDITIONS
+                  rows={8}
+                  className="font-mono text-sm"
+                />
+              </div>
+              
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <div>
+                    <Label className="text-lg font-semibold">Terms & Conditions (Pages 3+)</Label>
+                    <p className="text-sm text-gray-500">
+                      Use the toolbar for formatting: bold, italic, underline, lists, headings
+                    </p>
+                  </div>
+                </div>
+                <div className="border rounded-md">
+                  <ReactQuill
+                    theme="snow"
+                    value={pdfTemplates.terms_conditions_pages}
+                    onChange={(value) => setPdfTemplates({ ...pdfTemplates, terms_conditions_pages: value })}
+                    modules={quillModules}
+                    formats={quillFormats}
+                    placeholder="TERMS AND CONDITIONS
 
 1. PAYMENT TERMS
 1.1 Payment is due upon receipt of invoice.
 1.2 A 50% deposit is required upon confirmation of training.
-1.3 Full payment must be made before the training date.
 
 2. CANCELLATION POLICY
 2.1 Cancellation within 7 days of training will incur a 50% cancellation fee.
-2.2 No refunds for cancellations made within 48 hours of training.
 
 3. GENERAL CONDITIONS
-3.1 All prices quoted are in Malaysian Ringgit (RM).
-3.2 Prices are subject to SST where applicable.
-3.3 This quotation is valid for 30 days from the date of issue.
-
-..."
-                rows={15}
-                className="font-mono text-sm"
-              />
+3.1 All prices are in Malaysian Ringgit (RM)."
+                    style={{ minHeight: '300px' }}
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Note: Rich formatting (bold, headers, lists) will be converted to plain text in the PDF while preserving structure.
+                </p>
+              </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPdfTemplatesDialog(false)}>Cancel</Button>
-            <Button onClick={savePdfTemplates} disabled={pdfTemplatesLoading}>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-gray-100 p-4 rounded-lg">
+                <h4 className="font-semibold mb-2">Cover Letter Preview</h4>
+                <div className="bg-white p-4 border rounded whitespace-pre-wrap text-sm">
+                  {pdfTemplates.cover_letter || "(No cover letter content)"}
+                </div>
+              </div>
+              <div className="bg-gray-100 p-4 rounded-lg">
+                <h4 className="font-semibold mb-2">Terms & Conditions Preview</h4>
+                <div 
+                  className="bg-white p-4 border rounded text-sm prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: pdfTemplates.terms_conditions_pages || "(No terms content)" }}
+                />
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter className="flex justify-between">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowPdfPreview(!showPdfPreview)}
+            >
+              <Eye className="w-4 h-4 mr-2" />
+              {showPdfPreview ? 'Back to Edit' : 'Preview'}
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setShowPdfTemplatesDialog(false); setShowPdfPreview(false); }}>
+                Cancel
+              </Button>
+              <Button onClick={savePdfTemplates} disabled={pdfTemplatesLoading}>
+                {pdfTemplatesLoading ? 'Saving...' : 'Save Templates'}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
               {pdfTemplatesLoading ? 'Saving...' : 'Save Templates'}
             </Button>
           </DialogFooter>
