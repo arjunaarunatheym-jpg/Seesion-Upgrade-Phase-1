@@ -15910,6 +15910,69 @@ async def update_client_response(quotation_id: str, data: dict, current_user: Us
     return {"message": f"Quotation marked as {response}"}
 
 
+# ==================== QUOTATION DESCRIPTION ITEMS (Admin) ====================
+
+@api_router.get("/marketing/description-items")
+async def get_description_items(current_user: User = Depends(get_current_user)):
+    """Get all description items (for marketers to select)"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    items = await db.quotation_description_items.find({"is_active": True}, {"_id": 0}).to_list(100)
+    items.sort(key=lambda x: (x.get("category", ""), x.get("sort_order", 0)))
+    return items
+
+
+@api_router.get("/marketing/description-items/all")
+async def get_all_description_items(current_user: User = Depends(get_current_user)):
+    """Get all description items including inactive (admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    items = await db.quotation_description_items.find({}, {"_id": 0}).to_list(100)
+    items.sort(key=lambda x: (x.get("category", ""), x.get("sort_order", 0)))
+    return items
+
+
+@api_router.post("/marketing/description-items")
+async def create_description_item(data: dict, current_user: User = Depends(get_current_user)):
+    """Create a new description item (admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    item = QuotationDescriptionItem(
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        category=data.get("category", "general"),
+        sort_order=data.get("sort_order", 0),
+        is_active=data.get("is_active", True)
+    )
+    
+    await db.quotation_description_items.insert_one(item.model_dump())
+    return {"message": "Description item created", "item": item.model_dump()}
+
+
+@api_router.put("/marketing/description-items/{item_id}")
+async def update_description_item(item_id: str, data: dict, current_user: User = Depends(get_current_user)):
+    """Update a description item (admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    update_fields = {k: v for k, v in data.items() if k not in ["id", "created_at"]}
+    await db.quotation_description_items.update_one({"id": item_id}, {"$set": update_fields})
+    return {"message": "Description item updated"}
+
+
+@api_router.delete("/marketing/description-items/{item_id}")
+async def delete_description_item(item_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a description item (admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    await db.quotation_description_items.delete_one({"id": item_id})
+    return {"message": "Description item deleted"}
+
+
 # ==================== END MARKETING QUOTATION ENDPOINTS ====================
 # Include router (after all routes are defined)
 app.include_router(api_router)
