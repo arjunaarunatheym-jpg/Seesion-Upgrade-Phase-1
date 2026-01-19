@@ -15904,21 +15904,46 @@ async def update_client_response(quotation_id: str, data: dict, current_user: Us
     
     now = get_malaysia_time()
     status_history = quotation.get("status_history", [])
-    status_history.append({
+    
+    update_data = {
         "status": response,
-        "by": current_user.id,
-        "by_name": current_user.full_name,
-        "at": now.isoformat(),
-        "remarks": data.get("remarks", f"Client {response}")
-    })
+        "status_history": status_history,
+        "updated_at": now.isoformat()
+    }
+    
+    # If accepting, require training_date and venue
+    if response == "accepted":
+        training_date = data.get("training_date")
+        venue = data.get("venue")
+        
+        if not training_date or not venue:
+            raise HTTPException(status_code=400, detail="Training date and venue are required when accepting quotation")
+        
+        update_data["training_date"] = training_date
+        update_data["venue"] = venue
+        update_data["accepted_at"] = now.isoformat()
+        
+        status_history.append({
+            "status": response,
+            "by": current_user.id,
+            "by_name": current_user.full_name,
+            "at": now.isoformat(),
+            "remarks": f"Client accepted. Training: {training_date} at {venue}"
+        })
+    else:
+        status_history.append({
+            "status": response,
+            "by": current_user.id,
+            "by_name": current_user.full_name,
+            "at": now.isoformat(),
+            "remarks": data.get("remarks", f"Client {response}")
+        })
+    
+    update_data["status_history"] = status_history
     
     await db.quotations.update_one(
         {"id": quotation_id},
-        {"$set": {
-            "status": response,
-            "status_history": status_history,
-            "updated_at": now.isoformat()
-        }}
+        {"$set": update_data}
     )
     
     return {"message": f"Quotation marked as {response}"}
