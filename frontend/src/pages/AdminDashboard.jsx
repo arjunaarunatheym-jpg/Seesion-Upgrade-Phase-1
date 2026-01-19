@@ -366,6 +366,14 @@ const AdminDashboard = ({ user, onLogout }) => {
         console.log('Quotations not loaded:', e.message);
       }
       
+      // Load description items for quotations
+      try {
+        const descItemsRes = await axiosInstance.get(`/marketing/description-items?_t=${timestamp}`);
+        setDescriptionItems(descItemsRes.data || []);
+      } catch (e) {
+        console.log('Description items not loaded:', e.message);
+      }
+      
       // Load finance summary with year filter
       await loadFinanceSummaryByYear(financeYear);
     } catch (error) {
