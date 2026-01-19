@@ -15585,6 +15585,76 @@ async def get_quotations(status: str = None, current_user: User = Depends(get_cu
     return quotations
 
 
+@api_router.get("/marketing/stats")
+async def get_marketing_stats(current_user: User = Depends(get_current_user)):
+    """Get marketing stats for dashboard"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    query = {}
+    if current_user.role not in ["admin", "super_admin"]:
+        query["created_by"] = current_user.id
+    
+    # Client count
+    client_query = {}
+    if current_user.role not in ["admin", "super_admin"]:
+        client_query["created_by"] = current_user.id
+    client_count = await db.marketing_clients.count_documents(client_query)
+    
+    # Quotation counts by status
+    total_quotations = await db.quotations.count_documents(query)
+    pending = await db.quotations.count_documents({**query, "status": "pending_approval"})
+    approved = await db.quotations.count_documents({**query, "status": "approved"})
+    sent = await db.quotations.count_documents({**query, "status": "sent"})
+    accepted = await db.quotations.count_documents({**query, "status": "accepted"})
+    declined = await db.quotations.count_documents({**query, "status": "declined"})
+    
+    # Total value of accepted quotations
+    accepted_quotations = await db.quotations.find({**query, "status": "accepted"}, {"_id": 0, "total_amount": 1}).to_list(1000)
+    total_accepted_value = sum(q.get("total_amount", 0) for q in accepted_quotations)
+    
+    return {
+        "clients": client_count,
+        "total_quotations": total_quotations,
+        "pending_approval": pending,
+        "approved": approved,
+        "sent": sent,
+        "accepted": accepted,
+        "declined": declined,
+        "total_accepted_value": total_accepted_value
+    }
+
+
+@api_router.get("/marketing/programmes")
+async def get_programmes_for_quotation(current_user: User = Depends(get_current_user)):
+    """Get programmes list for quotation creation"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    programmes = await db.programs.find({}, {"_id": 0, "id": 1, "name": 1, "category": 1, "description": 1}).to_list(100)
+    return programmes
+
+
+@api_router.get("/marketing/default-terms")
+async def get_default_terms(current_user: User = Depends(get_current_user)):
+    """Get default terms and conditions for quotations"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    settings = await db.company_settings.find_one({}, {"_id": 0})
+    default_terms = settings.get("quotation_terms", """1. This quotation is valid for 30 days from the date of issue.
+2. A 50% deposit is required upon confirmation.
+3. Full payment must be made before the training date.
+4. Cancellation within 7 days of training will incur a 50% cancellation fee.
+5. Prices are subject to SST where applicable.""") if settings else """1. This quotation is valid for 30 days from the date of issue.
+2. A 50% deposit is required upon confirmation.
+3. Full payment must be made before the training date.
+4. Cancellation within 7 days of training will incur a 50% cancellation fee.
+5. Prices are subject to SST where applicable."""
+    
+    return {"terms": default_terms}
+
+
 @api_router.get("/marketing/quotations/{quotation_id}")
 async def get_quotation(quotation_id: str, current_user: User = Depends(get_current_user)):
     """Get a single quotation with full details"""
