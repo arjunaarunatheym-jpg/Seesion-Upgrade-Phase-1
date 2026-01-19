@@ -260,12 +260,75 @@ const MarketingDashboard = ({ user, onLogout }) => {
   };
 
   const handleClientResponse = async (quotationId, response) => {
+    if (response === 'accepted') {
+      // Open dialog to capture training date and venue
+      const quotation = quotations.find(q => q.id === quotationId);
+      setAcceptingQuotation(quotation);
+      setAcceptForm({ training_date: '', venue: '' });
+      setShowAcceptDialog(true);
+      return;
+    }
+    
+    // For declined, send directly
     try {
       await axiosInstance.post(`/marketing/quotations/${quotationId}/client-response`, { response });
       toast.success(`Quotation marked as ${response}`);
       loadData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to update');
+    }
+  };
+
+  const handleAcceptQuotation = async () => {
+    if (!acceptForm.training_date || !acceptForm.venue) {
+      toast.error('Please enter training date and venue');
+      return;
+    }
+    
+    try {
+      await axiosInstance.post(`/marketing/quotations/${acceptingQuotation.id}/client-response`, {
+        response: 'accepted',
+        training_date: acceptForm.training_date,
+        venue: acceptForm.venue
+      });
+      toast.success('Quotation marked as accepted');
+      setShowAcceptDialog(false);
+      setAcceptingQuotation(null);
+      loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update');
+    }
+  };
+
+  const handleDownloadPdf = async (quotationId) => {
+    setDownloadingPdf(true);
+    try {
+      const response = await axiosInstance.get(`/marketing/quotations/${quotationId}/download-pdf`, {
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Get filename from quotation
+      const quotation = quotations.find(q => q.id === quotationId);
+      const filename = quotation?.quotation_number?.replace(/\//g, '_') || 'quotation';
+      link.download = `Quotation_${filename}.pdf`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('PDF downloaded successfully');
+    } catch (error) {
+      console.error('PDF download error:', error);
+      toast.error(error.response?.data?.detail || 'Failed to download PDF');
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
