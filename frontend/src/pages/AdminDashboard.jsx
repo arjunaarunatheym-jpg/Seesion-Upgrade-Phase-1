@@ -4465,6 +4465,49 @@ const AdminDashboard = ({ user, onLogout }) => {
                 )}
               </CardContent>
             </Card>
+
+            {/* Description Items Management */}
+            <Card className="mt-6">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>Quotation Description Items</CardTitle>
+                    <CardDescription>Manage reusable description items for quotations</CardDescription>
+                  </div>
+                  <Button 
+                    onClick={() => {
+                      const name = prompt("Enter item name:");
+                      if (!name) return;
+                      const description = prompt("Enter item description:");
+                      if (!description) return;
+                      const category = prompt("Enter category (e.g., inclusions, equipment, services):", "inclusions");
+                      
+                      axiosInstance.post('/marketing/description-items', {
+                        name,
+                        description,
+                        category: category || "inclusions",
+                        sort_order: 0
+                      }).then(() => {
+                        toast.success("Description item created");
+                        loadData();
+                      }).catch(err => {
+                        toast.error(err.response?.data?.detail || "Failed to create item");
+                      });
+                    }}
+                    size="sm"
+                  >
+                    <Plus className="w-4 h-4 mr-2" /> Add Item
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {quotations.descriptionItems?.length === 0 ? (
+                    <p className="text-center text-gray-500 py-4">No description items yet. Add items that marketers can select when creating quotations.</p>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* My Payroll Tab */}
