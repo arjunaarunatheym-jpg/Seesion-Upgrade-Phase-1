@@ -155,8 +155,19 @@ const MarketingDashboard = ({ user, onLogout }) => {
   // Quotation functions
   const handleSaveQuotation = async () => {
     try {
-      if (!quotationForm.client_id || !quotationForm.programme_id || !quotationForm.rate_per_pax) {
-        toast.error('Please fill in all required fields');
+      // Validate based on pricing type
+      if (!quotationForm.client_id || !quotationForm.programme_id) {
+        toast.error('Please select client and programme');
+        return;
+      }
+      
+      if (quotationForm.pricing_type === 'per_pax' && !quotationForm.rate_per_pax) {
+        toast.error('Please enter rate per pax');
+        return;
+      }
+      
+      if (quotationForm.pricing_type === 'per_group' && !quotationForm.group_price) {
+        toast.error('Please enter group price');
         return;
       }
       
@@ -185,10 +196,14 @@ const MarketingDashboard = ({ user, onLogout }) => {
     setQuotationForm({
       client_id: '',
       programme_id: '',
+      pricing_type: 'per_pax',
       num_participants: 1,
       rate_per_pax: 0,
+      group_price: 0,
       sst_percent: 0,
       validity_days: 30,
+      description_items: [],
+      custom_description: '',
       remarks: '',
       terms_conditions: ''
     });
@@ -198,6 +213,20 @@ const MarketingDashboard = ({ user, onLogout }) => {
     setEditingQuotation(quotation);
     setQuotationForm({
       client_id: quotation.client_id || '',
+      programme_id: quotation.programme_id || '',
+      pricing_type: quotation.pricing_type || 'per_pax',
+      num_participants: quotation.num_participants || 1,
+      rate_per_pax: quotation.rate_per_pax || 0,
+      group_price: quotation.group_price || 0,
+      sst_percent: quotation.sst_percent || 0,
+      validity_days: quotation.validity_days || 30,
+      description_items: quotation.description_items || [],
+      custom_description: quotation.custom_description || '',
+      remarks: quotation.remarks || '',
+      terms_conditions: quotation.terms_conditions || ''
+    });
+    setShowQuotationDialog(true);
+  };
       programme_id: quotation.programme_id || '',
       num_participants: quotation.num_participants || 1,
       rate_per_pax: quotation.rate_per_pax || 0,
