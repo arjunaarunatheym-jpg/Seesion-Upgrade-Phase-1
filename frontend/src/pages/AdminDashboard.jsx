@@ -4534,10 +4534,10 @@ const AdminDashboard = ({ user, onLogout }) => {
             {/* Description Items Management */}
             <Card className="mt-6">
               <CardHeader>
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div>
-                    <CardTitle>Quotation Description Items</CardTitle>
-                    <CardDescription>Manage reusable description items for quotations</CardDescription>
+                    <CardTitle className="text-base sm:text-lg">Quotation Description Items</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">Manage reusable description items for quotations</CardDescription>
                   </div>
                   <Button 
                     onClick={() => {
@@ -4560,16 +4560,60 @@ const AdminDashboard = ({ user, onLogout }) => {
                       });
                     }}
                     size="sm"
+                    className="text-xs sm:text-sm"
                   >
-                    <Plus className="w-4 h-4 mr-2" /> Add Item
+                    <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Add Item
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {quotations.descriptionItems?.length === 0 ? (
-                    <p className="text-center text-gray-500 py-4">No description items yet. Add items that marketers can select when creating quotations.</p>
-                  ) : null}
+                  {descriptionItems.length === 0 ? (
+                    <p className="text-center text-gray-500 py-4 text-sm">No description items yet. Add items that marketers can select when creating quotations.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-gray-50">
+                            <th className="text-left p-2 text-xs sm:text-sm">Name</th>
+                            <th className="text-left p-2 text-xs sm:text-sm">Description</th>
+                            <th className="text-left p-2 text-xs sm:text-sm">Category</th>
+                            <th className="text-center p-2 text-xs sm:text-sm">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {descriptionItems.map(item => (
+                            <tr key={item.id} className="border-b hover:bg-gray-50">
+                              <td className="p-2 font-medium text-xs sm:text-sm">{item.name}</td>
+                              <td className="p-2 text-xs sm:text-sm max-w-[200px] truncate">{item.description}</td>
+                              <td className="p-2 text-xs sm:text-sm">
+                                <Badge variant="outline">{item.category}</Badge>
+                              </td>
+                              <td className="p-2 text-center">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => {
+                                    if (confirm(`Delete "${item.name}"?`)) {
+                                      axiosInstance.delete(`/marketing/description-items/${item.id}`)
+                                        .then(() => {
+                                          toast.success("Item deleted");
+                                          loadData();
+                                        })
+                                        .catch(err => toast.error(err.response?.data?.detail || "Failed to delete"));
+                                    }
+                                  }}
+                                  className="text-red-600 h-7 w-7 p-0"
+                                >
+                                  <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
