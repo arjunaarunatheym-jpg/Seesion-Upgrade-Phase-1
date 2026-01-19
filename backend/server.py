@@ -16084,12 +16084,12 @@ def sanitize_text_for_pdf(text):
 
 
 class QuotationPDF(FPDF):
-    """Custom PDF class for quotation document generation"""
+    """Custom PDF class for quotation document generation - matches invoice styling"""
     
     def __init__(self, company_settings=None):
         super().__init__()
         self.company_settings = company_settings or {}
-        self.set_auto_page_break(auto=True, margin=15)
+        self.set_auto_page_break(auto=True, margin=25)  # More margin for footer
         # Add Unicode font support
         try:
             self.add_font('DejaVu', '', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', uni=True)
@@ -16111,21 +16111,15 @@ class QuotationPDF(FPDF):
         self.cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
     
     def multi_cell_safe(self, w, h, txt, **kwargs):
-        """Multi-cell with text sanitization"""
+        """Multi-cell with text sanitization and wrapping"""
         self.multi_cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
     
     def header(self):
-        pass  # We'll manage headers per page
-    
-    def footer(self):
-        self.set_y(-15)
-        self.set_font_safe('I', 8)
-        self.set_text_color(128, 128, 128)
-        self.cell(0, 10, f'Page {self.page_no()}', align='C')
-    
-    def add_company_header(self):
-        """Add company header with logo and info"""
+        """Invoice-style header - uniform across all pages"""
         cs = self.company_settings
+        
+        # Save current position
+        self.set_y(10)
         
         # Try to add logo if available
         logo_url = cs.get('logo_url')
@@ -16133,8 +16127,8 @@ class QuotationPDF(FPDF):
             logo_path = ROOT_DIR / logo_url.lstrip('/')
             if logo_path.exists():
                 try:
-                    self.image(str(logo_path), x=10, y=10, w=40)
-                    self.set_xy(55, 10)
+                    self.image(str(logo_path), x=10, y=10, w=35)
+                    self.set_xy(50, 10)
                 except Exception:
                     self.set_xy(10, 10)
             else:
@@ -16143,15 +16137,15 @@ class QuotationPDF(FPDF):
             self.set_xy(10, 10)
         
         # Company name
-        self.set_font_safe('B', 14)
+        self.set_font_safe('B', 12)
         self.set_text_color(26, 54, 93)  # Dark blue
-        self.cell_safe(0, 6, cs.get('company_name', 'Malaysian Defensive Driving and Riding Centre Sdn Bhd'), ln=True)
+        self.cell_safe(0, 5, cs.get('company_name', 'Malaysian Defensive Driving and Riding Centre Sdn Bhd'), ln=True)
         
-        # Company details
-        self.set_font_safe('', 9)
+        # Company details in smaller font
+        self.set_font_safe('', 8)
         self.set_text_color(80, 80, 80)
         if cs.get('company_reg_no'):
-            self.cell_safe(0, 4, f"Reg No: {cs.get('company_reg_no')}", ln=True)
+            self.cell_safe(0, 3.5, f"Reg No: {cs.get('company_reg_no')}", ln=True)
         
         address_parts = []
         if cs.get('address_line1'):
@@ -16163,19 +16157,45 @@ class QuotationPDF(FPDF):
             address_parts.append(city_line)
         
         for part in address_parts:
-            self.cell_safe(0, 4, part, ln=True)
+            self.cell_safe(0, 3.5, part, ln=True)
         
+        contact_line = []
         if cs.get('phone'):
-            self.cell_safe(0, 4, f"Tel: {cs.get('phone')}", ln=True)
+            contact_line.append(f"Tel: {cs.get('phone')}")
         if cs.get('email'):
-            self.cell_safe(0, 4, f"Email: {cs.get('email')}", ln=True)
+            contact_line.append(f"Email: {cs.get('email')}")
+        if contact_line:
+            self.cell_safe(0, 3.5, " | ".join(contact_line), ln=True)
         
         # Line separator
-        self.ln(5)
+        self.ln(3)
         self.set_draw_color(26, 54, 93)
         self.set_line_width(0.5)
         self.line(10, self.get_y(), 200, self.get_y())
-        self.ln(8)
+        self.ln(5)
+    
+    def footer(self):
+        """Invoice-style footer - uniform across all pages"""
+        self.set_y(-20)
+        
+        # Separator line
+        self.set_draw_color(26, 54, 93)
+        self.set_line_width(0.3)
+        self.line(10, self.get_y(), 200, self.get_y())
+        
+        self.ln(2)
+        self.set_font_safe('I', 7)
+        self.set_text_color(100, 100, 100)
+        
+        # Footer text
+        cs = self.company_settings
+        footer_text = cs.get('company_name', 'MDDRC Sdn Bhd')
+        if cs.get('company_reg_no'):
+            footer_text += f" | Reg No: {cs.get('company_reg_no')}"
+        
+        self.cell(0, 4, footer_text, align='C')
+        self.ln(3)
+        self.cell(0, 4, f'Page {self.page_no()}', align='C')
 
 
 @api_router.get("/marketing/quotations/{quotation_id}/download-pdf")
