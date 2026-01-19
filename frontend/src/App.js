@@ -287,7 +287,7 @@ function App() {
           <Route
             path="/marketing"
             element={
-              user && (user.role === "marketing" || (user.additional_roles && user.additional_roles.includes("marketing"))) ? (
+              user && (user.role === "marketing" || user.role === "admin" || user.role === "super_admin" || (user.additional_roles && user.additional_roles.includes("marketing"))) ? (
                 <MarketingDashboard user={user} onLogout={handleLogout} />
               ) : (
                 <Navigate to="/login" replace />
