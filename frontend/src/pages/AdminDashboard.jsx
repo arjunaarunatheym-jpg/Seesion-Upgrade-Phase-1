@@ -4542,6 +4542,44 @@ const AdminDashboard = ({ user, onLogout }) => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* PDF Templates Management */}
+            <Card className="mt-6">
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <CardTitle>PDF Document Templates</CardTitle>
+                    <CardDescription>Customize cover letter and terms & conditions for quotation PDFs</CardDescription>
+                  </div>
+                  <Button 
+                    onClick={() => {
+                      loadPdfTemplates();
+                      setShowPdfTemplatesDialog(true);
+                    }}
+                    size="sm"
+                  >
+                    <Edit className="w-4 h-4 mr-2" /> Edit Templates
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <h4 className="font-semibold text-blue-900 mb-2">Cover Letter (Page 1)</h4>
+                    <p className="text-sm text-blue-700">
+                      Customize the introductory letter that appears on the first page of the quotation PDF.
+                      Use placeholders like {"{{programme_name}}"}, {"{{company_name}}"}, {"{{contact_person}}"}, {"{{quotation_number}}"}.
+                    </p>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <h4 className="font-semibold text-green-900 mb-2">Terms & Conditions (Pages 3-6)</h4>
+                    <p className="text-sm text-green-700">
+                      Define the terms and conditions that will be included in pages 3-6 of the quotation PDF document.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* My Payroll Tab */}
