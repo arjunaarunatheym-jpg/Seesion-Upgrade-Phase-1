@@ -16414,7 +16414,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     
     # Quotation table with text wrapping for description
     pdf.set_font_safe('B', 9)
-    pdf.set_fill_color(26, 54, 93)
+    pdf.set_fill_color(*pdf.primary_color)
     pdf.set_text_color(255, 255, 255)
     
     # Table header - adjusted column widths for better text fit
@@ -16440,12 +16440,8 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
         rate_display = f"{quotation.get('rate_per_pax', 0):,.2f}"
         qty_display = str(quotation.get("num_participants", 1))
     
-    # Calculate row height needed for programme name (text wrapping)
+    # Draw main programme row
     programme_name = sanitize_text_for_pdf(quotation.get("programme_name", ""))
-    # Estimate characters per line based on column width
-    chars_per_line = int(col_desc * 0.4)  # Rough estimate
-    num_lines = max(1, (len(programme_name) + chars_per_line - 1) // chars_per_line)
-    row_height = max(8, num_lines * 5)
     
     # Use multi_cell for description to enable text wrapping
     x_start = pdf.get_x()
@@ -16463,14 +16459,15 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.cell_safe(col_amount, actual_height, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R')
     pdf.set_y(y_after_desc)
     
-    # Description items (inclusions) with wrapping
+    # Description items (inclusions) - each as separate row with full width
     if description_items_text or quotation.get("custom_description"):
-        pdf.set_font_safe('I', 8)
         all_desc = description_items_text + ([quotation.get("custom_description")] if quotation.get("custom_description") else [])
         for desc in all_desc:
             if desc:
-                # Use multi_cell for each description item
-                pdf.multi_cell_safe(185, 4, f"   - {desc}", border=0)
+                pdf.set_font_safe('I', 8)
+                pdf.set_fill_color(250, 250, 250)
+                # Use full width for description items
+                pdf.multi_cell_safe(col_desc + col_qty + col_rate + col_amount, 5, f"  Includes: {desc}", border='LRB', fill=True)
     
     pdf.set_font_safe('', 9)
     pdf.ln(2)
