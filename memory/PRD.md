@@ -642,15 +642,21 @@ A full-featured quotation management system for the marketing team, allowing the
   - Rows based on num_participants (min 10)
   - Continues to next page if needed
 
-#### 6. Admin PDF Templates Management ✅ NEW
+#### 6. Admin PDF Templates Management ✅ UPDATED
 - Located in Admin Dashboard > Quotations tab
 - "PDF Document Templates" card with Edit button
-- Cover Letter template with placeholders:
+- **Cover Letter template** with placeholders:
   - `{{programme_name}}`
   - `{{company_name}}`
   - `{{contact_person}}`
   - `{{quotation_number}}`
-- Terms & Conditions template (multi-page support)
+- **Terms & Conditions editor** with rich text formatting:
+  - Bold, Italic, Underline, Strikethrough
+  - Headings (H1, H2, H3)
+  - Ordered & Bullet lists
+  - Text alignment
+  - Preview mode to see formatted content before saving
+- Uses React-Quill for WYSIWYG editing
 
 ### Technical Implementation
 
