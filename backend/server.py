@@ -16083,13 +16083,37 @@ def sanitize_text_for_pdf(text):
     return ''.join(c if ord(c) < 256 else '-' for c in text)
 
 
+def strip_html_tags(html_text):
+    """Strip HTML tags and convert to plain text, preserving line breaks"""
+    if not html_text:
+        return ""
+    import re
+    # Replace <br>, </p>, </div>, </li> with newlines
+    text = re.sub(r'<br\s*/?>', '\n', html_text)
+    text = re.sub(r'</p>', '\n', text)
+    text = re.sub(r'</div>', '\n', text)
+    text = re.sub(r'</li>', '\n', text)
+    # Add bullet for <li>
+    text = re.sub(r'<li>', '• ', text)
+    # Replace headings with caps and newlines
+    text = re.sub(r'<h[1-3][^>]*>(.*?)</h[1-3]>', r'\n\1\n', text, flags=re.IGNORECASE)
+    # Remove all other HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Clean up whitespace
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    return text.strip()
+
+
 class QuotationPDF(FPDF):
-    """Custom PDF class for quotation document generation - matches invoice styling"""
+    """Custom PDF class for quotation document generation - EXACT invoice styling"""
     
     def __init__(self, company_settings=None):
         super().__init__()
         self.company_settings = company_settings or {}
-        self.set_auto_page_break(auto=True, margin=25)  # More margin for footer
+        self.set_auto_page_break(auto=True, margin=30)  # Space for footer
+        # Colors from invoice
+        self.primary_color = (26, 54, 93)  # Dark blue #1a365d
+        self.secondary_color = (68, 114, 196)  # Blue #4472C4
         # Add Unicode font support
         try:
             self.add_font('DejaVu', '', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', uni=True)
@@ -16115,87 +16139,106 @@ class QuotationPDF(FPDF):
         self.multi_cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
     
     def header(self):
-        """Invoice-style header - uniform across all pages"""
+        """Invoice-style header with logo - uniform across all pages"""
         cs = self.company_settings
         
-        # Save current position
         self.set_y(10)
         
-        # Try to add logo if available
+        # Logo on the left
         logo_url = cs.get('logo_url')
-        if logo_url and logo_url.startswith('/'):
-            logo_path = ROOT_DIR / logo_url.lstrip('/')
-            if logo_path.exists():
+        logo_x_end = 10
+        if logo_url:
+            logo_path = None
+            if logo_url.startswith('/'):
+                logo_path = ROOT_DIR / logo_url.lstrip('/')
+            if logo_path and logo_path.exists():
                 try:
-                    self.image(str(logo_path), x=10, y=10, w=35)
-                    self.set_xy(50, 10)
+                    self.image(str(logo_path), x=10, y=10, w=30)
+                    logo_x_end = 45
                 except Exception:
-                    self.set_xy(10, 10)
-            else:
-                self.set_xy(10, 10)
-        else:
-            self.set_xy(10, 10)
+                    pass
         
-        # Company name
-        self.set_font_safe('B', 12)
-        self.set_text_color(26, 54, 93)  # Dark blue
-        self.cell_safe(0, 5, cs.get('company_name', 'Malaysian Defensive Driving and Riding Centre Sdn Bhd'), ln=True)
+        # Company details next to logo
+        self.set_xy(logo_x_end, 10)
+        self.set_font_safe('B', 14)
+        self.set_text_color(*self.primary_color)
+        self.cell_safe(0, 5, cs.get('company_name', 'MALAYSIAN DEFENSIVE DRIVING AND RIDING CENTRE SDN BHD'), ln=True)
         
-        # Company details in smaller font
-        self.set_font_safe('', 8)
-        self.set_text_color(80, 80, 80)
+        self.set_x(logo_x_end)
+        self.set_font_safe('', 9)
+        self.set_text_color(68, 68, 68)
+        
+        # Company info on one line like invoice
+        info_parts = []
         if cs.get('company_reg_no'):
-            self.cell_safe(0, 3.5, f"Reg No: {cs.get('company_reg_no')}", ln=True)
-        
-        address_parts = []
+            info_parts.append(f"({cs.get('company_reg_no')})")
         if cs.get('address_line1'):
-            address_parts.append(cs.get('address_line1'))
+            info_parts.append(cs.get('address_line1'))
         if cs.get('address_line2'):
-            address_parts.append(cs.get('address_line2'))
-        if cs.get('city') or cs.get('postcode') or cs.get('state'):
-            city_line = ', '.join(filter(None, [cs.get('postcode'), cs.get('city'), cs.get('state')]))
-            address_parts.append(city_line)
+            info_parts.append(cs.get('address_line2'))
+        if info_parts:
+            self.cell_safe(0, 4, ' • '.join(info_parts), ln=True)
         
-        for part in address_parts:
-            self.cell_safe(0, 3.5, part, ln=True)
-        
-        contact_line = []
+        # City, postcode, state, contact
+        self.set_x(logo_x_end)
+        contact_parts = []
+        location = ', '.join(filter(None, [cs.get('city'), cs.get('postcode'), cs.get('state')]))
+        if location:
+            contact_parts.append(location)
         if cs.get('phone'):
-            contact_line.append(f"Tel: {cs.get('phone')}")
+            contact_parts.append(f"Tel: {cs.get('phone')}")
         if cs.get('email'):
-            contact_line.append(f"Email: {cs.get('email')}")
-        if contact_line:
-            self.cell_safe(0, 3.5, " | ".join(contact_line), ln=True)
+            contact_parts.append(cs.get('email'))
+        if contact_parts:
+            self.cell_safe(0, 4, ' • '.join(contact_parts), ln=True)
         
-        # Line separator
-        self.ln(3)
-        self.set_draw_color(26, 54, 93)
-        self.set_line_width(0.5)
+        # Blue separator line (like invoice)
+        self.ln(2)
+        self.set_draw_color(*self.primary_color)
+        self.set_line_width(1)
         self.line(10, self.get_y(), 200, self.get_y())
         self.ln(5)
     
     def footer(self):
-        """Invoice-style footer - uniform across all pages"""
-        self.set_y(-20)
+        """Invoice-style footer with bank details and tagline"""
+        cs = self.company_settings
+        
+        self.set_y(-28)
         
         # Separator line
-        self.set_draw_color(26, 54, 93)
+        self.set_draw_color(200, 200, 200)
         self.set_line_width(0.3)
         self.line(10, self.get_y(), 200, self.get_y())
         
         self.ln(2)
-        self.set_font_safe('I', 7)
-        self.set_text_color(100, 100, 100)
+        self.set_font_safe('', 8)
+        self.set_text_color(85, 85, 85)
         
-        # Footer text
-        cs = self.company_settings
-        footer_text = cs.get('company_name', 'MDDRC Sdn Bhd')
-        if cs.get('company_reg_no'):
-            footer_text += f" | Reg No: {cs.get('company_reg_no')}"
+        # Bank details (like invoice)
+        bank_info = []
+        if cs.get('bank_name'):
+            bank_info.append(f"Bank: {cs.get('bank_name')}")
+        if cs.get('bank_account_name'):
+            bank_info.append(f"Account: {cs.get('bank_account_name')}")
+        if cs.get('bank_account_number'):
+            bank_info.append(f"No: {cs.get('bank_account_number')}")
+        if bank_info:
+            self.cell(0, 4, ' | '.join(bank_info), align='C', ln=True)
         
-        self.cell(0, 4, footer_text, align='C')
-        self.ln(3)
-        self.cell(0, 4, f'Page {self.page_no()}', align='C')
+        # Footer note
+        footer_note = cs.get('invoice_footer_note', 'Thank you for your business!')
+        self.cell(0, 4, footer_note, align='C', ln=True)
+        
+        # Tagline in italic primary color (like invoice)
+        tagline = cs.get('tagline', 'Towards a Nation of Safe Drivers')
+        self.set_font_safe('I', 9)
+        self.set_text_color(*self.primary_color)
+        self.cell(0, 5, f'"{tagline}"', align='C', ln=True)
+        
+        # Page number
+        self.set_font_safe('', 7)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 3, f'Page {self.page_no()}', align='C')
 
 
 @api_router.get("/marketing/quotations/{quotation_id}/download-pdf")
