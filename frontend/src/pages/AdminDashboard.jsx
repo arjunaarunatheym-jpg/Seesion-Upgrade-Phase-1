@@ -221,6 +221,16 @@ const AdminDashboard = ({ user, onLogout }) => {
   });
   const [assistantAdminDialogOpen, setAssistantAdminDialogOpen] = useState(false);
 
+  // Quotations state
+  const [quotations, setQuotations] = useState([]);
+  const [pendingQuotations, setPendingQuotations] = useState([]);
+  const [quotationFilter, setQuotationFilter] = useState("pending_approval");
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [selectedQuotation, setSelectedQuotation] = useState(null);
+  const [rejectRemarks, setRejectRemarks] = useState("");
+  const [viewQuotationDialog, setViewQuotationDialog] = useState(false);
+
   // Finance user form
   const [financeForm, setFinanceForm] = useState({
     email: "",
