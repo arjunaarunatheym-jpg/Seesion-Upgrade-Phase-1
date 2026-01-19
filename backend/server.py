@@ -16687,44 +16687,44 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.set_font_safe('I', 6)
     pdf.cell_safe(0, 4, "(Please attach another copy if the space above is insufficient)", align='C', ln=True)
     
-    # PDPA Consent (if space available)
-    if pdf.get_y() < 220:
-        pdf.ln(3)
-        pdf.set_font_safe('B', 8)
-        pdf.set_text_color(26, 54, 93)
-        pdf.cell_safe(0, 5, "PDPA CONSENT", ln=True)
-        pdf.set_font_safe('', 7)
-        pdf.set_text_color(0, 0, 0)
-        pdf.multi_cell_safe(0, 3.5, "By signing this form, you hereby agree to give your consent to collect, obtain, store and process the personal data that you provide in this form for the purpose of training delivery, certification, and compliance. Personal data may also be transferred to principals, accreditors and examination institutes as part of course delivery.")
+    # PDPA Consent
+    pdf.ln(3)
+    pdf.set_font_safe('B', 8)
+    pdf.set_text_color(*pdf.primary_color)
+    pdf.cell_safe(0, 5, "PDPA CONSENT", ln=True)
+    pdf.set_font_safe('', 6)
+    pdf.set_text_color(0, 0, 0)
+    pdf.multi_cell_safe(0, 3, "By signing this form, you hereby agree to give your consent to collect, obtain, store and process the personal data that you provide in this form for the purpose of training delivery, certification, and compliance. Personal data may also be transferred to principals, accreditors and examination institutes as part of course delivery.")
     
     # Authorized Signatory Section
-    pdf.ln(5)
+    pdf.ln(3)
     pdf.set_font_safe('B', 8)
-    pdf.set_text_color(26, 54, 93)
+    pdf.set_text_color(*pdf.primary_color)
     pdf.cell_safe(0, 5, "AUTHORIZED SIGNATORY & COMPANY STAMP", ln=True)
     
-    pdf.set_font_safe('', 8)
+    pdf.set_font_safe('', 7)
     pdf.set_text_color(0, 0, 0)
     
-    # Two columns for signature
+    # Two columns for signature - better layout
     y_sig = pdf.get_y()
+    
+    # Left column - signature fields
     pdf.set_xy(10, y_sig)
-    pdf.cell_safe(90, 5, "Name: _________________________________")
-    pdf.set_xy(110, y_sig)
-    pdf.rect(110, y_sig, 80, 25, 'D')  # Box for company stamp
-    pdf.set_xy(112, y_sig + 2)
+    pdf.cell_safe(90, 5, "Name: _______________________________")
+    pdf.set_xy(10, y_sig + 6)
+    pdf.cell_safe(90, 5, "Designation: __________________________")
+    pdf.set_xy(10, y_sig + 12)
+    pdf.cell_safe(90, 5, "Date: ________________________________")
+    pdf.set_xy(10, y_sig + 18)
+    pdf.cell_safe(90, 5, "Signature: ___________________________")
+    
+    # Right column - company stamp box
+    pdf.set_draw_color(180, 180, 180)
+    pdf.rect(110, y_sig, 80, 23, 'D')
+    pdf.set_xy(112, y_sig + 8)
     pdf.set_font_safe('I', 7)
+    pdf.set_text_color(150, 150, 150)
     pdf.cell_safe(76, 4, "Company Stamp", align='C')
-    
-    pdf.set_xy(10, y_sig + 8)
-    pdf.set_font_safe('', 8)
-    pdf.cell_safe(90, 5, "Designation: ___________________________")
-    
-    pdf.set_xy(10, y_sig + 16)
-    pdf.cell_safe(90, 5, "Date: _________________________________")
-    
-    pdf.set_xy(10, y_sig + 24)
-    pdf.cell_safe(90, 5, "Signature: _____________________________")
     
     # Thank you message at bottom
     pdf.set_y(-35)
