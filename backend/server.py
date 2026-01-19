@@ -678,6 +678,17 @@ class MarketingClientCreate(BaseModel):
     contact_email: str
     notes: Optional[str] = None
 
+class QuotationDescriptionItem(BaseModel):
+    """Reusable description items that admin creates for marketers to select"""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str  # Short name for selection
+    description: str  # Full description text to appear in quotation
+    category: str = "general"  # Category for grouping (e.g., "inclusions", "equipment", "services")
+    is_active: bool = True
+    sort_order: int = 0
+    created_at: datetime = Field(default_factory=get_malaysia_time)
+
 class Quotation(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -685,14 +696,18 @@ class Quotation(BaseModel):
     client_id: str
     programme_id: str
     programme_name: str
+    pricing_type: str = "per_pax"  # "per_pax" or "per_group"
     num_participants: int = 1
-    rate_per_pax: float
+    rate_per_pax: float = 0  # Used when pricing_type is "per_pax"
+    group_price: float = 0  # Used when pricing_type is "per_group"
     subtotal: float
     sst_percent: float = 0
     sst_amount: float = 0
     total_amount: float
     validity_days: int = 30
     valid_until: str
+    description_items: List[str] = []  # List of selected description item IDs
+    custom_description: Optional[str] = None  # Additional custom description
     remarks: Optional[str] = None
     terms_conditions: Optional[str] = None
     status: str = "draft"  # draft, pending_approval, approved, rejected, sent, accepted, declined
@@ -708,18 +723,26 @@ class Quotation(BaseModel):
 class QuotationCreate(BaseModel):
     client_id: str
     programme_id: str
+    pricing_type: str = "per_pax"  # "per_pax" or "per_group"
     num_participants: int = 1
-    rate_per_pax: float
+    rate_per_pax: float = 0
+    group_price: float = 0
     sst_percent: float = 0
     validity_days: int = 30
+    description_items: List[str] = []  # Selected description item IDs
+    custom_description: Optional[str] = None
     remarks: Optional[str] = None
     terms_conditions: Optional[str] = None
 
 class QuotationUpdate(BaseModel):
+    pricing_type: Optional[str] = None
     num_participants: Optional[int] = None
     rate_per_pax: Optional[float] = None
+    group_price: Optional[float] = None
     sst_percent: Optional[float] = None
     validity_days: Optional[int] = None
+    description_items: Optional[List[str]] = None
+    custom_description: Optional[str] = None
     remarks: Optional[str] = None
     terms_conditions: Optional[str] = None
 
