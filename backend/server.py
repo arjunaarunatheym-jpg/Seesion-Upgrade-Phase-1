@@ -656,6 +656,78 @@ class Attendance(BaseModel):
     clock_out: Optional[str] = None
     created_at: datetime = Field(default_factory=get_malaysia_time)
 
+# ==================== MARKETING QUOTATION MODELS ====================
+class MarketingClient(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    company_name: str
+    company_address: str
+    contact_person: str
+    contact_phone: str
+    contact_email: str
+    notes: Optional[str] = None
+    created_by: str  # marketer user id (ownership)
+    created_at: datetime = Field(default_factory=get_malaysia_time)
+    updated_at: datetime = Field(default_factory=get_malaysia_time)
+
+class MarketingClientCreate(BaseModel):
+    company_name: str
+    company_address: str
+    contact_person: str
+    contact_phone: str
+    contact_email: str
+    notes: Optional[str] = None
+
+class Quotation(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    quotation_number: str  # QOU/MDDRC/YYYY/MM/0001
+    client_id: str
+    programme_id: str
+    programme_name: str
+    num_participants: int = 1
+    rate_per_pax: float
+    subtotal: float
+    sst_percent: float = 0
+    sst_amount: float = 0
+    total_amount: float
+    validity_days: int = 30
+    valid_until: str
+    remarks: Optional[str] = None
+    terms_conditions: Optional[str] = None
+    status: str = "draft"  # draft, pending_approval, approved, rejected, sent, accepted, declined
+    status_history: List[dict] = []
+    admin_remarks: Optional[str] = None
+    created_by: str  # marketer user id
+    approved_by: Optional[str] = None
+    approved_at: Optional[str] = None
+    sent_at: Optional[str] = None
+    created_at: datetime = Field(default_factory=get_malaysia_time)
+    updated_at: datetime = Field(default_factory=get_malaysia_time)
+
+class QuotationCreate(BaseModel):
+    client_id: str
+    programme_id: str
+    num_participants: int = 1
+    rate_per_pax: float
+    sst_percent: float = 0
+    validity_days: int = 30
+    remarks: Optional[str] = None
+    terms_conditions: Optional[str] = None
+
+class QuotationUpdate(BaseModel):
+    num_participants: Optional[int] = None
+    rate_per_pax: Optional[float] = None
+    sst_percent: Optional[float] = None
+    validity_days: Optional[int] = None
+    remarks: Optional[str] = None
+    terms_conditions: Optional[str] = None
+
+class QuotationStatusUpdate(BaseModel):
+    status: str
+    remarks: Optional[str] = None
+# ==================== END MARKETING MODELS ====================
+
 class AttendanceClockIn(BaseModel):
     session_id: str
 
