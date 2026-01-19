@@ -326,6 +326,15 @@ const AdminDashboard = ({ user, onLogout }) => {
         console.log('Marketing users not loaded:', e.message);
       }
       
+      // Load quotations (admin sees all)
+      try {
+        const quotationsRes = await axiosInstance.get(`/marketing/quotations?_t=${timestamp}`);
+        setQuotations(quotationsRes.data);
+        setPendingQuotations(quotationsRes.data.filter(q => q.status === 'pending_approval'));
+      } catch (e) {
+        console.log('Quotations not loaded:', e.message);
+      }
+      
       // Load finance summary with year filter
       await loadFinanceSummaryByYear(financeYear);
     } catch (error) {
