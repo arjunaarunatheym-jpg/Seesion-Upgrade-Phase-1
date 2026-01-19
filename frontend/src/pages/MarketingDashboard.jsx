@@ -227,16 +227,6 @@ const MarketingDashboard = ({ user, onLogout }) => {
     });
     setShowQuotationDialog(true);
   };
-      programme_id: quotation.programme_id || '',
-      num_participants: quotation.num_participants || 1,
-      rate_per_pax: quotation.rate_per_pax || 0,
-      sst_percent: quotation.sst_percent || 0,
-      validity_days: quotation.validity_days || 30,
-      remarks: quotation.remarks || '',
-      terms_conditions: quotation.terms_conditions || ''
-    });
-    setShowQuotationDialog(true);
-  };
 
   const handleSubmitForApproval = async (quotationId) => {
     try {
