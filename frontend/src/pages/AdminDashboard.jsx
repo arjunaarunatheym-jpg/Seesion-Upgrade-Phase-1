@@ -4368,6 +4368,105 @@ const AdminDashboard = ({ user, onLogout }) => {
             </Card>
           </TabsContent>
 
+          {/* Quotations Tab */}
+          <TabsContent value="quotations">
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center flex-wrap gap-3">
+                  <div>
+                    <CardTitle>Quotation Management</CardTitle>
+                    <CardDescription>Review and approve marketing quotations</CardDescription>
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Badge className="bg-yellow-500 text-white">{pendingQuotations.length} Pending</Badge>
+                    <Select value={quotationFilter} onValueChange={setQuotationFilter}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue placeholder="Filter" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="pending_approval">Pending Approval</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                        <SelectItem value="sent">Sent</SelectItem>
+                        <SelectItem value="accepted">Accepted</SelectItem>
+                        <SelectItem value="declined">Declined</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {filteredQuotations.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No quotations found</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-gray-50">
+                          <th className="text-left p-3">Quotation No</th>
+                          <th className="text-left p-3">Client</th>
+                          <th className="text-left p-3">Marketer</th>
+                          <th className="text-left p-3">Programme</th>
+                          <th className="text-right p-3">Amount</th>
+                          <th className="text-center p-3">Status</th>
+                          <th className="text-center p-3">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredQuotations.map(q => (
+                          <tr key={q.id} className="border-b hover:bg-gray-50">
+                            <td className="p-3 font-medium">{q.quotation_number}</td>
+                            <td className="p-3">{q.client_name}</td>
+                            <td className="p-3">{q.marketer_name}</td>
+                            <td className="p-3">{q.programme_name}</td>
+                            <td className="p-3 text-right">RM {(q.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                            <td className="p-3 text-center">{getQuotationStatusBadge(q.status)}</td>
+                            <td className="p-3">
+                              <div className="flex justify-center gap-1">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => { setSelectedQuotation(q); setViewQuotationDialog(true); }}
+                                  title="View Details"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                                
+                                {q.status === 'pending_approval' && (
+                                  <>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm" 
+                                      onClick={() => handleApproveQuotation(q.id)}
+                                      title="Approve"
+                                      className="text-green-600 hover:text-green-700"
+                                    >
+                                      <CheckCircle className="w-4 h-4" />
+                                    </Button>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm" 
+                                      onClick={() => { setSelectedQuotation(q); setRejectDialogOpen(true); }}
+                                      title="Reject"
+                                      className="text-red-600 hover:text-red-700"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* My Payroll Tab */}
           <TabsContent value="my-payroll">
             <MyPayroll />
