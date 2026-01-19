@@ -23,7 +23,7 @@ import pymongo
 import os
 
 # Configuration
-BASE_URL = "https://financeflow-209.preview.emergentagent.com/api"
+BASE_URL = "https://marketing-portal-3.preview.emergentagent.com/api"
 
 # Test Credentials from review request
 ADMIN_EMAIL = "arjuna@mddrc.com.my"

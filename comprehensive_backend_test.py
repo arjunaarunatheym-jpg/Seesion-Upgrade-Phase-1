@@ -33,7 +33,7 @@ from typing import Dict, List, Optional
 import uuid
 
 # Configuration
-BASE_URL = "https://financeflow-209.preview.emergentagent.com/api"
+BASE_URL = "https://marketing-portal-3.preview.emergentagent.com/api"
 
 # Test credentials from review request
 TEST_CREDENTIALS = {
