@@ -567,3 +567,125 @@ A comprehensive training management platform for MDDRC (Malaysian Defensive Driv
 - Backend: 10/10 API tests passed
 - Frontend: All UI features working
 - Test file: `/app/tests/test_billing_parties_companies.py`
+
+
+---
+
+## MARKETING PORTAL - PHASE 1 ✅ COMPLETE (January 19, 2026)
+
+### Overview
+A full-featured quotation management system for the marketing team, allowing them to create quotations, get admin approval, and generate professional PDF packages.
+
+### Features Implemented
+
+#### 1. Client Management ✅
+- Create and manage marketing clients
+- Store company details, contact person, phone, email, address
+- Client list with search functionality
+
+#### 2. Quotation Creation ✅
+- Create quotations with unique numbering format: `QOU/MDDRC/YYYY/MM/0001`
+- Select programme, set pricing (per pax or per group)
+- Add description items (admin-managed templates)
+- Custom remarks and terms
+
+#### 3. Quotation Workflow ✅
+- Status flow: Draft → Pending Approval → Approved/Rejected → Sent → Accepted/Declined
+- Admin approval queue in Admin Dashboard > Quotations tab
+- Marketer can edit rejected quotations
+
+#### 4. Accept Quotation with Training Details ✅ NEW
+- When marking quotation as "Accepted", dialog opens requiring:
+  - Training Date (date picker)
+  - Venue / Location (text input)
+- Training details saved to quotation and shown in PDF
+
+#### 5. Multi-Page PDF Generation ✅ NEW
+- **Page 1: Cover Letter**
+  - Company header with logo
+  - Recipient details (client name, address)
+  - Custom content from admin template
+  - Signature block
+  
+- **Page 2: Quotation Details**
+  - Quotation number, date, validity
+  - Client info box
+  - Training details (date/venue) if accepted
+  - Pricing table with programme, qty, rate, amount
+  - Description items
+  - SST if applicable
+  - Total amount
+  - Prepared/Approved signatures
+  
+- **Pages 3-6: Terms & Conditions**
+  - Custom content from admin template
+  - Paginated automatically
+
+- **Page 7: Attendance/Participants List**
+  - Programme, client, date, venue
+  - Table columns: No, Full Name, IC Number, Company Name, Citizen, Signature
+  - Rows based on num_participants (min 10)
+  - Continues to next page if needed
+
+#### 6. Admin PDF Templates Management ✅ NEW
+- Located in Admin Dashboard > Quotations tab
+- "PDF Document Templates" card with Edit button
+- Cover Letter template with placeholders:
+  - `{{programme_name}}`
+  - `{{company_name}}`
+  - `{{contact_person}}`
+  - `{{quotation_number}}`
+- Terms & Conditions template (multi-page support)
+
+### Technical Implementation
+
+#### Backend (`server.py`)
+- `QuotationPDF` class with Unicode font support (DejaVu)
+- `sanitize_text_for_pdf()` for character handling
+- Endpoints:
+  - `GET /api/marketing/quotations/{id}/download-pdf` - Generate PDF
+  - `GET /api/marketing/pdf-templates` - Get templates
+  - `PUT /api/marketing/pdf-templates` - Update templates
+  - Updated: `POST /api/marketing/quotations/{id}/client-response` - Now requires training_date and venue for "accepted"
+
+#### Frontend
+- `MarketingDashboard.jsx`: Accept dialog, PDF download button, training details display
+- `AdminDashboard.jsx`: PDF templates management section
+
+### Test Results (Iteration 11)
+- Backend: 100% (12/12 tests passed)
+- Frontend: 100% (all features working)
+- Test file: `/app/tests/test_quotation_pdf.py`
+
+### Access
+- Marketing Users: Users with `additional_roles: ["marketing"]`
+- Credentials: `malek@mddrc.com.my` / `mddrc1` or `chandra@mddrc.com.my` / `mddrc1`
+- Access via: Dashboard → Marketing button
+
+---
+
+## UPCOMING TASKS (P1 Priority)
+
+### Marketing Portal Phase 2
+1. Extended quotation statuses (Negotiating, Revised, Expired, Converted)
+2. One-click conversion: Accepted quotation → Training session
+3. CSV/Excel export functionality
+4. Performance reports for marketers
+
+### Finance
+1. Formal Accountant P&L view
+2. Year-over-Year (YoY) analysis
+
+### System
+1. Backend refactoring (`server.py` → separate router files)
+2. Frontend refactoring (break down AdminDashboard.jsx, MarketingDashboard.jsx)
+
+---
+
+## BACKLOG (P2 Priority)
+
+1. Post-Training Evaluation System
+2. Billing party deletion verification
+3. Invoice "Undo" and "Replace" button verification
+4. Re-adding dummy participant verification
+
