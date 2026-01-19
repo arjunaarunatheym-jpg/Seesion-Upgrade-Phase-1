@@ -16061,6 +16061,28 @@ async def update_pdf_templates(data: dict, current_user: User = Depends(get_curr
 
 # ==================== QUOTATION PDF GENERATION ====================
 
+def sanitize_text_for_pdf(text):
+    """Remove or replace characters that might cause font issues"""
+    if not text:
+        return ""
+    # Replace common problematic characters
+    replacements = {
+        '–': '-',  # en-dash
+        '—': '-',  # em-dash
+        ''': "'",  # smart quote
+        ''': "'",  # smart quote
+        '"': '"',  # smart quote
+        '"': '"',  # smart quote
+        '…': '...',  # ellipsis
+        '\u200b': '',  # zero-width space
+        '\xa0': ' ',  # non-breaking space
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    # Filter out any remaining non-ASCII characters that might cause issues
+    return ''.join(c if ord(c) < 256 else '-' for c in text)
+
+
 class QuotationPDF(FPDF):
     """Custom PDF class for quotation document generation"""
     
@@ -16068,13 +16090,36 @@ class QuotationPDF(FPDF):
         super().__init__()
         self.company_settings = company_settings or {}
         self.set_auto_page_break(auto=True, margin=15)
+        # Add Unicode font support
+        try:
+            self.add_font('DejaVu', '', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', uni=True)
+            self.add_font('DejaVu', 'B', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', uni=True)
+            self.add_font('DejaVu', 'I', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf', uni=True)
+            self.unicode_font = True
+        except Exception:
+            self.unicode_font = False
+    
+    def set_font_safe(self, style='', size=10):
+        """Set font with fallback for Unicode support"""
+        if self.unicode_font:
+            self.set_font('DejaVu', style, size)
+        else:
+            self.set_font('Helvetica', style, size)
+    
+    def cell_safe(self, w, h, txt, **kwargs):
+        """Cell with text sanitization"""
+        self.cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
+    
+    def multi_cell_safe(self, w, h, txt, **kwargs):
+        """Multi-cell with text sanitization"""
+        self.multi_cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
     
     def header(self):
         pass  # We'll manage headers per page
     
     def footer(self):
         self.set_y(-15)
-        self.set_font('Helvetica', 'I', 8)
+        self.set_font_safe('I', 8)
         self.set_text_color(128, 128, 128)
         self.cell(0, 10, f'Page {self.page_no()}', align='C')
     
@@ -16098,15 +16143,15 @@ class QuotationPDF(FPDF):
             self.set_xy(10, 10)
         
         # Company name
-        self.set_font('Helvetica', 'B', 14)
+        self.set_font_safe('B', 14)
         self.set_text_color(26, 54, 93)  # Dark blue
-        self.cell(0, 6, cs.get('company_name', 'Malaysian Defensive Driving and Riding Centre Sdn Bhd'), ln=True)
+        self.cell_safe(0, 6, cs.get('company_name', 'Malaysian Defensive Driving and Riding Centre Sdn Bhd'), ln=True)
         
         # Company details
-        self.set_font('Helvetica', '', 9)
+        self.set_font_safe('', 9)
         self.set_text_color(80, 80, 80)
         if cs.get('company_reg_no'):
-            self.cell(0, 4, f"Reg No: {cs.get('company_reg_no')}", ln=True)
+            self.cell_safe(0, 4, f"Reg No: {cs.get('company_reg_no')}", ln=True)
         
         address_parts = []
         if cs.get('address_line1'):
@@ -16118,12 +16163,12 @@ class QuotationPDF(FPDF):
             address_parts.append(city_line)
         
         for part in address_parts:
-            self.cell(0, 4, part, ln=True)
+            self.cell_safe(0, 4, part, ln=True)
         
         if cs.get('phone'):
-            self.cell(0, 4, f"Tel: {cs.get('phone')}", ln=True)
+            self.cell_safe(0, 4, f"Tel: {cs.get('phone')}", ln=True)
         if cs.get('email'):
-            self.cell(0, 4, f"Email: {cs.get('email')}", ln=True)
+            self.cell_safe(0, 4, f"Email: {cs.get('email')}", ln=True)
         
         # Line separator
         self.ln(5)
