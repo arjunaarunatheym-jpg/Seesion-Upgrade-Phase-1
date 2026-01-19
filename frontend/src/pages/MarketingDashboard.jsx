@@ -738,20 +738,20 @@ const MarketingDashboard = ({ user, onLogout }) => {
           <TabsContent value="quotations">
             <Card>
               <CardHeader>
-                <div className="flex justify-between items-center flex-wrap gap-3">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div>
-                    <CardTitle>Quotations</CardTitle>
-                    <CardDescription>Manage your quotations</CardDescription>
+                    <CardTitle className="text-lg sm:text-xl">Quotations</CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">Manage your quotations</CardDescription>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 w-full sm:w-auto">
                     <Select value={quotationFilter} onValueChange={setQuotationFilter}>
-                      <SelectTrigger className="w-40">
+                      <SelectTrigger className="w-full sm:w-40 text-xs sm:text-sm">
                         <SelectValue placeholder="Filter" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All Status</SelectItem>
                         <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="pending_approval">Pending Approval</SelectItem>
+                        <SelectItem value="pending_approval">Pending</SelectItem>
                         <SelectItem value="approved">Approved</SelectItem>
                         <SelectItem value="rejected">Rejected</SelectItem>
                         <SelectItem value="sent">Sent</SelectItem>
@@ -759,37 +759,37 @@ const MarketingDashboard = ({ user, onLogout }) => {
                         <SelectItem value="declined">Declined</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button onClick={() => { resetQuotationForm(); setEditingQuotation(null); setShowQuotationDialog(true); }}>
-                      <Plus className="w-4 h-4 mr-2" /> New Quotation
+                    <Button onClick={() => { resetQuotationForm(); setEditingQuotation(null); setShowQuotationDialog(true); }} className="text-xs sm:text-sm whitespace-nowrap">
+                      <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> <span className="hidden sm:inline">New </span>Quotation
                     </Button>
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+              <CardContent className="px-2 sm:px-6">
+                <div className="overflow-x-auto -mx-2 sm:mx-0">
+                  <table className="w-full text-xs sm:text-sm min-w-[600px]">
                     <thead>
                       <tr className="border-b bg-gray-50">
-                        <th className="text-left p-3">Quotation No</th>
-                        <th className="text-left p-3">Client</th>
-                        <th className="text-left p-3">Programme</th>
-                        <th className="text-right p-3">Amount</th>
-                        <th className="text-center p-3">Status</th>
-                        <th className="text-center p-3">Actions</th>
+                        <th className="text-left p-2 sm:p-3">Quote No</th>
+                        <th className="text-left p-2 sm:p-3">Client</th>
+                        <th className="text-left p-2 sm:p-3 hidden sm:table-cell">Programme</th>
+                        <th className="text-right p-2 sm:p-3">Amount</th>
+                        <th className="text-center p-2 sm:p-3">Status</th>
+                        <th className="text-center p-2 sm:p-3">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredQuotations.map(q => (
                         <tr key={q.id} className="border-b hover:bg-gray-50">
-                          <td className="p-3 font-medium">{q.quotation_number}</td>
-                          <td className="p-3">{q.client_name}</td>
-                          <td className="p-3">{q.programme_name}</td>
-                          <td className="p-3 text-right">{formatCurrency(q.total_amount)}</td>
-                          <td className="p-3 text-center">{getStatusBadge(q.status)}</td>
-                          <td className="p-3">
-                            <div className="flex justify-center gap-1">
-                              <Button variant="ghost" size="sm" onClick={() => viewQuotationDetails(q.id)} title="View">
-                                <Eye className="w-4 h-4" />
+                          <td className="p-2 sm:p-3 font-medium text-xs">{q.quotation_number}</td>
+                          <td className="p-2 sm:p-3 max-w-[100px] truncate">{q.client_name}</td>
+                          <td className="p-2 sm:p-3 max-w-[150px] truncate hidden sm:table-cell">{q.programme_name}</td>
+                          <td className="p-2 sm:p-3 text-right whitespace-nowrap">{formatCurrency(q.total_amount)}</td>
+                          <td className="p-2 sm:p-3 text-center">{getStatusBadge(q.status)}</td>
+                          <td className="p-2 sm:p-3">
+                            <div className="flex justify-center gap-0.5 sm:gap-1">
+                              <Button variant="ghost" size="sm" onClick={() => viewQuotationDetails(q.id)} title="View" className="h-7 w-7 sm:h-8 sm:w-8 p-0">
+                                <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
                               </Button>
                               
                               {q.status === 'draft' && (
