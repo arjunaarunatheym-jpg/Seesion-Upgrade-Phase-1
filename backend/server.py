@@ -16248,9 +16248,8 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     
     # ===== PAGE 1: COVER LETTER =====
     pdf.add_page()
-    pdf.add_company_header()
     
-    # Date
+    # Date (after automatic header)
     pdf.set_font_safe('', 10)
     pdf.set_text_color(0, 0, 0)
     created_date = quotation.get("created_at", "")
@@ -16314,10 +16313,164 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     
     # ===== PAGE 2: QUOTATION DETAILS =====
     pdf.add_page()
-    pdf.add_company_header()
     
     # Title
     pdf.set_font_safe('B', 16)
+    pdf.set_text_color(26, 54, 93)
+    pdf.cell_safe(0, 10, "QUOTATION", align='C', ln=True)
+    pdf.ln(3)
+    
+    # Quotation info in a box
+    pdf.set_fill_color(248, 249, 250)
+    pdf.set_draw_color(200, 200, 200)
+    pdf.rect(10, pdf.get_y(), 190, 20, 'DF')
+    pdf.set_font_safe('', 9)
+    pdf.set_text_color(0, 0, 0)
+    
+    y_info = pdf.get_y() + 3
+    pdf.set_xy(15, y_info)
+    pdf.cell_safe(60, 5, f"Quotation No: {quotation.get('quotation_number', '')}")
+    pdf.set_xy(85, y_info)
+    pdf.cell_safe(60, 5, f"Date: {created_date.strftime('%d %B %Y')}")
+    
+    valid_until = quotation.get("valid_until", "")
+    if isinstance(valid_until, str):
+        try:
+            valid_until_dt = datetime.fromisoformat(valid_until.replace('Z', '+00:00'))
+            valid_until = valid_until_dt.strftime("%d %B %Y")
+        except:
+            pass
+    pdf.set_xy(15, y_info + 7)
+    pdf.cell_safe(60, 5, f"Valid Until: {valid_until}")
+    pdf.set_xy(85, y_info + 7)
+    pdf.cell_safe(60, 5, f"Status: {quotation.get('status', '').title()}")
+    
+    pdf.set_y(pdf.get_y() + 25)
+    
+    # Client info box
+    pdf.set_fill_color(232, 244, 253)
+    pdf.set_font_safe('B', 9)
+    pdf.cell_safe(0, 6, "TO:", fill=True, ln=True)
+    pdf.set_font_safe('', 9)
+    pdf.cell_safe(0, 5, client.get("company_name", ""), ln=True)
+    for line in client.get("company_address", "").split('\n'):
+        pdf.cell_safe(0, 5, line.strip(), ln=True)
+    pdf.cell_safe(0, 5, f"Attn: {client.get('contact_person', '')}", ln=True)
+    pdf.cell_safe(0, 5, f"Tel: {client.get('contact_phone', '')}", ln=True)
+    pdf.ln(5)
+    
+    # Training date/venue if accepted
+    if quotation.get("status") == "accepted" and quotation.get("training_date"):
+        pdf.set_fill_color(232, 253, 232)
+        pdf.set_font_safe('B', 9)
+        pdf.cell_safe(0, 6, "TRAINING DETAILS:", fill=True, ln=True)
+        pdf.set_font_safe('', 9)
+        pdf.cell_safe(0, 5, f"Date: {quotation.get('training_date', '')}", ln=True)
+        pdf.cell_safe(0, 5, f"Venue: {quotation.get('venue', '')}", ln=True)
+        pdf.ln(5)
+    
+    # Quotation table with text wrapping for description
+    pdf.set_font_safe('B', 9)
+    pdf.set_fill_color(26, 54, 93)
+    pdf.set_text_color(255, 255, 255)
+    
+    # Table header - adjusted column widths for better text fit
+    col_desc = 100  # Wider for description
+    col_qty = 20
+    col_rate = 30
+    col_amount = 35
+    
+    pdf.cell_safe(col_desc, 7, "Description", border=1, fill=True)
+    pdf.cell_safe(col_qty, 7, "Qty", border=1, fill=True, align='C')
+    pdf.cell_safe(col_rate, 7, "Rate (RM)", border=1, fill=True, align='R')
+    pdf.cell_safe(col_amount, 7, "Amount (RM)", border=1, fill=True, align='R', ln=True)
+    
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font_safe('', 9)
+    
+    # Table content with text wrapping
+    pricing_type = quotation.get("pricing_type", "per_pax")
+    if pricing_type == "per_group":
+        rate_display = f"{quotation.get('group_price', 0):,.2f}"
+        qty_display = "1 group"
+    else:
+        rate_display = f"{quotation.get('rate_per_pax', 0):,.2f}"
+        qty_display = str(quotation.get("num_participants", 1))
+    
+    # Calculate row height needed for programme name (text wrapping)
+    programme_name = sanitize_text_for_pdf(quotation.get("programme_name", ""))
+    # Estimate characters per line based on column width
+    chars_per_line = int(col_desc * 0.4)  # Rough estimate
+    num_lines = max(1, (len(programme_name) + chars_per_line - 1) // chars_per_line)
+    row_height = max(8, num_lines * 5)
+    
+    # Use multi_cell for description to enable text wrapping
+    x_start = pdf.get_x()
+    y_start = pdf.get_y()
+    
+    # Draw description cell with wrapping
+    pdf.multi_cell(col_desc, 5, programme_name, border=1)
+    y_after_desc = pdf.get_y()
+    actual_height = y_after_desc - y_start
+    
+    # Draw other cells at same height
+    pdf.set_xy(x_start + col_desc, y_start)
+    pdf.cell_safe(col_qty, actual_height, qty_display, border=1, align='C')
+    pdf.cell_safe(col_rate, actual_height, rate_display, border=1, align='R')
+    pdf.cell_safe(col_amount, actual_height, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R')
+    pdf.set_y(y_after_desc)
+    
+    # Description items (inclusions) with wrapping
+    if description_items_text or quotation.get("custom_description"):
+        pdf.set_font_safe('I', 8)
+        all_desc = description_items_text + ([quotation.get("custom_description")] if quotation.get("custom_description") else [])
+        for desc in all_desc:
+            if desc:
+                # Use multi_cell for each description item
+                pdf.multi_cell_safe(185, 4, f"   - {desc}", border=0)
+    
+    pdf.set_font_safe('', 9)
+    pdf.ln(2)
+    
+    # Subtotal row
+    pdf.cell_safe(col_desc + col_qty + col_rate, 7, "Subtotal", border=1, align='R')
+    pdf.cell_safe(col_amount, 7, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R', ln=True)
+    
+    # SST row if applicable
+    if quotation.get("sst_percent", 0) > 0:
+        pdf.cell_safe(col_desc + col_qty + col_rate, 7, f"SST ({quotation.get('sst_percent')}%)", border=1, align='R')
+        pdf.cell_safe(col_amount, 7, f"{quotation.get('sst_amount', 0):,.2f}", border=1, align='R', ln=True)
+    
+    # Total row
+    pdf.set_font_safe('B', 10)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.cell_safe(col_desc + col_qty + col_rate, 9, "TOTAL (RM)", border=1, align='R', fill=True)
+    pdf.cell_safe(col_amount, 9, f"{quotation.get('total_amount', 0):,.2f}", border=1, align='R', fill=True, ln=True)
+    
+    # Validity note
+    pdf.ln(5)
+    pdf.set_fill_color(255, 243, 205)
+    pdf.set_font_safe('B', 9)
+    pdf.cell_safe(0, 7, f"This quotation is valid until {valid_until}", fill=True, align='C', ln=True)
+    
+    # Remarks if any
+    if quotation.get("remarks"):
+        pdf.ln(3)
+        pdf.set_font_safe('I', 8)
+        pdf.multi_cell_safe(0, 4, f"Remarks: {quotation.get('remarks')}")
+    
+    # Signatures at bottom
+    pdf.ln(10)
+    pdf.set_font_safe('', 8)
+    y_pos = pdf.get_y()
+    pdf.set_xy(10, y_pos)
+    pdf.cell_safe(90, 4, "Prepared by:", ln=False)
+    pdf.cell_safe(90, 4, "Approved by:", ln=True)
+    pdf.ln(12)
+    pdf.cell_safe(90, 4, "_" * 35, ln=False)
+    pdf.cell_safe(90, 4, "_" * 35, ln=True)
+    pdf.cell_safe(90, 4, marketer.get("full_name", "") if marketer else "", ln=False)
+    pdf.cell_safe(90, 4, approver.get("full_name", "") if approver else "", ln=True)
     pdf.set_text_color(26, 54, 93)
     pdf.cell_safe(0, 10, "QUOTATION", align='C', ln=True)
     pdf.ln(5)
