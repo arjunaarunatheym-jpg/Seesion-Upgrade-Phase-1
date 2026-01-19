@@ -5484,11 +5484,6 @@ We trust our proposal meets your requirements and look forward to being of servi
           </DialogFooter>
         </DialogContent>
       </Dialog>
-              {pdfTemplatesLoading ? 'Saving...' : 'Save Templates'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
