@@ -5153,6 +5153,97 @@ const AdminDashboard = ({ user, onLogout }) => {
           onClose={() => setPrintIndemnityRecord(null)}
         />
       )}
+
+      {/* Quotation View Dialog */}
+      <Dialog open={viewQuotationDialog} onOpenChange={setViewQuotationDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Quotation Details</DialogTitle>
+          </DialogHeader>
+          {selectedQuotation && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xl font-bold">{selectedQuotation.quotation_number}</p>
+                  <p className="text-gray-600">Created: {new Date(selectedQuotation.created_at).toLocaleDateString()}</p>
+                  <p className="text-gray-600">By: {selectedQuotation.marketer_name}</p>
+                </div>
+                {getQuotationStatusBadge(selectedQuotation.status)}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <h4 className="font-semibold text-blue-900 mb-2">Client</h4>
+                  <p className="font-medium">{selectedQuotation.client_name}</p>
+                  <p className="text-sm">{selectedQuotation.contact_person}</p>
+                </div>
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <h4 className="font-semibold text-green-900 mb-2">Programme</h4>
+                  <p className="font-medium">{selectedQuotation.programme_name}</p>
+                  <p className="text-sm">{selectedQuotation.num_participants} pax @ RM {selectedQuotation.rate_per_pax?.toLocaleString()}</p>
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <div className="flex justify-between"><span>Subtotal:</span><span>RM {selectedQuotation.subtotal?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
+                {selectedQuotation.sst_percent > 0 && (
+                  <div className="flex justify-between"><span>SST ({selectedQuotation.sst_percent}%):</span><span>RM {selectedQuotation.sst_amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
+                )}
+                <div className="flex justify-between font-bold border-t mt-2 pt-2"><span>Total:</span><span>RM {selectedQuotation.total_amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
+              </div>
+              
+              <div className="bg-yellow-50 p-3 rounded-lg">
+                <p className="text-sm"><strong>Valid Until:</strong> {new Date(selectedQuotation.valid_until).toLocaleDateString()}</p>
+              </div>
+              
+              {selectedQuotation.remarks && (
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <h4 className="font-semibold mb-1">Remarks</h4>
+                  <p className="text-sm">{selectedQuotation.remarks}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 mt-4">
+            {selectedQuotation?.status === 'pending_approval' && (
+              <>
+                <Button onClick={() => handleApproveQuotation(selectedQuotation.id)} className="bg-green-600 hover:bg-green-700">
+                  <CheckCircle className="w-4 h-4 mr-2" /> Approve
+                </Button>
+                <Button variant="destructive" onClick={() => { setViewQuotationDialog(false); setRejectDialogOpen(true); }}>
+                  <XCircle className="w-4 h-4 mr-2" /> Reject
+                </Button>
+              </>
+            )}
+            <Button variant="outline" onClick={() => setViewQuotationDialog(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quotation Reject Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Quotation</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejection. This will be visible to the marketer.
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            <Label>Rejection Remarks</Label>
+            <Textarea 
+              value={rejectRemarks} 
+              onChange={(e) => setRejectRemarks(e.target.value)}
+              placeholder="Reason for rejection..."
+              rows={3}
+            />
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => { setRejectDialogOpen(false); setRejectRemarks(''); }}>Cancel</Button>
+            <Button variant="destructive" onClick={handleRejectQuotation}>Reject Quotation</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
