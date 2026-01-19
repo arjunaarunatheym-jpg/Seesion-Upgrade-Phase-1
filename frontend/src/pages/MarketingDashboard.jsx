@@ -522,39 +522,42 @@ const MarketingDashboard = ({ user, onLogout }) => {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Marketing Portal</h1>
-            <p className="text-sm text-gray-600">Welcome, {user.full_name}</p>
-          </div>
-          <div className="flex gap-2">
-            {/* Back button for coordinators/trainers */}
-            {(user.role === 'coordinator' || user.role === 'trainer' || user.role === 'supervisor') && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => window.location.href = `/${user.role}`}
-                className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
-              >
-                <Users className="w-4 h-4 mr-1" /> Back to {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+        <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Marketing Portal</h1>
+              <p className="text-xs sm:text-sm text-gray-600">Welcome, {user.full_name}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {/* Back button for coordinators/trainers */}
+              {(user.role === 'coordinator' || user.role === 'trainer' || user.role === 'supervisor') && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => window.location.href = `/${user.role}`}
+                  className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 text-xs sm:text-sm"
+                >
+                  <Users className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> 
+                  <span className="hidden sm:inline">Back to </span>{user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                </Button>
+              )}
+              {user.role === 'admin' && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => window.location.href = '/admin'}
+                  className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 text-xs sm:text-sm"
+                >
+                  <Users className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> <span className="hidden sm:inline">Back to </span>Admin
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={loadData} className="text-xs sm:text-sm">
+                <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> <span className="hidden sm:inline">Refresh</span>
               </Button>
-            )}
-            {user.role === 'admin' && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => window.location.href = '/admin'}
-                className="bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100"
-              >
-                <Users className="w-4 h-4 mr-1" /> Back to Admin
+              <Button variant="outline" size="sm" onClick={onLogout} className="text-xs sm:text-sm">
+                <LogOut className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> <span className="hidden sm:inline">Logout</span>
               </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={loadData}>
-              <RefreshCw className="w-4 h-4 mr-1" /> Refresh
-            </Button>
-            <Button variant="outline" size="sm" onClick={onLogout}>
-              <LogOut className="w-4 h-4 mr-1" /> Logout
-            </Button>
+            </div>
           </div>
         </div>
       </header>
