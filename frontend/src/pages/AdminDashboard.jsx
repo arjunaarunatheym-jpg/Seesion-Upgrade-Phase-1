@@ -373,6 +373,60 @@ const AdminDashboard = ({ user, onLogout }) => {
   useEffect(() => {
     loadFinanceSummaryByYear(financeYear);
   }, [financeYear]);
+
+  // Quotation approval functions
+  const handleApproveQuotation = async (quotationId) => {
+    try {
+      await axiosInstance.post(`/marketing/quotations/${quotationId}/approve`);
+      toast.success('Quotation approved');
+      loadData();
+      setApproveDialogOpen(false);
+      setSelectedQuotation(null);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to approve quotation');
+    }
+  };
+
+  const handleRejectQuotation = async () => {
+    if (!selectedQuotation) return;
+    try {
+      await axiosInstance.post(`/marketing/quotations/${selectedQuotation.id}/reject`, { remarks: rejectRemarks });
+      toast.success('Quotation rejected');
+      loadData();
+      setRejectDialogOpen(false);
+      setSelectedQuotation(null);
+      setRejectRemarks('');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to reject quotation');
+    }
+  };
+
+  const filteredQuotations = quotations.filter(q => {
+    if (quotationFilter === 'all') return true;
+    return q.status === quotationFilter;
+  });
+
+  const getQuotationStatusBadge = (status) => {
+    const colors = {
+      draft: 'bg-gray-500',
+      pending_approval: 'bg-yellow-500',
+      approved: 'bg-green-500',
+      rejected: 'bg-red-500',
+      sent: 'bg-blue-500',
+      accepted: 'bg-emerald-600',
+      declined: 'bg-red-600'
+    };
+    const labels = {
+      draft: 'Draft',
+      pending_approval: 'Pending',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      sent: 'Sent',
+      accepted: 'Accepted',
+      declined: 'Declined'
+    };
+    return <Badge className={`${colors[status] || 'bg-gray-500'} text-white`}>{labels[status] || status}</Badge>;
+  };
   
   // Search filtering effects
   useEffect(() => {
