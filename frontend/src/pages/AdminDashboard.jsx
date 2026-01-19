@@ -5359,6 +5359,78 @@ const AdminDashboard = ({ user, onLogout }) => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* PDF Templates Edit Dialog */}
+      <Dialog open={showPdfTemplatesDialog} onOpenChange={setShowPdfTemplatesDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit PDF Templates</DialogTitle>
+            <DialogDescription>
+              Customize the content that appears in quotation PDF documents.
+              Use placeholders like {"{{programme_name}}"}, {"{{company_name}}"}, {"{{contact_person}}"}, {"{{quotation_number}}"} for dynamic content.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6">
+            <div>
+              <Label className="text-lg font-semibold">Cover Letter (Page 1)</Label>
+              <p className="text-sm text-gray-500 mb-2">
+                This content appears after the salutation on page 1. The company header and recipient address are auto-generated.
+              </p>
+              <Textarea
+                value={pdfTemplates.cover_letter}
+                onChange={(e) => setPdfTemplates({ ...pdfTemplates, cover_letter: e.target.value })}
+                placeholder="Enter cover letter content. Example:
+
+RE: QUOTATION FOR {{programme_name}}
+
+Thank you for your interest in our training programmes. We are pleased to submit our quotation for the {{programme_name}} as per your request.
+
+We trust our proposal meets your requirements and look forward to being of service to {{company_name}}."
+                rows={10}
+                className="font-mono text-sm"
+              />
+            </div>
+            
+            <div>
+              <Label className="text-lg font-semibold">Terms & Conditions (Pages 3-6)</Label>
+              <p className="text-sm text-gray-500 mb-2">
+                This content will be spread across pages 3-6 of the PDF. Use clear numbering for terms.
+              </p>
+              <Textarea
+                value={pdfTemplates.terms_conditions_pages}
+                onChange={(e) => setPdfTemplates({ ...pdfTemplates, terms_conditions_pages: e.target.value })}
+                placeholder="Enter terms and conditions. Example:
+
+TERMS AND CONDITIONS
+
+1. PAYMENT TERMS
+1.1 Payment is due upon receipt of invoice.
+1.2 A 50% deposit is required upon confirmation of training.
+1.3 Full payment must be made before the training date.
+
+2. CANCELLATION POLICY
+2.1 Cancellation within 7 days of training will incur a 50% cancellation fee.
+2.2 No refunds for cancellations made within 48 hours of training.
+
+3. GENERAL CONDITIONS
+3.1 All prices quoted are in Malaysian Ringgit (RM).
+3.2 Prices are subject to SST where applicable.
+3.3 This quotation is valid for 30 days from the date of issue.
+
+..."
+                rows={15}
+                className="font-mono text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPdfTemplatesDialog(false)}>Cancel</Button>
+            <Button onClick={savePdfTemplates} disabled={pdfTemplatesLoading}>
+              {pdfTemplatesLoading ? 'Saving...' : 'Save Templates'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
