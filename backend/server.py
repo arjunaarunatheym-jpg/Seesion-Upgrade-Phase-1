@@ -16533,10 +16533,6 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
             pdf.cell_safe(35, 8, "Signature", border=1, fill=True, align='C', ln=True)
             pdf.set_text_color(0, 0, 0)
             pdf.set_font_safe('', 9)
-            pdf.cell(20, 8, "Citizen", border=1, fill=True, align='C')
-            pdf.cell(35, 8, "Signature", border=1, fill=True, align='C', ln=True)
-            pdf.set_text_color(0, 0, 0)
-            pdf.set_font('Helvetica', '', 9)
     
     # Generate PDF bytes
     pdf_bytes = pdf.output()
