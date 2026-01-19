@@ -16231,7 +16231,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.add_company_header()
     
     # Date
-    pdf.set_font('Helvetica', '', 10)
+    pdf.set_font_safe('', 10)
     pdf.set_text_color(0, 0, 0)
     created_date = quotation.get("created_at", "")
     if isinstance(created_date, str):
@@ -16239,24 +16239,24 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
             created_date = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
         except:
             created_date = datetime.now()
-    pdf.cell(0, 6, created_date.strftime("%d %B %Y"), ln=True)
+    pdf.cell_safe(0, 6, created_date.strftime("%d %B %Y"), ln=True)
     pdf.ln(5)
     
     # Recipient
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 5, client.get("contact_person", ""), ln=True)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 5, client.get("company_name", ""), ln=True)
+    pdf.set_font_safe('B', 10)
+    pdf.cell_safe(0, 5, client.get("contact_person", ""), ln=True)
+    pdf.set_font_safe('', 10)
+    pdf.cell_safe(0, 5, client.get("company_name", ""), ln=True)
     
     # Address - multi-line
     address = client.get("company_address", "")
     for line in address.split('\n'):
-        pdf.cell(0, 5, line.strip(), ln=True)
+        pdf.cell_safe(0, 5, line.strip(), ln=True)
     
     pdf.ln(8)
     
     # Salutation
-    pdf.cell(0, 6, f"Dear {client.get('contact_person', 'Sir/Madam')},", ln=True)
+    pdf.cell_safe(0, 6, f"Dear {client.get('contact_person', 'Sir/Madam')},", ln=True)
     pdf.ln(5)
     
     # Cover letter content (from template or default)
@@ -16268,48 +16268,48 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
         cover_letter = cover_letter.replace("{{contact_person}}", client.get("contact_person", ""))
         cover_letter = cover_letter.replace("{{quotation_number}}", quotation.get("quotation_number", ""))
         
-        pdf.set_font('Helvetica', '', 10)
-        pdf.multi_cell(0, 5, cover_letter)
+        pdf.set_font_safe('', 10)
+        pdf.multi_cell_safe(0, 5, cover_letter)
     else:
         # Default cover letter
-        pdf.set_font('Helvetica', 'B', 10)
-        pdf.cell(0, 6, f"RE: QUOTATION FOR {quotation.get('programme_name', '').upper()}", ln=True)
+        pdf.set_font_safe('B', 10)
+        pdf.cell_safe(0, 6, f"RE: QUOTATION FOR {sanitize_text_for_pdf(quotation.get('programme_name', '')).upper()}", ln=True)
         pdf.ln(5)
-        pdf.set_font('Helvetica', '', 10)
-        pdf.multi_cell(0, 5, f"Thank you for your interest in our training programme. We are pleased to submit our quotation for the {quotation.get('programme_name', '')} programme as per your request.")
+        pdf.set_font_safe('', 10)
+        pdf.multi_cell_safe(0, 5, f"Thank you for your interest in our training programme. We are pleased to submit our quotation for the {quotation.get('programme_name', '')} programme as per your request.")
         pdf.ln(3)
-        pdf.multi_cell(0, 5, "Please find attached the detailed quotation for your kind perusal and consideration.")
+        pdf.multi_cell_safe(0, 5, "Please find attached the detailed quotation for your kind perusal and consideration.")
     
     pdf.ln(10)
     
     # Signature
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 5, "Yours faithfully,", ln=True)
+    pdf.set_font_safe('', 10)
+    pdf.cell_safe(0, 5, "Yours faithfully,", ln=True)
     pdf.ln(15)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 5, marketer.get("full_name", "") if marketer else "", ln=True)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 5, "Marketing Executive", ln=True)
-    pdf.cell(0, 5, company_settings.get("company_name", "MDDRC Sdn Bhd"), ln=True)
+    pdf.set_font_safe('B', 10)
+    pdf.cell_safe(0, 5, marketer.get("full_name", "") if marketer else "", ln=True)
+    pdf.set_font_safe('', 10)
+    pdf.cell_safe(0, 5, "Marketing Executive", ln=True)
+    pdf.cell_safe(0, 5, company_settings.get("company_name", "MDDRC Sdn Bhd"), ln=True)
     
     # ===== PAGE 2: QUOTATION DETAILS =====
     pdf.add_page()
     pdf.add_company_header()
     
     # Title
-    pdf.set_font('Helvetica', 'B', 16)
+    pdf.set_font_safe('B', 16)
     pdf.set_text_color(26, 54, 93)
-    pdf.cell(0, 10, "QUOTATION", align='C', ln=True)
+    pdf.cell_safe(0, 10, "QUOTATION", align='C', ln=True)
     pdf.ln(5)
     
     # Quotation details box
     pdf.set_fill_color(240, 240, 240)
-    pdf.set_font('Helvetica', '', 10)
+    pdf.set_font_safe('', 10)
     pdf.set_text_color(0, 0, 0)
     
     # Two column layout for quotation info
-    pdf.cell(95, 6, f"Quotation No: {quotation.get('quotation_number', '')}", ln=False)
-    pdf.cell(95, 6, f"Date: {created_date.strftime('%d %B %Y')}", ln=True)
+    pdf.cell_safe(95, 6, f"Quotation No: {quotation.get('quotation_number', '')}", ln=False)
+    pdf.cell_safe(95, 6, f"Date: {created_date.strftime('%d %B %Y')}", ln=True)
     
     valid_until = quotation.get("valid_until", "")
     if isinstance(valid_until, str):
@@ -16318,44 +16318,44 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
             valid_until = valid_until_dt.strftime("%d %B %Y")
         except:
             pass
-    pdf.cell(95, 6, f"Valid Until: {valid_until}", ln=True)
+    pdf.cell_safe(95, 6, f"Valid Until: {valid_until}", ln=True)
     pdf.ln(5)
     
     # Client info box
     pdf.set_fill_color(232, 244, 253)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 7, "TO:", fill=True, ln=True)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.cell(0, 5, client.get("company_name", ""), ln=True)
+    pdf.set_font_safe('B', 10)
+    pdf.cell_safe(0, 7, "TO:", fill=True, ln=True)
+    pdf.set_font_safe('', 10)
+    pdf.cell_safe(0, 5, client.get("company_name", ""), ln=True)
     for line in client.get("company_address", "").split('\n'):
-        pdf.cell(0, 5, line.strip(), ln=True)
-    pdf.cell(0, 5, f"Attn: {client.get('contact_person', '')}", ln=True)
-    pdf.cell(0, 5, f"Tel: {client.get('contact_phone', '')}", ln=True)
+        pdf.cell_safe(0, 5, line.strip(), ln=True)
+    pdf.cell_safe(0, 5, f"Attn: {client.get('contact_person', '')}", ln=True)
+    pdf.cell_safe(0, 5, f"Tel: {client.get('contact_phone', '')}", ln=True)
     pdf.ln(8)
     
     # Training date/venue if accepted
     if quotation.get("status") == "accepted" and quotation.get("training_date"):
         pdf.set_fill_color(232, 253, 232)
-        pdf.set_font('Helvetica', 'B', 10)
-        pdf.cell(0, 7, "TRAINING DETAILS:", fill=True, ln=True)
-        pdf.set_font('Helvetica', '', 10)
-        pdf.cell(0, 5, f"Date: {quotation.get('training_date', '')}", ln=True)
-        pdf.cell(0, 5, f"Venue: {quotation.get('venue', '')}", ln=True)
+        pdf.set_font_safe('B', 10)
+        pdf.cell_safe(0, 7, "TRAINING DETAILS:", fill=True, ln=True)
+        pdf.set_font_safe('', 10)
+        pdf.cell_safe(0, 5, f"Date: {quotation.get('training_date', '')}", ln=True)
+        pdf.cell_safe(0, 5, f"Venue: {quotation.get('venue', '')}", ln=True)
         pdf.ln(5)
     
     # Quotation table
-    pdf.set_font('Helvetica', 'B', 10)
+    pdf.set_font_safe('B', 10)
     pdf.set_fill_color(26, 54, 93)
     pdf.set_text_color(255, 255, 255)
     
     # Table header
-    pdf.cell(80, 8, "Description", border=1, fill=True)
-    pdf.cell(25, 8, "Qty", border=1, fill=True, align='C')
-    pdf.cell(35, 8, "Rate (RM)", border=1, fill=True, align='R')
-    pdf.cell(40, 8, "Amount (RM)", border=1, fill=True, align='R', ln=True)
+    pdf.cell_safe(80, 8, "Description", border=1, fill=True)
+    pdf.cell_safe(25, 8, "Qty", border=1, fill=True, align='C')
+    pdf.cell_safe(35, 8, "Rate (RM)", border=1, fill=True, align='R')
+    pdf.cell_safe(40, 8, "Amount (RM)", border=1, fill=True, align='R', ln=True)
     
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font('Helvetica', '', 10)
+    pdf.set_font_safe('', 10)
     
     # Table content
     pricing_type = quotation.get("pricing_type", "per_pax")
@@ -16366,60 +16366,61 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
         rate_display = f"{quotation.get('rate_per_pax', 0):,.2f}"
         qty_display = str(quotation.get("num_participants", 1))
     
-    pdf.cell(80, 8, quotation.get("programme_name", ""), border=1)
-    pdf.cell(25, 8, qty_display, border=1, align='C')
-    pdf.cell(35, 8, rate_display, border=1, align='R')
-    pdf.cell(40, 8, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R', ln=True)
+    pdf.cell_safe(80, 8, quotation.get("programme_name", ""), border=1)
+    pdf.cell_safe(25, 8, qty_display, border=1, align='C')
+    pdf.cell_safe(35, 8, rate_display, border=1, align='R')
+    pdf.cell_safe(40, 8, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R', ln=True)
     
     # Description items
     if description_items_text or quotation.get("custom_description"):
-        pdf.set_font('Helvetica', 'I', 9)
+        pdf.set_font_safe('I', 9)
         all_desc = description_items_text + ([quotation.get("custom_description")] if quotation.get("custom_description") else [])
         for desc in all_desc:
             if desc:
-                pdf.cell(180, 6, f"  • {desc[:80]}{'...' if len(desc) > 80 else ''}", border=0, ln=True)
+                desc_text = sanitize_text_for_pdf(desc)[:80]
+                pdf.cell_safe(180, 6, f"  - {desc_text}{'...' if len(desc) > 80 else ''}", border=0, ln=True)
     
-    pdf.set_font('Helvetica', '', 10)
+    pdf.set_font_safe('', 10)
     
     # Subtotal row
-    pdf.cell(140, 8, "Subtotal", border=1, align='R')
-    pdf.cell(40, 8, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R', ln=True)
+    pdf.cell_safe(140, 8, "Subtotal", border=1, align='R')
+    pdf.cell_safe(40, 8, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R', ln=True)
     
     # SST row if applicable
     if quotation.get("sst_percent", 0) > 0:
-        pdf.cell(140, 8, f"SST ({quotation.get('sst_percent')}%)", border=1, align='R')
-        pdf.cell(40, 8, f"{quotation.get('sst_amount', 0):,.2f}", border=1, align='R', ln=True)
+        pdf.cell_safe(140, 8, f"SST ({quotation.get('sst_percent')}%)", border=1, align='R')
+        pdf.cell_safe(40, 8, f"{quotation.get('sst_amount', 0):,.2f}", border=1, align='R', ln=True)
     
     # Total row
-    pdf.set_font('Helvetica', 'B', 11)
+    pdf.set_font_safe('B', 11)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(140, 10, "TOTAL (RM)", border=1, align='R', fill=True)
-    pdf.cell(40, 10, f"{quotation.get('total_amount', 0):,.2f}", border=1, align='R', fill=True, ln=True)
+    pdf.cell_safe(140, 10, "TOTAL (RM)", border=1, align='R', fill=True)
+    pdf.cell_safe(40, 10, f"{quotation.get('total_amount', 0):,.2f}", border=1, align='R', fill=True, ln=True)
     
     # Validity note
     pdf.ln(8)
     pdf.set_fill_color(255, 243, 205)
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 8, f"This quotation is valid until {valid_until}", fill=True, align='C', ln=True)
+    pdf.set_font_safe('B', 10)
+    pdf.cell_safe(0, 8, f"This quotation is valid until {valid_until}", fill=True, align='C', ln=True)
     
     # Remarks if any
     if quotation.get("remarks"):
         pdf.ln(5)
-        pdf.set_font('Helvetica', 'I', 9)
-        pdf.multi_cell(0, 5, f"Remarks: {quotation.get('remarks')}")
+        pdf.set_font_safe('I', 9)
+        pdf.multi_cell_safe(0, 5, f"Remarks: {quotation.get('remarks')}")
     
     # Signatures at bottom
     pdf.ln(15)
-    pdf.set_font('Helvetica', '', 9)
+    pdf.set_font_safe('', 9)
     y_pos = pdf.get_y()
     pdf.set_xy(10, y_pos)
-    pdf.cell(90, 5, "Prepared by:", ln=False)
-    pdf.cell(90, 5, "Approved by:", ln=True)
+    pdf.cell_safe(90, 5, "Prepared by:", ln=False)
+    pdf.cell_safe(90, 5, "Approved by:", ln=True)
     pdf.ln(15)
-    pdf.cell(90, 5, "_" * 30, ln=False)
-    pdf.cell(90, 5, "_" * 30, ln=True)
-    pdf.cell(90, 5, marketer.get("full_name", "") if marketer else "", ln=False)
-    pdf.cell(90, 5, approver.get("full_name", "") if approver else "", ln=True)
+    pdf.cell_safe(90, 5, "_" * 30, ln=False)
+    pdf.cell_safe(90, 5, "_" * 30, ln=True)
+    pdf.cell_safe(90, 5, marketer.get("full_name", "") if marketer else "", ln=False)
+    pdf.cell_safe(90, 5, approver.get("full_name", "") if approver else "", ln=True)
     
     # ===== PAGES 3-6: TERMS & CONDITIONS =====
     terms_content = templates.get("terms_conditions_pages", "")
@@ -16433,101 +16434,105 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
             pdf.add_company_header()
             
             if i == 0:
-                pdf.set_font('Helvetica', 'B', 14)
+                pdf.set_font_safe('B', 14)
                 pdf.set_text_color(26, 54, 93)
-                pdf.cell(0, 10, "TERMS & CONDITIONS", align='C', ln=True)
+                pdf.cell_safe(0, 10, "TERMS & CONDITIONS", align='C', ln=True)
                 pdf.ln(5)
             
-            pdf.set_font('Helvetica', '', 10)
+            pdf.set_font_safe('', 10)
             pdf.set_text_color(0, 0, 0)
-            pdf.multi_cell(0, 5, page_content)
+            pdf.multi_cell_safe(0, 5, page_content)
     else:
         # Default terms page
         pdf.add_page()
         pdf.add_company_header()
         
-        pdf.set_font('Helvetica', 'B', 14)
+        pdf.set_font_safe('B', 14)
         pdf.set_text_color(26, 54, 93)
-        pdf.cell(0, 10, "TERMS & CONDITIONS", align='C', ln=True)
+        pdf.cell_safe(0, 10, "TERMS & CONDITIONS", align='C', ln=True)
         pdf.ln(5)
         
-        pdf.set_font('Helvetica', '', 10)
+        pdf.set_font_safe('', 10)
         pdf.set_text_color(0, 0, 0)
         
         default_terms = quotation.get("terms_conditions", "")
         if default_terms:
             for line in default_terms.split('\n'):
-                pdf.multi_cell(0, 5, line.strip())
+                pdf.multi_cell_safe(0, 5, line.strip())
                 pdf.ln(2)
         else:
-            pdf.multi_cell(0, 5, "1. Payment terms: Upon receipt of invoice.")
-            pdf.multi_cell(0, 5, "2. Cancellation must be made at least 7 days before training date.")
-            pdf.multi_cell(0, 5, "3. All prices are in Malaysian Ringgit (RM).")
-            pdf.multi_cell(0, 5, "4. This quotation is subject to change without prior notice.")
+            pdf.multi_cell_safe(0, 5, "1. Payment terms: Upon receipt of invoice.")
+            pdf.multi_cell_safe(0, 5, "2. Cancellation must be made at least 7 days before training date.")
+            pdf.multi_cell_safe(0, 5, "3. All prices are in Malaysian Ringgit (RM).")
+            pdf.multi_cell_safe(0, 5, "4. This quotation is subject to change without prior notice.")
     
     # ===== PAGE 7: ATTENDANCE LIST =====
     pdf.add_page()
     pdf.add_company_header()
     
-    pdf.set_font('Helvetica', 'B', 14)
+    pdf.set_font_safe('B', 14)
     pdf.set_text_color(26, 54, 93)
-    pdf.cell(0, 10, "ATTENDANCE / PARTICIPANTS LIST", align='C', ln=True)
+    pdf.cell_safe(0, 10, "ATTENDANCE / PARTICIPANTS LIST", align='C', ln=True)
     pdf.ln(3)
     
     # Training info
-    pdf.set_font('Helvetica', '', 10)
+    pdf.set_font_safe('', 10)
     pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 6, f"Programme: {quotation.get('programme_name', '')}", ln=True)
-    pdf.cell(0, 6, f"Client: {client.get('company_name', '')}", ln=True)
+    pdf.cell_safe(0, 6, f"Programme: {quotation.get('programme_name', '')}", ln=True)
+    pdf.cell_safe(0, 6, f"Client: {client.get('company_name', '')}", ln=True)
     if quotation.get("training_date"):
-        pdf.cell(0, 6, f"Date: {quotation.get('training_date', '')}", ln=True)
+        pdf.cell_safe(0, 6, f"Date: {quotation.get('training_date', '')}", ln=True)
     if quotation.get("venue"):
-        pdf.cell(0, 6, f"Venue: {quotation.get('venue', '')}", ln=True)
+        pdf.cell_safe(0, 6, f"Venue: {quotation.get('venue', '')}", ln=True)
     pdf.ln(5)
     
     # Table header
-    pdf.set_font('Helvetica', 'B', 9)
+    pdf.set_font_safe('B', 9)
     pdf.set_fill_color(26, 54, 93)
     pdf.set_text_color(255, 255, 255)
     
-    pdf.cell(10, 8, "No", border=1, fill=True, align='C')
-    pdf.cell(50, 8, "Full Name", border=1, fill=True)
-    pdf.cell(35, 8, "IC Number", border=1, fill=True)
-    pdf.cell(40, 8, "Company Name", border=1, fill=True)
-    pdf.cell(20, 8, "Citizen", border=1, fill=True, align='C')
-    pdf.cell(35, 8, "Signature", border=1, fill=True, align='C', ln=True)
+    pdf.cell_safe(10, 8, "No", border=1, fill=True, align='C')
+    pdf.cell_safe(50, 8, "Full Name", border=1, fill=True)
+    pdf.cell_safe(35, 8, "IC Number", border=1, fill=True)
+    pdf.cell_safe(40, 8, "Company Name", border=1, fill=True)
+    pdf.cell_safe(20, 8, "Citizen", border=1, fill=True, align='C')
+    pdf.cell_safe(35, 8, "Signature", border=1, fill=True, align='C', ln=True)
     
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font('Helvetica', '', 9)
+    pdf.set_font_safe('', 9)
     
     # Empty rows for participants (based on num_participants)
     num_rows = max(quotation.get("num_participants", 10), 10)
     for i in range(num_rows):
-        pdf.cell(10, 10, str(i + 1), border=1, align='C')
-        pdf.cell(50, 10, "", border=1)
-        pdf.cell(35, 10, "", border=1)
-        pdf.cell(40, 10, "", border=1)
-        pdf.cell(20, 10, "", border=1, align='C')
-        pdf.cell(35, 10, "", border=1, ln=True)
+        pdf.cell_safe(10, 10, str(i + 1), border=1, align='C')
+        pdf.cell_safe(50, 10, "", border=1)
+        pdf.cell_safe(35, 10, "", border=1)
+        pdf.cell_safe(40, 10, "", border=1)
+        pdf.cell_safe(20, 10, "", border=1, align='C')
+        pdf.cell_safe(35, 10, "", border=1, ln=True)
         
         # Add new page if running out of space
         if pdf.get_y() > 260 and i < num_rows - 1:
             pdf.add_page()
             pdf.add_company_header()
             
-            pdf.set_font('Helvetica', 'B', 12)
+            pdf.set_font_safe('B', 12)
             pdf.set_text_color(26, 54, 93)
-            pdf.cell(0, 8, "ATTENDANCE / PARTICIPANTS LIST (continued)", ln=True)
+            pdf.cell_safe(0, 8, "ATTENDANCE / PARTICIPANTS LIST (continued)", ln=True)
             pdf.ln(3)
             
             # Repeat header
-            pdf.set_font('Helvetica', 'B', 9)
+            pdf.set_font_safe('B', 9)
             pdf.set_fill_color(26, 54, 93)
             pdf.set_text_color(255, 255, 255)
-            pdf.cell(10, 8, "No", border=1, fill=True, align='C')
-            pdf.cell(50, 8, "Full Name", border=1, fill=True)
-            pdf.cell(35, 8, "IC Number", border=1, fill=True)
-            pdf.cell(40, 8, "Company Name", border=1, fill=True)
+            pdf.cell_safe(10, 8, "No", border=1, fill=True, align='C')
+            pdf.cell_safe(50, 8, "Full Name", border=1, fill=True)
+            pdf.cell_safe(35, 8, "IC Number", border=1, fill=True)
+            pdf.cell_safe(40, 8, "Company Name", border=1, fill=True)
+            pdf.cell_safe(20, 8, "Citizen", border=1, fill=True, align='C')
+            pdf.cell_safe(35, 8, "Signature", border=1, fill=True, align='C', ln=True)
+            pdf.set_text_color(0, 0, 0)
+            pdf.set_font_safe('', 9)
             pdf.cell(20, 8, "Citizen", border=1, fill=True, align='C')
             pdf.cell(35, 8, "Signature", border=1, fill=True, align='C', ln=True)
             pdf.set_text_color(0, 0, 0)
