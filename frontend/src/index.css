@@ -153,6 +153,34 @@ code {
     }
     
     /* Responsive grid improvements */
+
+/* React Quill Editor Styles */
+.ql-container {
+    font-family: inherit;
+    font-size: 14px;
+    min-height: 250px;
+}
+
+.ql-editor {
+    min-height: 250px;
+}
+
+.ql-toolbar.ql-snow {
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+    border-color: hsl(var(--border));
+}
+
+.ql-container.ql-snow {
+    border-bottom-left-radius: 0.5rem;
+    border-bottom-right-radius: 0.5rem;
+    border-color: hsl(var(--border));
+}
+
+.ql-editor.ql-blank::before {
+    font-style: normal;
+    color: hsl(var(--muted-foreground));
+}
     .grid-mobile-stack > * {
         @apply w-full;
     }
