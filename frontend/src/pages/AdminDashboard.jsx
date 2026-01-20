@@ -5243,6 +5243,65 @@ const AdminDashboard = ({ user, onLogout }) => {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Participant Dialog */}
+      <Dialog open={editParticipantDialogOpen} onOpenChange={setEditParticipantDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Participant</DialogTitle>
+            <DialogDescription>
+              Update participant details. Changes will apply across all trainings.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateParticipant} className="space-y-4">
+            <div>
+              <Label htmlFor="edit-part-name">Full Name *</Label>
+              <Input
+                id="edit-part-name"
+                data-testid="edit-participant-name"
+                value={editParticipantForm.full_name}
+                onChange={(e) => setEditParticipantForm({ ...editParticipantForm, full_name: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-part-ic">IC Number *</Label>
+              <Input
+                id="edit-part-ic"
+                data-testid="edit-participant-ic"
+                value={editParticipantForm.id_number}
+                onChange={(e) => setEditParticipantForm({ ...editParticipantForm, id_number: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-part-phone">Phone Number</Label>
+              <Input
+                id="edit-part-phone"
+                data-testid="edit-participant-phone"
+                value={editParticipantForm.phone_number}
+                onChange={(e) => setEditParticipantForm({ ...editParticipantForm, phone_number: e.target.value })}
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setEditParticipantDialogOpen(false);
+                  setEditingParticipant(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" className="flex-1" data-testid="save-participant-btn">
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Bulk Delete Users Confirmation Dialog */}
       <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
         <DialogContent>
