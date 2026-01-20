@@ -36,6 +36,9 @@ const SuperAdminPanel = () => {
   
   // Score calculator state
   const [scoreCalculator, setScoreCalculator] = useState({ correct: "", total: "" });
+  
+  // Program pass percentage (fetched when opening test dialog)
+  const [programPassPercentage, setProgramPassPercentage] = useState(70);
 
   useEffect(() => {
     loadActiveSessions();
