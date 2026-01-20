@@ -1038,12 +1038,12 @@ const SuperAdminPanel = () => {
               {/* Result Display */}
               {scoreCalculator.correct && scoreCalculator.total && parseInt(scoreCalculator.total) > 0 && (
                 <div className={`text-center p-3 rounded-lg ${
-                  (parseInt(scoreCalculator.correct) / parseInt(scoreCalculator.total)) * 100 >= 70 
+                  (parseInt(scoreCalculator.correct) / parseInt(scoreCalculator.total)) * 100 >= programPassPercentage 
                     ? 'bg-green-100 border-2 border-green-400' 
                     : 'bg-red-100 border-2 border-red-400'
                 }`}>
                   <p className={`text-2xl font-bold ${
-                    (parseInt(scoreCalculator.correct) / parseInt(scoreCalculator.total)) * 100 >= 70 
+                    (parseInt(scoreCalculator.correct) / parseInt(scoreCalculator.total)) * 100 >= programPassPercentage 
                       ? 'text-green-700' 
                       : 'text-red-700'
                   }`}>
@@ -1053,11 +1053,11 @@ const SuperAdminPanel = () => {
                     {scoreCalculator.correct} / {scoreCalculator.total} correct answers
                   </p>
                   <p className={`text-xs font-semibold mt-1 ${
-                    (parseInt(scoreCalculator.correct) / parseInt(scoreCalculator.total)) * 100 >= 70 
+                    (parseInt(scoreCalculator.correct) / parseInt(scoreCalculator.total)) * 100 >= programPassPercentage 
                       ? 'text-green-600' 
                       : 'text-red-600'
                   }`}>
-                    {(parseInt(scoreCalculator.correct) / parseInt(scoreCalculator.total)) * 100 >= 70 ? '✓ PASS' : '✗ FAIL'}
+                    {(parseInt(scoreCalculator.correct) / parseInt(scoreCalculator.total)) * 100 >= programPassPercentage ? '✓ PASS' : '✗ FAIL'} (Pass Mark: {programPassPercentage}%)
                   </p>
                 </div>
               )}
@@ -1087,15 +1087,15 @@ const SuperAdminPanel = () => {
                 }}
                 placeholder="85"
                 className={`text-lg font-semibold ${
-                  testForm.score && parseFloat(testForm.score) >= 70 ? 'border-green-400 bg-green-50' : 
-                  testForm.score && parseFloat(testForm.score) < 70 ? 'border-red-400 bg-red-50' : ''
+                  testForm.score && parseFloat(testForm.score) >= programPassPercentage ? 'border-green-400 bg-green-50' : 
+                  testForm.score && parseFloat(testForm.score) < programPassPercentage ? 'border-red-400 bg-red-50' : ''
                 }`}
               />
               {testForm.score && (
                 <p className={`text-sm font-semibold mt-1 ${
-                  parseFloat(testForm.score) >= 70 ? 'text-green-600' : 'text-red-600'
+                  parseFloat(testForm.score) >= programPassPercentage ? 'text-green-600' : 'text-red-600'
                 }`}>
-                  {parseFloat(testForm.score) >= 70 ? '✓ PASS (≥70%)' : '✗ FAIL (<70%)'}
+                  {parseFloat(testForm.score) >= programPassPercentage ? `✓ PASS (≥${programPassPercentage}%)` : `✗ FAIL (<${programPassPercentage}%)`}
                 </p>
               )}
             </div>
