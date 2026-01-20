@@ -990,6 +990,7 @@ const SuperAdminPanel = () => {
             </DialogTitle>
             <DialogDescription>
               Enter exact score (correct answers out of total) or percentage directly.
+              <span className="block mt-1 font-semibold text-orange-600">Pass Mark: {programPassPercentage}%</span>
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
