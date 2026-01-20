@@ -5132,22 +5132,40 @@ const AdminDashboard = ({ user, onLogout }) => {
                           <div>
                             <p className="font-medium text-sm">{participant.full_name}</p>
                             <p className="text-xs text-gray-600">
-                              {participant.email} • ID: {participant.id_number}
+                              IC: {participant.id_number} {participant.phone_number && `• ${participant.phone_number}`}
                             </p>
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              // Remove participant from session
-                              const updated = editingSession.participant_ids.filter(id => id !== pid);
-                              setEditingSession({ ...editingSession, participant_ids: updated });
-                              toast.success(`${participant.full_name} will be removed from this session`);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setEditingParticipant(participant);
+                                setEditParticipantForm({
+                                  full_name: participant.full_name || "",
+                                  id_number: participant.id_number || "",
+                                  phone_number: participant.phone_number || "",
+                                });
+                                setEditParticipantDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="w-4 h-4 text-blue-600" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                // Remove participant from session
+                                const updated = editingSession.participant_ids.filter(id => id !== pid);
+                                setEditingSession({ ...editingSession, participant_ids: updated });
+                                toast.success(`${participant.full_name} will be removed from this session`);
+                              }}
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
