@@ -226,9 +226,10 @@ const SuperAdminPanel = () => {
       const sessionRes = await axiosInstance.get(`/sessions/${sessionId}`);
       const programId = sessionRes.data.program_id;
       
-      // Fetch program to get pass_percentage
-      const programRes = await axiosInstance.get(`/programs/${programId}`);
-      const passPercentage = programRes.data.pass_percentage || 70;
+      // Fetch ALL programs and find the matching one
+      const programsRes = await axiosInstance.get('/programs');
+      const program = programsRes.data.find(p => p.id === programId);
+      const passPercentage = program?.pass_percentage || 70;
       setProgramPassPercentage(passPercentage);
       
       // Set dialog state
