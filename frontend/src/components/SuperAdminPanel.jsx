@@ -176,22 +176,20 @@ const SuperAdminPanel = () => {
   // Open Test Dialog and fetch program pass percentage
   const openTestDialog = async (participant, sessionId, testType, existingScore) => {
     try {
-      console.log("Opening test dialog for session:", sessionId);
+      // Find the session from our already loaded sessions
+      const session = sessions.find(s => s.id === sessionId);
+      const programId = session?.program_id;
       
-      // Fetch session to get program_id
-      const sessionRes = await axiosInstance.get(`/sessions/${sessionId}`);
-      const programId = sessionRes.data.program_id;
-      console.log("Session program_id:", programId);
+      // Use cached programs or fetch if not available
+      let programs = programsCache;
+      if (!programs) {
+        const programsRes = await axiosInstance.get('/programs');
+        programs = programsRes.data;
+        setProgramsCache(programs);
+      }
       
-      // Fetch ALL programs and find the matching one
-      const programsRes = await axiosInstance.get('/programs');
-      console.log("All programs:", programsRes.data.map(p => ({ id: p.id, name: p.name, pass: p.pass_percentage })));
-      
-      const program = programsRes.data.find(p => p.id === programId);
-      console.log("Found program:", program);
-      
+      const program = programs.find(p => p.id === programId);
       const passPercentage = program?.pass_percentage || 70;
-      console.log("Setting pass percentage to:", passPercentage);
       setProgramPassPercentage(passPercentage);
       
       // Set dialog state
@@ -207,7 +205,6 @@ const SuperAdminPanel = () => {
       setScoreCalculator({ correct: "", total: "" });
     } catch (error) {
       console.error("Failed to fetch program pass percentage:", error);
-      // Default to 70% if fetch fails
       setProgramPassPercentage(70);
       setTestDialog({ open: true, participant, sessionId, testType });
       setTestForm({ score: existingScore?.toString() || "" });
