@@ -88,8 +88,13 @@ const SuperAdminPanel = () => {
   };
 
   const refreshParticipant = async (sessionId, participantId) => {
-    const participants = await loadSessionParticipants(sessionId);
-    setExpandedSessions(prev => ({ ...prev, [sessionId]: participants }));
+    try {
+      const participants = await loadSessionParticipants(sessionId);
+      setExpandedSessions(prev => ({ ...prev, [sessionId]: participants }));
+    } catch (error) {
+      console.error("Failed to refresh participants:", error);
+      toast.error("Failed to refresh data. Please try again.");
+    }
   };
 
   const toggleParticipantExpand = (participantId) => {
@@ -100,7 +105,11 @@ const SuperAdminPanel = () => {
   };
 
   // Handle Clock In/Out - Keep dialog open and refresh status
+  const [submitting, setSubmitting] = useState(false);
+  
   const handleClockInOut = async () => {
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const { participant, sessionId } = clockInOutDialog;
       
