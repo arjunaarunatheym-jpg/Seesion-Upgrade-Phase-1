@@ -146,8 +146,10 @@ const SuperAdminPanel = () => {
       setClockForm({ clockIn: "", clockOut: "" });
       setClockInOutDialog({ open: false, participant: null, sessionId: null });
     } catch (error) {
-      toast.error("Failed to update attendance");
+      toast.error(error.response?.data?.detail || "Failed to update attendance");
       console.error(error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
