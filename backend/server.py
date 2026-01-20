@@ -1347,8 +1347,8 @@ async def get_or_create_participant_access(participant_id: str, session_id: str)
 
 async def find_or_create_user(user_data: dict, role: str, company_id: str) -> dict:
     """
-    Find existing user by fullname OR email OR id_number (any match)
-    If found: update the user with new data
+    Find existing user by IC number (single source of truth)
+    If found: update the user with NEW data (latest wins)
     If not found: create new user
     Returns: user dict with 'is_existing' flag and user data
     """
@@ -1357,34 +1357,23 @@ async def find_or_create_user(user_data: dict, role: str, company_id: str) -> di
     id_number = user_data.get("id_number")
     phone_number = user_data.get("phone_number")
     
-    # Search for existing user by fullname OR email OR id_number
-    query = {"$or": []}
-    
-    if full_name:
-        query["$or"].append({"full_name": full_name})
-    if email:
-        query["$or"].append({"email": email})
-    if id_number:
-        query["$or"].append({"id_number": id_number})
-    
-    # If no fields provided, skip search
-    if not query["$or"]:
-        query = None
-    
+    # Search for existing user ONLY by IC number (unique identifier)
     existing_user = None
-    if query:
-        existing_user = await db.users.find_one(query, {"_id": 0})
+    if id_number:
+        existing_user = await db.users.find_one({"id_number": id_number}, {"_id": 0})
     
     if existing_user:
-        # User found - update with new data
+        # User found - update with NEW data (latest entry wins)
         update_data = {
-            "id_number": user_data.get("id_number"),
             "phone_number": phone_number,
             "company_id": company_id,
         }
         
+        # Update full_name with latest value (fixes typo correction issue)
+        if full_name and full_name.strip():
+            update_data["full_name"] = full_name.strip()
+        
         # Only update email if a valid non-empty email is provided
-        # Don't overwrite existing email with empty string (violates unique constraint)
         if email and email.strip():
             update_data["email"] = email
         
