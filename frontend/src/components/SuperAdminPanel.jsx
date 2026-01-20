@@ -219,6 +219,39 @@ const SuperAdminPanel = () => {
     }
   };
 
+  // Open Test Dialog and fetch program pass percentage
+  const openTestDialog = async (participant, sessionId, testType, existingScore) => {
+    try {
+      // Fetch session to get program_id
+      const sessionRes = await axiosInstance.get(`/sessions/${sessionId}`);
+      const programId = sessionRes.data.program_id;
+      
+      // Fetch program to get pass_percentage
+      const programRes = await axiosInstance.get(`/programs/${programId}`);
+      const passPercentage = programRes.data.pass_percentage || 70;
+      setProgramPassPercentage(passPercentage);
+      
+      // Set dialog state
+      setTestDialog({ open: true, participant, sessionId, testType });
+      
+      // Pre-fill score if exists
+      if (existingScore !== undefined && existingScore !== null) {
+        setTestForm({ score: existingScore.toString() });
+        toast.info(`Editing existing ${testType}-test`, { duration: 2000 });
+      } else {
+        setTestForm({ score: "" });
+      }
+      setScoreCalculator({ correct: "", total: "" });
+    } catch (error) {
+      console.error("Failed to fetch program pass percentage:", error);
+      // Default to 70% if fetch fails
+      setProgramPassPercentage(70);
+      setTestDialog({ open: true, participant, sessionId, testType });
+      setTestForm({ score: existingScore?.toString() || "" });
+      setScoreCalculator({ correct: "", total: "" });
+    }
+  };
+
   // Handle Test Submission - Update badge immediately
   const handleTestSubmit = async () => {
     try {
