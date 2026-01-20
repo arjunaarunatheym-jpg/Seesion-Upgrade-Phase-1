@@ -64,62 +64,11 @@ const SuperAdminPanel = () => {
 
   const loadSessionParticipants = async (sessionId) => {
     try {
-      // Add timestamp to prevent caching
-      const timestamp = new Date().getTime();
-      const response = await axiosInstance.get(`/sessions/${sessionId}/participants?_t=${timestamp}`);
-      
-      const enriched = await Promise.all(response.data.map(async (p) => {
-        const participantUser = p.user || p;
-        
-        try {
-          const [testsRes, checklistRes, attendanceRes, feedbackRes, vehicleRes] = await Promise.all([
-            axiosInstance.get(`/tests/results/participant/${participantUser.id}`).catch(() => ({ data: [] })),
-            axiosInstance.get(`/vehicle-checklists/${sessionId}/${participantUser.id}`).catch(() => ({ data: null })),
-            axiosInstance.get(`/attendance/${sessionId}/${participantUser.id}`).catch(() => ({ data: [] })),
-            axiosInstance.get(`/feedback/session/${sessionId}`).catch(() => ({ data: [] })),
-            axiosInstance.get(`/vehicle-details/${sessionId}/${participantUser.id}`).catch(() => ({ data: null }))
-          ]);
-          
-          const sessionTests = testsRes.data.filter(t => t.session_id === sessionId);
-          const preTest = sessionTests.find(t => t.test_type === "pre");
-          const postTest = sessionTests.find(t => t.test_type === "post");
-          
-          // Check if feedback exists for this participant
-          const participantFeedback = feedbackRes.data.find(f => f.participant_id === participantUser.id);
-          
-          // Check if participant has clocked in
-          const attendance = attendanceRes.data || [];
-          const hasClockIn = attendance.length > 0 && attendance[0].clock_in;
-          
-          return {
-            ...participantUser,
-            sessionId,
-            attendance: attendance,
-            clockedIn: hasClockIn,
-            vehicleDetails: vehicleRes.data ? true : false,
-            preTest: preTest ? { ...preTest, completed: true } : null,
-            postTest: postTest ? { ...postTest, completed: true } : null,
-            checklist: checklistRes.data ? { completed: true, data: checklistRes.data } : null,
-            feedback: participantFeedback ? { completed: true, data: participantFeedback } : null
-          };
-        } catch (error) {
-          return {
-            ...participantUser,
-            sessionId,
-            attendance: [],
-            clockedIn: false,
-            vehicleDetails: false,
-            preTest: null,
-            postTest: null,
-            checklist: null,
-            feedback: null
-          };
-        }
-      }));
-      
-      return enriched;
+      // Use the new optimized endpoint that returns ALL data in ONE call
+      const response = await axiosInstance.get(`/sessions/${sessionId}/participants/enriched`);
+      return response.data;
     } catch (error) {
-      console.error(error);
+      console.error("Failed to load participants:", error);
       return [];
     }
   };
