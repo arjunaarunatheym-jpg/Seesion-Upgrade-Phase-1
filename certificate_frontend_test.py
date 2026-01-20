@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://marketing-portal-3.preview.emergentagent.com/api"
+BASE_URL = "https://hr-quote-system.preview.emergentagent.com/api"
 USER_EMAIL = "maaman@gmail.com"
 USER_PASSWORD = "mddrc1"
 

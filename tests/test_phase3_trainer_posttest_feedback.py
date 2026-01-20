@@ -12,7 +12,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://marketing-portal-3.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://hr-quote-system.preview.emergentagent.com').rstrip('/')
 SESSION_ID = "d664b79d-91a1-4968-bd72-de82611cdb1f"
 PROGRAM_ID = "5d8c9145-3fbf-4d4f-8b2f-aaa1b225ff30"
 
