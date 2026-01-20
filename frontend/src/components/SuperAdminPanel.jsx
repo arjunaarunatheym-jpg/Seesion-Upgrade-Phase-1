@@ -222,14 +222,22 @@ const SuperAdminPanel = () => {
   // Open Test Dialog and fetch program pass percentage
   const openTestDialog = async (participant, sessionId, testType, existingScore) => {
     try {
+      console.log("Opening test dialog for session:", sessionId);
+      
       // Fetch session to get program_id
       const sessionRes = await axiosInstance.get(`/sessions/${sessionId}`);
       const programId = sessionRes.data.program_id;
+      console.log("Session program_id:", programId);
       
       // Fetch ALL programs and find the matching one
       const programsRes = await axiosInstance.get('/programs');
+      console.log("All programs:", programsRes.data.map(p => ({ id: p.id, name: p.name, pass: p.pass_percentage })));
+      
       const program = programsRes.data.find(p => p.id === programId);
+      console.log("Found program:", program);
+      
       const passPercentage = program?.pass_percentage || 70;
+      console.log("Setting pass percentage to:", passPercentage);
       setProgramPassPercentage(passPercentage);
       
       // Set dialog state
