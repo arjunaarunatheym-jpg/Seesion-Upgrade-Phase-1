@@ -1325,6 +1325,20 @@ const AdminDashboard = ({ user, onLogout }) => {
     }
   };
 
+  // Handle participant update
+  const handleUpdateParticipant = async (e) => {
+    e.preventDefault();
+    try {
+      await axiosInstance.put(`/users/${editingParticipant.id}`, editParticipantForm);
+      toast.success("Participant updated successfully");
+      setEditParticipantDialogOpen(false);
+      setEditingParticipant(null);
+      loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to update participant");
+    }
+  };
+
   const loadPastTraining = async () => {
     try {
       setLoadingPastTraining(true);
