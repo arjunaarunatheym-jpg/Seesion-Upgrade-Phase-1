@@ -39,9 +39,14 @@ const SuperAdminPanel = () => {
   
   // Program pass percentage (fetched when opening test dialog)
   const [programPassPercentage, setProgramPassPercentage] = useState(70);
+  
+  // Cache programs to avoid refetching
+  const [programsCache, setProgramsCache] = useState(null);
 
   useEffect(() => {
     loadActiveSessions();
+    // Pre-load programs cache
+    axiosInstance.get('/programs').then(res => setProgramsCache(res.data)).catch(() => {});
   }, []);
 
   const loadActiveSessions = async () => {
