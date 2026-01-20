@@ -845,18 +845,12 @@ const SuperAdminPanel = () => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => {
-                                setTestDialog({ open: true, participant, sessionId: session.id, testType: "pre" });
-                                // Pre-fill score if test already exists
-                                if (participant.preTest && participant.preTest.score !== undefined) {
-                                  setTestForm({ score: participant.preTest.score.toString() });
-                                  toast.info("Editing existing pre-test", { duration: 2000 });
-                                } else {
-                                  setTestForm({ score: "" });
-                                }
-                                // Clear score calculator
-                                setScoreCalculator({ correct: "", total: "" });
-                              }}
+                              onClick={() => openTestDialog(
+                                participant, 
+                                session.id, 
+                                "pre", 
+                                participant.preTest?.score
+                              )}
                               className={`flex items-center gap-2 ${
                                 participant.preTest ? 'bg-green-100 hover:bg-green-200 border-green-400' : 'bg-red-100 hover:bg-red-200 border-red-400'
                               }`}
@@ -868,18 +862,12 @@ const SuperAdminPanel = () => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => {
-                                setTestDialog({ open: true, participant, sessionId: session.id, testType: "post" });
-                                // Pre-fill score if test already exists
-                                if (participant.postTest && participant.postTest.score !== undefined) {
-                                  setTestForm({ score: participant.postTest.score.toString() });
-                                  toast.info("Editing existing post-test", { duration: 2000 });
-                                } else {
-                                  setTestForm({ score: "" });
-                                }
-                                // Clear score calculator
-                                setScoreCalculator({ correct: "", total: "" });
-                              }}
+                              onClick={() => openTestDialog(
+                                participant, 
+                                session.id, 
+                                "post", 
+                                participant.postTest?.score
+                              )}
                               className={`flex items-center gap-2 ${
                                 participant.postTest ? 'bg-green-100 hover:bg-green-200 border-green-400' : 'bg-red-100 hover:bg-red-200 border-red-400'
                               }`}
