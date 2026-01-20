@@ -2624,6 +2624,106 @@ async def add_participants_to_session(
     }
 
 
+@api_router.get("/sessions/{session_id}/participants/enriched")
+async def get_session_participants_enriched(session_id: str, current_user: User = Depends(get_current_user)):
+    """
+    Optimized endpoint that returns ALL participant data in ONE call.
+    Includes: attendance, test results, checklists, feedback, vehicle details.
+    """
+    if current_user.role not in ["admin", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can view enriched participants")
+    
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    participant_ids = session.get('participant_ids', [])
+    if not participant_ids:
+        return []
+    
+    # Fetch ALL data in bulk queries (much faster than individual calls)
+    all_tests = await db.test_results.find(
+        {"session_id": session_id},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    all_attendance = await db.attendance.find(
+        {"session_id": session_id},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    all_checklists = await db.vehicle_checklists.find(
+        {"session_id": session_id},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    all_feedback = await db.feedback.find(
+        {"session_id": session_id},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    all_vehicles = await db.vehicle_details.find(
+        {"session_id": session_id},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Build lookup dictionaries for O(1) access
+    tests_by_participant = {}
+    for t in all_tests:
+        pid = t.get('participant_id')
+        if pid not in tests_by_participant:
+            tests_by_participant[pid] = []
+        tests_by_participant[pid].append(t)
+    
+    attendance_by_participant = {}
+    for a in all_attendance:
+        pid = a.get('participant_id')
+        if pid not in attendance_by_participant:
+            attendance_by_participant[pid] = []
+        attendance_by_participant[pid].append(a)
+    
+    checklists_by_participant = {c.get('participant_id'): c for c in all_checklists}
+    feedback_by_participant = {f.get('participant_id'): f for f in all_feedback}
+    vehicles_by_participant = {v.get('participant_id'): v for v in all_vehicles}
+    
+    # Enrich participants
+    enriched = []
+    for pid in participant_ids:
+        user = await db.users.find_one({"id": pid}, {"_id": 0, "password": 0})
+        if not user:
+            continue
+        
+        # Get participant's data from lookup dicts
+        tests = tests_by_participant.get(pid, [])
+        pre_test = next((t for t in tests if t.get('test_type') == 'pre'), None)
+        post_test = next((t for t in tests if t.get('test_type') == 'post'), None)
+        
+        attendance = attendance_by_participant.get(pid, [])
+        has_clock_in = len(attendance) > 0 and attendance[0].get('clock_in')
+        
+        checklist = checklists_by_participant.get(pid)
+        feedback = feedback_by_participant.get(pid)
+        vehicle = vehicles_by_participant.get(pid)
+        
+        enriched.append({
+            "id": user.get('id'),
+            "full_name": user.get('full_name'),
+            "email": user.get('email'),
+            "id_number": user.get('id_number'),
+            "phone_number": user.get('phone_number'),
+            "sessionId": session_id,
+            "attendance": attendance,
+            "clockedIn": has_clock_in,
+            "vehicleDetails": vehicle is not None,
+            "preTest": {"score": pre_test.get('score'), "passed": pre_test.get('passed'), "completed": True} if pre_test else None,
+            "postTest": {"score": post_test.get('score'), "passed": post_test.get('passed'), "completed": True} if post_test else None,
+            "checklist": {"completed": True, "data": checklist} if checklist else None,
+            "feedback": {"completed": True, "data": feedback} if feedback else None
+        })
+    
+    return enriched
+
+
 @api_router.post("/sessions/{session_id}/participants/bulk-upload")
 async def bulk_upload_participants(
     session_id: str,
