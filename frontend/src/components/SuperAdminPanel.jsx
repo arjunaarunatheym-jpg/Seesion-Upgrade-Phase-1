@@ -176,21 +176,20 @@ const SuperAdminPanel = () => {
   // Open Test Dialog and fetch program pass percentage
   const openTestDialog = async (participant, sessionId, testType, existingScore) => {
     try {
-      // Find the session from our already loaded sessions
-      const session = sessions.find(s => s.id === sessionId);
-      const programId = session?.program_id;
+      // ALWAYS fetch fresh session data to get program_id reliably
+      const sessionRes = await axiosInstance.get(`/sessions/${sessionId}`);
+      const programId = sessionRes.data?.program_id;
       
-      // Use cached programs or fetch if not available
-      let programs = programsCache;
-      if (!programs) {
+      if (!programId) {
+        console.warn("No program_id found for session, using default 70%");
+        setProgramPassPercentage(70);
+      } else {
+        // ALWAYS fetch programs fresh to ensure correct pass percentage
         const programsRes = await axiosInstance.get('/programs');
-        programs = programsRes.data;
-        setProgramsCache(programs);
+        const program = programsRes.data.find(p => p.id === programId);
+        const passPercentage = program?.pass_percentage || 70;
+        setProgramPassPercentage(passPercentage);
       }
-      
-      const program = programs.find(p => p.id === programId);
-      const passPercentage = program?.pass_percentage || 70;
-      setProgramPassPercentage(passPercentage);
       
       // Set dialog state
       setTestDialog({ open: true, participant, sessionId, testType });
