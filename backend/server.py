@@ -1995,7 +1995,15 @@ async def update_user(user_id: str, user_data: dict, current_user: User = Depend
     if "email" in user_data:
         update_data["email"] = user_data["email"]
     if "id_number" in user_data:
-        update_data["id_number"] = user_data["id_number"]
+        # Check if new IC number conflicts with another user
+        new_ic = user_data["id_number"]
+        if new_ic and new_ic != existing_user.get("id_number"):
+            ic_exists = await db.users.find_one({"id_number": new_ic, "id": {"$ne": user_id}}, {"_id": 0})
+            if ic_exists:
+                raise HTTPException(status_code=400, detail="IC number already in use by another user")
+        update_data["id_number"] = new_ic
+    if "phone_number" in user_data:
+        update_data["phone_number"] = user_data["phone_number"]
     if "additional_roles" in user_data:
         update_data["additional_roles"] = user_data["additional_roles"]
     
