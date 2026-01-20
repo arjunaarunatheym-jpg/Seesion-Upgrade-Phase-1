@@ -265,6 +265,15 @@ const AdminDashboard = ({ user, onLogout }) => {
     additional_roles: [],
   });
   
+  // Edit participant states
+  const [editingParticipant, setEditingParticipant] = useState(null);
+  const [editParticipantDialogOpen, setEditParticipantDialogOpen] = useState(false);
+  const [editParticipantForm, setEditParticipantForm] = useState({
+    full_name: "",
+    id_number: "",
+    phone_number: "",
+  });
+  
   // Delete confirmation states
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
