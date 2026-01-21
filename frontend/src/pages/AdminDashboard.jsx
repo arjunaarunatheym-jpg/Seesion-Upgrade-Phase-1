@@ -588,7 +588,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
   const loadChecklistTemplates = async () => {
     try {
-      const response = await axiosInstance.get("/checklists/templates");
+      const response = await axiosInstance.get("/checklist-templates");
       setChecklistTemplates(response.data);
     } catch (error) {
       console.error("Failed to load checklist templates:", error);
@@ -1510,14 +1510,14 @@ const AdminDashboard = ({ user, onLogout }) => {
       if (existingTemplate) {
         // Update existing template by adding new items
         const updatedItems = [...existingTemplate.items, ...checklistForm.items.filter(i => i.trim())];
-        await axiosInstance.put(`/checklists/templates/${existingTemplate.id}`, {
+        await axiosInstance.put(`/checklist-templates/${existingTemplate.id}`, {
           program_id: checklistForm.program_id,
           items: updatedItems
         });
         toast.success("Checklist item added successfully");
       } else {
         // Create new template
-        await axiosInstance.post("/checklists/templates", {
+        await axiosInstance.post("/checklist-templates", {
           program_id: checklistForm.program_id,
           items: checklistForm.items.filter(i => i.trim())
         });
@@ -1549,7 +1549,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
   const handleDeleteChecklistTemplate = async (templateId) => {
     try {
-      await axiosInstance.delete(`/checklists/templates/${templateId}`);
+      await axiosInstance.delete(`/checklist-templates/${templateId}`);
       toast.success("Checklist template deleted");
       loadChecklistTemplates();
     } catch (error) {
@@ -1570,11 +1570,11 @@ const AdminDashboard = ({ user, onLogout }) => {
       
       // If no items left, delete the template
       if (updatedItems.length === 0) {
-        await axiosInstance.delete(`/checklists/templates/${templateId}`);
+        await axiosInstance.delete(`/checklist-templates/${templateId}`);
         toast.success("Last item removed. Template deleted.");
       } else {
         // Update template with remaining items
-        await axiosInstance.put(`/checklists/templates/${templateId}`, {
+        await axiosInstance.put(`/checklist-templates/${templateId}`, {
           program_id: template.program_id,
           items: updatedItems
         });
