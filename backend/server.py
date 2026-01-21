@@ -4750,6 +4750,17 @@ async def get_checklist_template_alias(program_id: str, current_user: User = Dep
         template['created_at'] = datetime.fromisoformat(template['created_at'])
     return ChecklistTemplate(**template)
 
+@api_router.get("/checklists/templates", response_model=List[ChecklistTemplate])
+async def get_all_checklist_templates_alias(current_user: User = Depends(get_current_user)):
+    """Alias endpoint for /checklist-templates - used by AdminDashboard"""
+    templates = await db.checklist_templates.find({}, {"_id": 0}).to_list(100)
+    result = []
+    for t in templates:
+        if isinstance(t.get('created_at'), str):
+            t['created_at'] = datetime.fromisoformat(t['created_at'])
+        result.append(ChecklistTemplate(**t))
+    return result
+
 @api_router.put("/checklist-templates/{template_id}", response_model=ChecklistTemplate)
 async def update_checklist_template(template_id: str, template_data: ChecklistTemplateCreate, current_user: User = Depends(get_current_user)):
     """Update a checklist template"""
