@@ -1,6 +1,6 @@
 # Backend Refactoring Progress
 
-## ✅ COMPLETED - STAGES 1, 2, 3 (January 2026)
+## ✅ COMPLETED - STAGES 1-5 (January 2026)
 
 ### Stage 1: Settings, Programs, Companies ✅
 - `routes/settings.py` - 4 endpoints extracted
@@ -18,12 +18,57 @@
 - `routes/participant_access.py` - 4 endpoints extracted (access control)
 - **Status:** Tested and verified working
 
-### Core Module Created ✅
+### Stage 4: Tests, Feedback ✅
+- `routes/tests.py` - 11 endpoints extracted (test CRUD, submit, results)
+- `routes/feedback.py` - 15 endpoints extracted (templates, submit, coordinator/trainer feedback)
+- **Status:** Tested and verified working
+
+### Stage 5: Checklists ✅
+- `routes/checklists.py` - 18 endpoints extracted (templates, submissions, vehicle details)
+- **Status:** Tested and verified working
+
+### Core Modules Created ✅
 - `core/__init__.py` - Shared utilities (db, auth, helpers)
 - `models/__init__.py` - All Pydantic models centralized
 
-**Total Extracted:** 33 endpoints
+**Total Extracted (New):** ~68 endpoints across 10 route files
 **API Contract Test:** All passing ✅
+**Application Status:** Fully functional ✅
+
+---
+
+## 📋 REMAINING STAGES (Stage 6+)
+
+### Stage 6: Sessions & Training Reports (HIGH COMPLEXITY)
+- Sessions: 25 endpoints - Complex participant management
+- Training Reports: 12 endpoints - AI report generation, DOCX handling
+- Pre-existing route files exist but use different import paths
+- **Status:** Pending
+
+### Stage 7-12: Finance, HR, Marketing (HIGHEST COMPLEXITY)
+- Finance: ~95 endpoints - Most complex business logic
+- HR: 27 endpoints - Payroll, statutory calculations
+- Marketing: 26 endpoints - Quotations, PDFs
+- **Status:** Pending
+
+---
+
+## 📊 PROGRESS TRACKER
+
+| Stage | Module | Status | Endpoints |
+|-------|--------|--------|-----------|
+| 1 | Settings, Programs, Companies | ✅ Complete | 12 |
+| 2 | Auth, Users | ✅ Complete | 13 |
+| 3 | Attendance, Participant Access | ✅ Complete | 8 |
+| 4 | Tests, Feedback | ✅ Complete | 26 |
+| 5 | Checklists | ✅ Complete | 18 |
+| 6 | Sessions, Reports | ⬜ Pending | ~37 |
+| 7 | HR | ⬜ Pending | 27 |
+| 8 | Marketing | ⬜ Pending | 26 |
+| 9-10 | Finance | ⬜ Pending | 95 |
+| 11-12 | Cleanup | ⬜ Pending | - |
+
+**Progress: ~77/307 endpoints extracted (~25%)**
 
 ---
 
