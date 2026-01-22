@@ -283,6 +283,28 @@ app.add_middleware(SecurityMiddleware)
 
 api_router = APIRouter(prefix="/api")
 
+# ==================== MODULAR ROUTERS (Stages 1-3) ====================
+# Import and include refactored routes
+from routes import (
+    settings_router,
+    programs_router,
+    companies_router,
+    auth_router,
+    users_router,
+    attendance_router,
+    participant_access_router,
+)
+
+# Include all modular routers
+api_router.include_router(settings_router)
+api_router.include_router(programs_router)
+api_router.include_router(companies_router)
+api_router.include_router(auth_router)
+api_router.include_router(users_router)
+api_router.include_router(attendance_router)
+api_router.include_router(participant_access_router)
+# ==================== END MODULAR ROUTERS ====================
+
 # Static files directory
 STATIC_DIR = ROOT_DIR / "static"
 STATIC_DIR.mkdir(exist_ok=True)
