@@ -11,6 +11,8 @@ from .auth import router as auth_router
 from .users import router as users_router
 from .attendance import router as attendance_router
 from .participant_access import router as participant_access_router
+from .tests import router as tests_router
+from .feedback import router as feedback_router
 
 # Create combined router for easy registration
 def get_all_routers():
@@ -23,6 +25,8 @@ def get_all_routers():
         users_router,          # /users
         attendance_router,     # /attendance/*
         participant_access_router,  # /participant-access/*
+        tests_router,          # /tests/*
+        feedback_router,       # /feedback-templates/*, /feedback/*, coordinator/chief-trainer feedback
     ]
 
 __all__ = [
@@ -33,5 +37,7 @@ __all__ = [
     'users_router',
     'attendance_router',
     'participant_access_router',
+    'tests_router',
+    'feedback_router',
     'get_all_routers',
 ]
