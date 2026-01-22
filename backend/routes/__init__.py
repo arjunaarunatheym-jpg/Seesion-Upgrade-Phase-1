@@ -14,6 +14,7 @@ from .participant_access import router as participant_access_router
 from .tests import router as tests_router
 from .feedback import router as feedback_router
 from .checklists import router as checklists_router
+from .sessions_new import router as sessions_new_router
 
 # Create combined router for easy registration
 def get_all_routers():
@@ -29,6 +30,7 @@ def get_all_routers():
         tests_router,          # /tests/*
         feedback_router,       # /feedback-templates/*, /feedback/*, coordinator/chief-trainer feedback
         checklists_router,     # /checklist-templates/*, /checklists/*, /vehicle-*/
+        sessions_new_router,   # /sessions/* (partial - core endpoints)
     ]
 
 __all__ = [
@@ -42,5 +44,6 @@ __all__ = [
     'tests_router',
     'feedback_router',
     'checklists_router',
+    'sessions_new_router',
     'get_all_routers',
 ]
