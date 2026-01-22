@@ -1,24 +1,37 @@
 """
-API route modules
+Routes package - All API routers are exported from here
 """
-from . import auth
-from . import sessions
-from . import users
-from . import companies
-from . import programs
-from . import tests
-from . import certificates
-from . import reports
-from . import feedback
-from . import checklists
-from . import attendance
-from . import settings
-from . import participant_access
-from . import admin_data_management
-from . import vehicle_details
+from fastapi import APIRouter
+
+# Import individual routers
+from .settings import router as settings_router
+from .programs import router as programs_router
+from .companies import router as companies_router
+from .auth import router as auth_router
+from .users import router as users_router
+from .attendance import router as attendance_router
+from .participant_access import router as participant_access_router
+
+# Create combined router for easy registration
+def get_all_routers():
+    """Return list of all routers with their prefixes already set"""
+    return [
+        settings_router,        # /settings
+        programs_router,        # /programs
+        companies_router,       # /companies
+        auth_router,           # /auth/*
+        users_router,          # /users
+        attendance_router,     # /attendance/*
+        participant_access_router,  # /participant-access/*
+    ]
 
 __all__ = [
-    'auth', 'sessions', 'users', 'companies', 'programs',
-    'tests', 'certificates', 'reports', 'feedback', 'checklists',
-    'attendance', 'settings', 'participant_access', 'admin_data_management', 'vehicle_details'
+    'settings_router',
+    'programs_router', 
+    'companies_router',
+    'auth_router',
+    'users_router',
+    'attendance_router',
+    'participant_access_router',
+    'get_all_routers',
 ]
