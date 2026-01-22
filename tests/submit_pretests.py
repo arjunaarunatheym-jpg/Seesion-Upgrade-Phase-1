@@ -8,7 +8,7 @@ Submit pre-tests for participants 1-13
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://hr-quote-system.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://trainingfix.preview.emergentagent.com').rstrip('/')
 SESSION_ID = "d664b79d-91a1-4968-bd72-de82611cdb1f"
 TEST_ID = "f3cb5358-41fe-4d7a-8e44-deefa85e5f5f"
 PASSWORD = "mddrc1"

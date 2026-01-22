@@ -16,7 +16,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://hr-quote-system.preview.emergentagent.com/api"
+BASE_URL = "https://trainingfix.preview.emergentagent.com/api"
 TRAINER_EMAIL = "vijay@mddrc.com.my"
 TRAINER_PASSWORD = "mddrc1"
 
