@@ -1,48 +1,28 @@
 """
-Program management routes
+Programs routes - Training program management
+Endpoints: 4
+- POST /programs
+- GET /programs
+- PUT /programs/{program_id}
+- DELETE /programs/{program_id}
 """
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
+from datetime import datetime
 
-from models import Program, ProgramCreate, ProgramUpdate
-from services.auth_service import get_current_user
-from utils import db
+from core import db, get_current_user
+from models import User, Program, ProgramCreate, ProgramUpdate
 
-router = APIRouter(prefix="/programs", tags=["programs"])
-
-
-@router.get("", response_model=List[Program])
-async def get_programs(
-    search: Optional[str] = None,
-    current_user = Depends(get_current_user)
-):
-    """Get all programs"""
-    query = {}
-    if search:
-        query["name"] = {"$regex": search, "$options": "i"}
-    
-    programs = await db.programs.find(query, {"_id": 0}).to_list(1000)
-    from datetime import datetime
-    for program in programs:
-        if isinstance(program.get('created_at'), str):
-            program['created_at'] = datetime.fromisoformat(program['created_at'])
-    return programs
+router = APIRouter(tags=["programs"])
 
 
-@router.post("", response_model=Program)
-async def create_program(
-    program_data: ProgramCreate,
-    current_user = Depends(get_current_user)
-):
-    """Create a new program"""
+@router.post("/programs", response_model=Program)
+async def create_program(program_data: ProgramCreate, current_user: User = Depends(get_current_user)):
+    """Create a new training program (admin only)"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can create programs")
     
-    program_obj = Program(
-        name=program_data.name,
-        description=program_data.description,
-        pass_percentage=program_data.pass_percentage or 70.0
-    )
+    program_obj = Program(**program_data.model_dump())
     doc = program_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     
@@ -50,54 +30,53 @@ async def create_program(
     return program_obj
 
 
-@router.get("/{program_id}", response_model=Program)
-async def get_program(program_id: str, current_user = Depends(get_current_user)):
-    """Get a specific program"""
-    program_doc = await db.programs.find_one({"id": program_id}, {"_id": 0})
-    if not program_doc:
-        raise HTTPException(status_code=404, detail="Program not found")
-    
-    from datetime import datetime
-    if isinstance(program_doc.get('created_at'), str):
-        program_doc['created_at'] = datetime.fromisoformat(program_doc['created_at'])
-    return Program(**program_doc)
-
-
-@router.put("/{program_id}", response_model=Program)
-async def update_program(
-    program_id: str,
-    program_data: ProgramUpdate,
-    current_user = Depends(get_current_user)
+@router.get("/programs", response_model=List[Program])
+async def get_programs(
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
 ):
-    """Update a program"""
+    """Get all programs with optional search"""
+    query = {}
+    if search:
+        query["name"] = {"$regex": search, "$options": "i"}
+    
+    programs = await db.programs.find(query, {"_id": 0}).to_list(1000)
+    for program in programs:
+        if isinstance(program.get('created_at'), str):
+            program['created_at'] = datetime.fromisoformat(program['created_at'])
+    return programs
+
+
+@router.put("/programs/{program_id}", response_model=Program)
+async def update_program(program_id: str, program_data: ProgramUpdate, current_user: User = Depends(get_current_user)):
+    """Update a program (admin only)"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can update programs")
     
-    update_data = {}
-    if program_data.name is not None:
-        update_data["name"] = program_data.name
-    if program_data.description is not None:
-        update_data["description"] = program_data.description
-    if program_data.pass_percentage is not None:
-        update_data["pass_percentage"] = program_data.pass_percentage
+    update_data = {k: v for k, v in program_data.model_dump().items() if v is not None}
     
-    if update_data:
-        await db.programs.update_one({"id": program_id}, {"$set": update_data})
+    result = await db.programs.update_one(
+        {"id": program_id},
+        {"$set": update_data}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Program not found")
     
     program_doc = await db.programs.find_one({"id": program_id}, {"_id": 0})
-    from datetime import datetime
     if isinstance(program_doc.get('created_at'), str):
         program_doc['created_at'] = datetime.fromisoformat(program_doc['created_at'])
     return Program(**program_doc)
 
 
-@router.delete("/{program_id}")
-async def delete_program(program_id: str, current_user = Depends(get_current_user)):
-    """Delete a program"""
+@router.delete("/programs/{program_id}")
+async def delete_program(program_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a program (admin only)"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can delete programs")
     
     result = await db.programs.delete_one({"id": program_id})
+    
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Program not found")
     
