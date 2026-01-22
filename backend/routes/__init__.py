@@ -15,6 +15,8 @@ from .tests import router as tests_router
 from .feedback import router as feedback_router
 from .checklists import router as checklists_router
 from .sessions_new import router as sessions_new_router
+from .hr import router as hr_router
+from .marketing import router as marketing_router
 
 # Create combined router for easy registration
 def get_all_routers():
@@ -31,6 +33,8 @@ def get_all_routers():
         feedback_router,       # /feedback-templates/*, /feedback/*, coordinator/chief-trainer feedback
         checklists_router,     # /checklist-templates/*, /checklists/*, /vehicle-*/
         sessions_new_router,   # /sessions/* (partial - core endpoints)
+        hr_router,             # /hr/* (staff, payroll, pay advice)
+        marketing_router,      # /marketing/* (clients, quotations)
     ]
 
 __all__ = [
@@ -45,5 +49,7 @@ __all__ = [
     'feedback_router',
     'checklists_router',
     'sessions_new_router',
+    'hr_router',
+    'marketing_router',
     'get_all_routers',
 ]
