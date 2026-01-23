@@ -19,6 +19,7 @@ import { FaFacebook, FaInstagram, FaTiktok, FaYoutube, FaTwitter, FaLinkedin } f
 import HRModule from '../components/HRModule';
 import ProfitLossLedger from '../components/ProfitLossLedger';
 import PettyCash from '../components/PettyCash';
+import { InvoicesTab } from '../components/finance/InvoicesTab';
 
 const FinanceDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
