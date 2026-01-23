@@ -68,5 +68,6 @@ __all__ = [
     'supervisor_router',
     'super_admin_router',
     'security_router',
+    'finance_billing_router',
     'get_all_routers',
 ]
