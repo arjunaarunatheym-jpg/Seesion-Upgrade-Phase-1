@@ -48,6 +48,7 @@ def get_all_routers():
         super_admin_router,    # /super-admin/* (testing panel)
         security_router,       # /security/* (admin security)
         finance_billing_router, # /finance/billing-parties (F1)
+        finance_invoices_router, # /finance/invoices/* (F2)
     ]
 
 __all__ = [
