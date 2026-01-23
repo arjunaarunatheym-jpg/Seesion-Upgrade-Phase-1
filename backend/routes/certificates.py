@@ -32,7 +32,6 @@ class Certificate(BaseModel):
     file_path: Optional[str] = None
     issue_date: datetime = Field(default_factory=get_malaysia_time)
 
-from typing import Optional
 
 router = APIRouter(prefix="/certificates", tags=["certificates"])
 
