@@ -283,7 +283,7 @@ app.add_middleware(SecurityMiddleware)
 
 api_router = APIRouter(prefix="/api")
 
-# ==================== MODULAR ROUTERS (Stages 1-6, 9-10) ====================
+# ==================== MODULAR ROUTERS (Stages 1-13) ====================
 # Import and include refactored routes
 from routes import (
     settings_router,
@@ -301,6 +301,9 @@ from routes import (
     marketing_router,
     certificates_router,
     training_reports_router,
+    supervisor_router,
+    super_admin_router,
+    security_router,
 )
 
 # Include all modular routers
@@ -319,6 +322,9 @@ api_router.include_router(hr_router)
 api_router.include_router(marketing_router)
 api_router.include_router(certificates_router)
 api_router.include_router(training_reports_router)
+api_router.include_router(supervisor_router)
+api_router.include_router(super_admin_router)
+api_router.include_router(security_router)
 # ==================== END MODULAR ROUTERS ====================
 
 # Static files directory
