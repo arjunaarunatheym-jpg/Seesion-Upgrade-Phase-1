@@ -29,6 +29,7 @@ import { StaffTab } from "../components/admin/StaffTab";
 import { ReportsTab } from "../components/admin/ReportsTab";
 import { PastTrainingTab } from "../components/admin/PastTrainingTab";
 import { UsersTab } from "../components/admin/UsersTab";
+import { CertificatesTab } from "../components/admin/CertificatesTab";
 
 const AdminDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
