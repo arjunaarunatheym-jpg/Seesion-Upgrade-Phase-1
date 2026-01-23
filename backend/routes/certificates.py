@@ -4,7 +4,7 @@ Endpoints: 10
 """
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.responses import FileResponse
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 from pathlib import Path
 import uuid
