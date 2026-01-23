@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 import { CEOPnLTab } from './ledger/CEOPnLTab';
 import { GeneralLedgerTab } from './ledger/GeneralLedgerTab';
+import { TrainerSubledgerTab } from './ledger/TrainerSubledgerTab';
+import { MarketingSubledgerTab } from './ledger/MarketingSubledgerTab';
+import { PayrollSubledgerTab } from './ledger/PayrollSubledgerTab';
 
 const ProfitLossLedger = () => {
   const [loading, setLoading] = useState(true);
