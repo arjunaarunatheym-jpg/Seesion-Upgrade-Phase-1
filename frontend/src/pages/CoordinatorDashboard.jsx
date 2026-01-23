@@ -15,6 +15,7 @@ import { LogOut, Calendar, Users, FileText, BarChart3, Camera, Upload, Sparkles,
 import { useTheme } from "../context/ThemeContext";
 import MyEarnings from "../components/MyEarnings";
 import { ManagementTab } from "../components/coordinator/ManagementTab";
+import { ReportTab } from "../components/coordinator/ReportTab";
 
 const CoordinatorDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
