@@ -22,6 +22,7 @@ import { SearchBar } from "../components/SearchBar";
 import SessionCosting from "../components/SessionCosting";
 import IndemnityFormPrint from "../components/IndemnityFormPrint";
 import MyPayroll from "../components/MyPayroll";
+import ProgramsTab from "../components/admin/ProgramsTab";
 
 const AdminDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
