@@ -328,6 +328,7 @@ api_router.include_router(supervisor_router)
 api_router.include_router(super_admin_router)
 api_router.include_router(security_router)
 api_router.include_router(finance_billing_router)
+api_router.include_router(finance_invoices_router)
 # ==================== END MODULAR ROUTERS ====================
 
 # Static files directory
