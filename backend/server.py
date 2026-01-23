@@ -299,6 +299,8 @@ from routes import (
     sessions_new_router,
     hr_router,
     marketing_router,
+    certificates_router,
+    training_reports_router,
 )
 
 # Include all modular routers
