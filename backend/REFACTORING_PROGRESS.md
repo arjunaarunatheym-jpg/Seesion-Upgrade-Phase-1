@@ -101,13 +101,23 @@
 | 6 | Sessions (Full) | ✅ Complete | 25 |
 | 7 | HR | ✅ Complete | 27 |
 | 8 | Marketing | ✅ Complete | 26 |
-| 9-10 | Finance | ⬜ Pending | 95 |
+| 9-10 | Finance | 🔄 In Progress | ~95 |
 | 11 | Training Reports | ✅ Complete | 12 |
 | 12 | Certificates | ✅ Complete | 10 |
 | 13 | Supervisor, SuperAdmin, Security | ✅ Complete | 11 |
 
-**Progress: ~188/307 endpoints extracted (~61%)**
-**Remaining: Finance module (~95 endpoints)**
+### Finance Module Progress (Stages 9-10)
+| Sub-Stage | Module | Status | Endpoints |
+|-----------|--------|--------|-----------|
+| F1 | Billing Parties | ✅ Complete | 4 |
+| F2 | Invoices (Core + Admin) | ✅ Complete | 18 |
+| F3 | Payments & Credit Notes | ✅ Complete | 18 |
+| F4 | Payables & Session Costing | ⬜ Pending | ~22 |
+| F5 | P&L, Subledgers, Ledger | ⬜ Pending | ~12 |
+| F6 | Petty Cash & Manual Entries | ✅ Complete | 14 |
+
+**Progress: ~228/307 endpoints extracted (~74%)**
+**Remaining: ~34 endpoints (F4: Payables, F5: P&L)**
 
 ---
 
