@@ -306,6 +306,8 @@ from routes import (
     security_router,
     finance_billing_router,
     finance_invoices_router,
+    finance_payments_router,
+    finance_petty_cash_router,
 )
 
 # Include all modular routers
