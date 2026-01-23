@@ -297,3 +297,39 @@ class ResetPasswordRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+# ==================== VEHICLE & CHECKLIST MODELS ====================
+class VehicleChecklist(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    participant_id: str
+    session_id: str
+    interval: str
+    checklist_items: List[dict] = []
+    submitted_at: datetime = Field(default_factory=get_malaysia_time)
+    verified_by: Optional[str] = None
+    verified_at: Optional[datetime] = None
+    verification_status: str = "pending"
+
+
+class VehicleDetails(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    participant_id: str
+    session_id: str
+    vehicle_model: str
+    registration_number: str
+    roadtax_expiry: str
+    created_at: datetime = Field(default_factory=get_malaysia_time)
+
+
+# ==================== FEEDBACK MODELS ====================
+class CourseFeedback(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    participant_id: str
+    session_id: str
+    program_id: Optional[str] = None
+    responses: List[dict]  # [{"question": str, "answer": str/int}]
+    submitted_at: datetime = Field(default_factory=get_malaysia_time)
