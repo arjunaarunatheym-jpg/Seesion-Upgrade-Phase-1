@@ -1,6 +1,6 @@
 # Backend Refactoring Progress
 
-## ✅ COMPLETED - STAGES 1-6 (January 2026)
+## ✅ COMPLETED - STAGES 1-12 (January 2026)
 
 ### Stage 1: Settings, Programs, Companies ✅
 - `routes/settings.py` - 4 endpoints extracted
@@ -36,12 +36,28 @@
 - **Status:** Tested and verified working
 - **Note:** Complex CRUD and bulk operations remain in server.py
 
+### Stage 7 (was 9): HR Module ✅
+- `routes/hr.py` - 27 endpoints extracted (staff, payroll, pay advice, EA forms)
+- **Status:** Tested and verified working
+
+### Stage 8 (was 10): Marketing Module ✅
+- `routes/marketing.py` - 26 endpoints extracted (clients, quotations, PDF generation)
+- **Status:** Tested and verified working
+
+### Stage 11: Training Reports ✅
+- `routes/training_reports.py` - 12 endpoints extracted (AI report, DOCX/PDF generation)
+- **Status:** Tested and verified working (Jan 23, 2026)
+
+### Stage 12: Certificates ✅
+- `routes/certificates.py` - 10 endpoints extracted (generate, upload, download, eligibility)
+- **Status:** Tested and verified working (Jan 23, 2026)
+
 ### Core Modules Created ✅
 - `core/__init__.py` - Shared utilities (db, auth, helpers)
 - `models/__init__.py` - All Pydantic models centralized
 
-**Total Extracted:** ~88 endpoints across 11 route files
-**API Contract Test:** All passing ✅
+**Total Extracted:** ~167 endpoints across 15 route files
+**API Contract Test:** All 306 tests passing ✅
 **Application Status:** Fully functional ✅
 
 ---
