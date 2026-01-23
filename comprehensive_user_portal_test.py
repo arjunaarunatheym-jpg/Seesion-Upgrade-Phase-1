@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 import uuid
 
 # Configuration
-BASE_URL = "https://training-manager-13.preview.emergentagent.com/api"
+BASE_URL = "https://trainingapp-update.preview.emergentagent.com/api"
 
 # Test Credentials
 TEST_CREDENTIALS = {
