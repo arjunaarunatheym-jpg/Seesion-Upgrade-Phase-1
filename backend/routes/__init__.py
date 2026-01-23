@@ -23,6 +23,7 @@ from .supervisor import router as supervisor_router
 from .super_admin import router as super_admin_router
 from .security import router as security_router
 from .finance_billing import router as finance_billing_router
+from .finance_invoices import router as finance_invoices_router
 
 # Create combined router for easy registration
 def get_all_routers():
