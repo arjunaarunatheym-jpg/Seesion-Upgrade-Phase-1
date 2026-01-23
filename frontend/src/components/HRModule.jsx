@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import PayslipPrint from './PayslipPrint';
 import PayAdvicePrint from './PayAdvicePrint';
+import { EAFormsTab } from './hr/EAFormsTab';
 
 
 const HRModule = () => {
