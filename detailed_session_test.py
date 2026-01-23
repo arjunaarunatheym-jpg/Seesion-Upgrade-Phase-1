@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://trainingfix.preview.emergentagent.com/api"
+BASE_URL = "https://training-manager-13.preview.emergentagent.com/api"
 ADMIN_EMAIL = "arjuna@mddrc.com.my"
 ADMIN_PASSWORD = "Dana102229"
 
