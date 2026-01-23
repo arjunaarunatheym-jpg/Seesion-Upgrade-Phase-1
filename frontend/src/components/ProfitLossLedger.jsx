@@ -15,6 +15,8 @@ import {
   Users, Briefcase, UserCheck, Building2, ChevronDown, ChevronRight,
   BookOpen, Printer, FileSpreadsheet
 } from 'lucide-react';
+import { CEOPnLTab } from './ledger/CEOPnLTab';
+import { GeneralLedgerTab } from './ledger/GeneralLedgerTab';
 
 const ProfitLossLedger = () => {
   const [loading, setLoading] = useState(true);
