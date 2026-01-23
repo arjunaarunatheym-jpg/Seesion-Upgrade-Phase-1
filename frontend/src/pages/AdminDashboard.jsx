@@ -26,6 +26,7 @@ import ProgramsTab from "../components/admin/ProgramsTab";
 import CompaniesTab from "../components/admin/CompaniesTab";
 import { SessionsTab } from "../components/admin/SessionsTab";
 import { StaffTab } from "../components/admin/StaffTab";
+import { ReportsTab } from "../components/admin/ReportsTab";
 
 const AdminDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
