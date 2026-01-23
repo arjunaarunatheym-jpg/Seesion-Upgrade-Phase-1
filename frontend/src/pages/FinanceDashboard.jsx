@@ -21,6 +21,7 @@ import ProfitLossLedger from '../components/ProfitLossLedger';
 import PettyCash from '../components/PettyCash';
 import { InvoicesTab } from '../components/finance/InvoicesTab';
 import { PaymentsTab } from '../components/finance/PaymentsTab';
+import { CreditNotesTab } from '../components/finance/CreditNotesTab';
 
 const FinanceDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
