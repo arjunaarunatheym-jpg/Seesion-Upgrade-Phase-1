@@ -15,17 +15,6 @@ const ResultsSummary = () => {
   const [detailedResult, setDetailedResult] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const loadSummary = async () => {
-    try {
-      const response = await axiosInstance.get(`/sessions/${sessionId}/results-summary`);
-      setSummary(response.data);
-      setLoading(false);
-    } catch (error) {
-      toast.error("Failed to load results summary");
-      navigate(-1);
-    }
-  };
-
   useEffect(() => {
     const fetchSummary = async () => {
       try {
