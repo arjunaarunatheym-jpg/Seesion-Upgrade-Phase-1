@@ -14,6 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Search, Edit, Trash2, Filter, Database, History, FileText, CreditCard, Settings, Download, Ban, Calendar, Hash, RefreshCw } from "lucide-react";
 import SuperAdminPanel from "./SuperAdminPanel";
+import { InvoiceManagementTab } from "./data-management/InvoiceManagementTab";
+import { CreditNoteManagementTab } from "./data-management/CreditNoteManagementTab";
 
 const DataManagement = ({ user }) => {
   const [activeMainTab, setActiveMainTab] = useState("sessions-data");
