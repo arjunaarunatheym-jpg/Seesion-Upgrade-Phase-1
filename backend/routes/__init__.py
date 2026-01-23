@@ -76,5 +76,7 @@ __all__ = [
     'security_router',
     'finance_billing_router',
     'finance_invoices_router',
+    'finance_payments_router',
+    'finance_petty_cash_router',
     'get_all_routers',
 ]
