@@ -64,21 +64,28 @@
 
 ## 📋 REMAINING STAGES
 
-### Sessions (Remaining ~10 endpoints)
+### Stage 6b: Sessions (Remaining ~10 endpoints)
 - POST /sessions (create)
 - GET /sessions (list with complex filtering)
 - PUT /sessions/{id} (update)
 - DELETE /sessions/{id}
 - Bulk upload participants
 - Indemnity records
+- **Status:** Pending
 
-### Stage 7-12: Finance, HR, Marketing (HIGHEST COMPLEXITY)
+### Stages 9-10: Finance (HIGHEST COMPLEXITY)
 - Finance: ~95 endpoints - Most complex business logic
-- HR: 27 endpoints - Payroll, statutory calculations
-- Marketing: 26 endpoints - Quotations, PDFs
-- Training Reports: 12 endpoints - AI, DOCX handling
-- Certificates: 10 endpoints - File handling
-- **Status:** Pending - These require careful extraction
+  - Invoices, Payments, Credit Notes
+  - P&L, Payables, Session Costing
+  - Petty Cash management
+- **Status:** Pending - Requires careful extraction
+
+### Stage 13: Cleanup & Final
+- Supervisor endpoints (2)
+- Super Admin endpoints (5)
+- Security Admin endpoints (4)
+- Move remaining helpers to services/
+- Final server.py cleanup (~300 lines target)
 
 ---
 
