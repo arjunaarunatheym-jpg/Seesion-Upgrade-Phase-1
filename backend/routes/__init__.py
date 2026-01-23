@@ -56,6 +56,7 @@ def get_all_routers():
         finance_payments_router, # /finance/payments/*, credit-notes/* (F3)
         finance_petty_cash_router, # /finance/petty-cash/*, manual-* (F6)
         finance_reports_router, # /finance/profit-loss/*, subledger/*, chart-of-accounts, general-ledger (F5)
+        finance_payables_router, # /finance/payables/*, income/*, dashboard, company-settings (F4)
     ]
 
 __all__ = [
