@@ -46,6 +46,7 @@ def get_all_routers():
         supervisor_router,     # /supervisor/* (PIC supervisor)
         super_admin_router,    # /super-admin/* (testing panel)
         security_router,       # /security/* (admin security)
+        finance_billing_router, # /finance/billing-parties (F1)
     ]
 
 __all__ = [
