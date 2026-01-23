@@ -27,9 +27,18 @@ const ResultsSummary = () => {
   };
 
   useEffect(() => {
-    loadSummary();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+    const fetchSummary = async () => {
+      try {
+        const response = await axiosInstance.get(`/sessions/${sessionId}/results-summary`);
+        setSummary(response.data);
+        setLoading(false);
+      } catch (error) {
+        toast.error("Failed to load results summary");
+        navigate(-1);
+      }
+    };
+    fetchSummary();
+  }, [sessionId, navigate]);
 
   const loadDetailedResult = async (resultId) => {
     try {
