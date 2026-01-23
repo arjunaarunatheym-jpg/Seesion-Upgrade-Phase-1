@@ -334,6 +334,7 @@ api_router.include_router(finance_billing_router)
 api_router.include_router(finance_invoices_router)
 api_router.include_router(finance_payments_router)
 api_router.include_router(finance_petty_cash_router)
+api_router.include_router(finance_reports_router)
 # ==================== END MODULAR ROUTERS ====================
 
 # Static files directory
