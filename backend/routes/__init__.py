@@ -51,6 +51,8 @@ def get_all_routers():
         security_router,       # /security/* (admin security)
         finance_billing_router, # /finance/billing-parties (F1)
         finance_invoices_router, # /finance/invoices/* (F2)
+        finance_payments_router, # /finance/payments/*, credit-notes/* (F3)
+        finance_petty_cash_router, # /finance/petty-cash/*, manual-* (F6)
     ]
 
 __all__ = [
