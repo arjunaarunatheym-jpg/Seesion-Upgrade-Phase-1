@@ -333,3 +333,28 @@ class CourseFeedback(BaseModel):
     program_id: Optional[str] = None
     responses: List[dict]  # [{"question": str, "answer": str/int}]
     submitted_at: datetime = Field(default_factory=get_malaysia_time)
+
+
+# ==================== COMPANY SETTINGS MODEL ====================
+class CompanySettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = "company_settings"  # Singleton
+    company_name: str = "MDDRC SDN BHD"
+    company_reg_no: str = ""
+    address_line1: str = ""
+    address_line2: str = ""
+    city: str = ""
+    postcode: str = ""
+    state: str = ""
+    country: str = "Malaysia"
+    phone: str = ""
+    email: str = ""
+    website: str = ""
+    logo_url: Optional[str] = None
+    bank_name: str = ""
+    bank_account_name: str = ""
+    bank_account_number: str = ""
+    bank_swift_code: str = ""
+    invoice_prefix: str = "INV/MDDRC"
+    invoice_terms: str = "Upon receipt of invoice"
+    invoice_footer_note: str = "Thank you for your business!"
