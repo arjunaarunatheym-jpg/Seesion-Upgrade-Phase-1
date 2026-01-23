@@ -77,14 +77,14 @@
 | 5 | Checklists | ✅ Complete | 18 |
 | 6 | Sessions (Partial) | ✅ Complete | 15 |
 | 6b | Sessions (Remaining) | ⬜ Pending | ~10 |
-| 7 | HR | ⬜ Pending | 27 |
-| 8 | Marketing | ⬜ Pending | 26 |
+| 7 | HR | ✅ Complete | 27 |
+| 8 | Marketing | ✅ Complete | 26 |
 | 9-10 | Finance | ⬜ Pending | 95 |
-| 11 | Training Reports | ⬜ Pending | 12 |
-| 12 | Certificates | ⬜ Pending | 10 |
+| 11 | Training Reports | ✅ Complete | 12 |
+| 12 | Certificates | ✅ Complete | 10 |
 | 13 | Cleanup | ⬜ Pending | - |
 
-**Progress: ~92/307 endpoints extracted (~30%)**
+**Progress: ~167/307 endpoints extracted (~54%)**
 
 ---
 
