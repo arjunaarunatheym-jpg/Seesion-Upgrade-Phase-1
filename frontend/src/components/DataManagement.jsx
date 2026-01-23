@@ -1342,10 +1342,45 @@ const DataManagement = ({ user }) => {
         {hasFinanceAccess && (
           <>
             <TabsContent value="invoice-management">
-              <InvoiceManagementTab />
+              <InvoiceManagementTab
+                invoices={invoices}
+                invoiceSearch={invoiceSearch}
+                setInvoiceSearch={setInvoiceSearch}
+                invoiceStatusFilter={invoiceStatusFilter}
+                setInvoiceStatusFilter={setInvoiceStatusFilter}
+                loading={loading}
+                loadInvoices={loadInvoices}
+                getInvoiceStatusBadge={getInvoiceStatusBadge}
+                setEditNumberForm={setEditNumberForm}
+                setEditNumberDialog={setEditNumberDialog}
+                setBackdateForm={setBackdateForm}
+                setBackdateDialog={setBackdateDialog}
+                setOverrideForm={setOverrideForm}
+                setOverrideDialog={setOverrideDialog}
+                setEditPaidForm={setEditPaidForm}
+                setEditPaidDialog={setEditPaidDialog}
+                setVoidForm={setVoidForm}
+                setVoidDialog={setVoidDialog}
+              />
             </TabsContent>
             <TabsContent value="creditnote-management">
-              <CreditNoteManagementTab />
+              <CreditNoteManagementTab
+                creditNotes={creditNotes}
+                cnSearch={cnSearch}
+                setCnSearch={setCnSearch}
+                cnStatusFilter={cnStatusFilter}
+                setCnStatusFilter={setCnStatusFilter}
+                loading={loading}
+                loadCreditNotes={loadCreditNotes}
+                setEditCnNumberForm={setEditCnNumberForm}
+                setEditCnNumberDialog={setEditCnNumberDialog}
+                setBackdateCnForm={setBackdateCnForm}
+                setBackdateCnDialog={setBackdateCnDialog}
+                setEditCnForm={setEditCnForm}
+                setEditCnDialog={setEditCnDialog}
+                setVoidCnForm={setVoidCnForm}
+                setVoidCnDialog={setVoidCnDialog}
+              />
             </TabsContent>
             <TabsContent value="payment-management">
               <PaymentManagementTab />
