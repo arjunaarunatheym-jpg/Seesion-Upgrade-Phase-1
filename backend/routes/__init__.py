@@ -80,5 +80,6 @@ __all__ = [
     'finance_invoices_router',
     'finance_payments_router',
     'finance_petty_cash_router',
+    'finance_reports_router',
     'get_all_routers',
 ]
