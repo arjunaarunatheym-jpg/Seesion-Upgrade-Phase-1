@@ -19,6 +19,9 @@ from .hr import router as hr_router
 from .marketing import router as marketing_router
 from .certificates import router as certificates_router
 from .training_reports import router as training_reports_router
+from .supervisor import router as supervisor_router
+from .super_admin import router as super_admin_router
+from .security import router as security_router
 
 # Create combined router for easy registration
 def get_all_routers():
@@ -34,11 +37,14 @@ def get_all_routers():
         tests_router,          # /tests/*
         feedback_router,       # /feedback-templates/*, /feedback/*, coordinator/chief-trainer feedback
         checklists_router,     # /checklist-templates/*, /checklists/*, /vehicle-*/
-        sessions_new_router,   # /sessions/* (partial - core endpoints)
+        sessions_new_router,   # /sessions/* (full CRUD now)
         hr_router,             # /hr/* (staff, payroll, pay advice)
         marketing_router,      # /marketing/* (clients, quotations)
         certificates_router,   # /certificates/*
         training_reports_router, # /training-reports/*
+        supervisor_router,     # /supervisor/* (PIC supervisor)
+        super_admin_router,    # /super-admin/* (testing panel)
+        security_router,       # /security/* (admin security)
     ]
 
 __all__ = [
@@ -57,5 +63,8 @@ __all__ = [
     'marketing_router',
     'certificates_router',
     'training_reports_router',
+    'supervisor_router',
+    'super_admin_router',
+    'security_router',
     'get_all_routers',
 ]
