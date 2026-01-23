@@ -16,6 +16,7 @@ import { useTheme } from "../context/ThemeContext";
 import MyEarnings from "../components/MyEarnings";
 import { ManagementTab } from "../components/coordinator/ManagementTab";
 import { ReportTab } from "../components/coordinator/ReportTab";
+import { AnalyticsTab } from "../components/coordinator/AnalyticsTab";
 
 const CoordinatorDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
