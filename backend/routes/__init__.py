@@ -24,6 +24,8 @@ from .super_admin import router as super_admin_router
 from .security import router as security_router
 from .finance_billing import router as finance_billing_router
 from .finance_invoices import router as finance_invoices_router
+from .finance_payments import router as finance_payments_router
+from .finance_petty_cash import router as finance_petty_cash_router
 
 # Create combined router for easy registration
 def get_all_routers():
