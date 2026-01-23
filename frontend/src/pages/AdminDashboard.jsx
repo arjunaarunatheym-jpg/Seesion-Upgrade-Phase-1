@@ -23,6 +23,7 @@ import SessionCosting from "../components/SessionCosting";
 import IndemnityFormPrint from "../components/IndemnityFormPrint";
 import MyPayroll from "../components/MyPayroll";
 import ProgramsTab from "../components/admin/ProgramsTab";
+import CompaniesTab from "../components/admin/CompaniesTab";
 
 const AdminDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
