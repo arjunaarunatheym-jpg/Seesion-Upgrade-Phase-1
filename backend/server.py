@@ -317,6 +317,8 @@ api_router.include_router(checklists_router)
 api_router.include_router(sessions_new_router)
 api_router.include_router(hr_router)
 api_router.include_router(marketing_router)
+api_router.include_router(certificates_router)
+api_router.include_router(training_reports_router)
 # ==================== END MODULAR ROUTERS ====================
 
 # Static files directory
