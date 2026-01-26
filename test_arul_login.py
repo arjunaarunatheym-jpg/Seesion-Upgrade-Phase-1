@@ -6,7 +6,7 @@ Test login for arul@kone.com supervisor who has 'hashed_password' field
 import requests
 from pymongo import MongoClient
 
-BASE_URL = "https://trainadmin-1.preview.emergentagent.com/api"
+BASE_URL = "https://tab-extraction.preview.emergentagent.com/api"
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "driving_training_db"
 
