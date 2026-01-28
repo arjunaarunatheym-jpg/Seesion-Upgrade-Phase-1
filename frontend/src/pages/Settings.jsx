@@ -52,6 +52,68 @@ const Settings = () => {
     }
   };
 
+  const loadIndemnitySections = async () => {
+    try {
+      const response = await axiosInstance.get("/settings/indemnity-sections");
+      setIndemnitySections(response.data || []);
+    } catch (error) {
+      console.error("Failed to load indemnity sections:", error);
+    }
+  };
+
+  const handleAddSection = () => {
+    const newOrder = indemnitySections.length + 1;
+    setIndemnitySections([...indemnitySections, {
+      id: `temp_${Date.now()}`,
+      order: newOrder,
+      title: "",
+      content: ""
+    }]);
+  };
+
+  const handleRemoveSection = (index) => {
+    const updated = indemnitySections.filter((_, i) => i !== index);
+    // Reorder remaining sections
+    updated.forEach((section, i) => { section.order = i + 1; });
+    setIndemnitySections(updated);
+  };
+
+  const handleMoveSection = (index, direction) => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= indemnitySections.length) return;
+    
+    const updated = [...indemnitySections];
+    [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+    // Update order values
+    updated.forEach((section, i) => { section.order = i + 1; });
+    setIndemnitySections(updated);
+  };
+
+  const handleSectionChange = (index, field, value) => {
+    const updated = [...indemnitySections];
+    updated[index] = { ...updated[index], [field]: value };
+    setIndemnitySections(updated);
+  };
+
+  const handleSaveIndemnitySections = async () => {
+    // Validate
+    if (indemnitySections.some(s => !s.title.trim())) {
+      toast.error("All sections must have a title");
+      return;
+    }
+    
+    setSavingIndemnity(true);
+    try {
+      await axiosInstance.post("/settings/indemnity-sections", indemnitySections);
+      toast.success("Indemnity form sections saved successfully!");
+      loadIndemnitySections();
+    } catch (error) {
+      toast.error("Failed to save indemnity sections");
+    } finally {
+      setSavingIndemnity(false);
+    }
+  };
+
   const handleLogoUpload = async () => {
     if (!logoFile) {
       toast.error("Please select a logo file");
