@@ -699,7 +699,9 @@ A full-featured quotation management system for the marketing team, allowing the
 
 ### System
 1. ~~Backend refactoring (`server.py` → separate router files)~~ **✅ COMPLETE (100%)**
-2. Frontend refactoring (break down AdminDashboard.jsx, MarketingDashboard.jsx)
+2. Frontend refactoring (break down large dashboards) - **IN PROGRESS** (~60%)
+   - ✅ FinanceDashboard.jsx, CoordinatorDashboard.jsx, ProfitLossLedger.jsx, ParticipantDashboard.jsx
+   - ⏳ MarketingDashboard.jsx, TrainerDashboard.jsx, AssistantAdminDashboard.jsx, SuperAdminPanel.jsx
 
 ---
 
