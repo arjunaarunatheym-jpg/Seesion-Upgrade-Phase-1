@@ -1430,16 +1430,24 @@ async def find_or_create_user(user_data: dict, role: str, company_id: str) -> di
             update_data["full_name"] = full_name.strip()
         
         # Only update email if a valid non-empty email is provided
+        # AND the email doesn't already belong to a different user
         if email and email.strip():
-            update_data["email"] = email
+            # Check if this email is already used by another user
+            email_owner = await db.users.find_one({"email": email.strip()}, {"id": 1})
+            if email_owner and email_owner.get("id") != existing_user["id"]:
+                # Email belongs to different user - keep existing email or generate temp
+                pass  # Don't update email
+            else:
+                update_data["email"] = email.strip()
         
         # Remove None values
         update_data = {k: v for k, v in update_data.items() if v is not None}
         
-        await db.users.update_one(
-            {"id": existing_user["id"]},
-            {"$set": update_data}
-        )
+        if update_data:
+            await db.users.update_one(
+                {"id": existing_user["id"]},
+                {"$set": update_data}
+            )
         
         # Return updated user data
         updated_user = await db.users.find_one({"id": existing_user["id"]}, {"_id": 0})
