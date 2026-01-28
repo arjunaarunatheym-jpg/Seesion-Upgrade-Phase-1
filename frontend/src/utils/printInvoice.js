@@ -1,39 +1,27 @@
 /**
  * Print Invoice utility - generates printable invoice PDF
+ * Restored from original implementation with full company branding and details
  */
 
-export const printInvoice = (invoice, companySettings, logoUrl) => {
-  const formatCurrency = (amount) => {
-    return `RM ${(amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleDateString('en-MY', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
-  };
-
-  const companyName = companySettings?.company_name || 'MDDRC SDN BHD';
-  const companyAddress = companySettings?.address || '';
-  const companyPhone = companySettings?.phone || '';
-  const companyEmail = companySettings?.email || '';
-  const companyReg = companySettings?.registration_no || '';
-
-  const printWindow = window.open('', '_blank');
+export const printInvoice = async (invoice, companySettings, logoUrl) => {
+  const settings = companySettings || {};
   
-  const lineItemsHtml = (invoice.line_items || []).map((item, idx) => `
-    <tr>
-      <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">${idx + 1}</td>
-      <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.description || 'Training Fee'}</td>
-      <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity || 1}</td>
-      <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">${formatCurrency(item.unit_price)}</td>
-      <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">${formatCurrency(item.amount)}</td>
-    </tr>
-  `).join('');
-
+  // Styling variables from settings
+  const primaryColor = settings.primary_color || '#1a365d';
+  const secondaryColor = settings.secondary_color || '#4472C4';
+  const tagline = settings.tagline || 'Towards a Nation of Safe Drivers';
+  
+  // Build custom fields HTML
+  const headerCustomFields = (settings.invoice_custom_fields || [])
+    .filter(f => f.position === 'Header' || f.position === 'header')
+    .map(f => ` • ${f.label}: ${f.value}`)
+    .join('');
+  const footerCustomFields = (settings.invoice_custom_fields || [])
+    .filter(f => f.position === 'Footer' || f.position === 'footer')
+    .map(f => `<p><strong>${f.label}:</strong> ${f.value}</p>`)
+    .join('');
+  
+  const printWindow = window.open('', '_blank');
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
@@ -45,147 +33,226 @@ export const printInvoice = (invoice, companySettings, logoUrl) => {
           body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Arial, sans-serif; font-size: 12px; color: #333; line-height: 1.5; }
-        .invoice-container { max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #2563eb; padding-bottom: 20px; }
-        .company-info { flex: 1; }
-        .company-name { font-size: 24px; font-weight: bold; color: #1e40af; margin-bottom: 8px; }
-        .company-details { font-size: 11px; color: #666; }
-        .logo { max-width: 120px; max-height: 80px; }
-        .invoice-title { text-align: right; }
-        .invoice-title h1 { font-size: 32px; color: #2563eb; margin-bottom: 5px; }
-        .invoice-number { font-size: 14px; font-weight: bold; color: #333; }
-        .invoice-meta { display: flex; justify-content: space-between; margin-bottom: 30px; }
-        .bill-to, .invoice-details { width: 48%; }
-        .section-title { font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
-        .bill-to-name { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 5px; }
-        .bill-to-address { font-size: 11px; color: #666; }
-        .detail-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
-        .detail-label { color: #666; }
-        .detail-value { font-weight: bold; }
-        .items-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        .items-table th { background: #2563eb; color: white; padding: 12px 10px; text-align: left; font-size: 11px; text-transform: uppercase; }
-        .items-table th:first-child { border-radius: 4px 0 0 0; }
-        .items-table th:last-child { border-radius: 0 4px 0 0; }
-        .totals { width: 300px; margin-left: auto; }
-        .total-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
-        .total-row.grand-total { background: #f0f9ff; padding: 12px; border-radius: 4px; font-size: 16px; font-weight: bold; color: #1e40af; border: 2px solid #2563eb; }
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; }
-        .bank-details { background: #f8fafc; padding: 15px; border-radius: 4px; margin-bottom: 20px; }
-        .bank-title { font-weight: bold; margin-bottom: 10px; }
-        .terms { font-size: 10px; color: #666; }
-        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
-        .status-issued { background: #dcfce7; color: #166534; }
-        .status-paid { background: #dbeafe; color: #1e40af; }
-        .status-approved { background: #e0e7ff; color: #3730a3; }
+        body { 
+          font-family: Arial, sans-serif; 
+          font-size: 12px;
+          padding: 25px; 
+          max-width: 210mm;
+          margin: 0 auto; 
+          line-height: 1.5;
+        }
+        
+        /* Header with Logo */
+        .header { 
+          display: flex;
+          align-items: center;
+          gap: 20px;
+          padding-bottom: 15px;
+          border-bottom: 3px solid ${primaryColor};
+          margin-bottom: 20px;
+        }
+        .logo-img { 
+          width: 100px; 
+          height: auto;
+          flex-shrink: 0;
+        }
+        .company-details {
+          flex: 1;
+        }
+        .company-name { 
+          font-size: 18px; 
+          font-weight: bold; 
+          color: ${primaryColor};
+          margin-bottom: 5px;
+        }
+        .company-info { 
+          font-size: 11px; 
+          color: #444;
+          line-height: 1.5;
+        }
+        
+        .invoice-title { 
+          font-size: 22px; 
+          font-weight: bold; 
+          text-align: center; 
+          color: ${primaryColor}; 
+          margin: 15px 0;
+          padding: 10px;
+          background: #f0f4f8;
+        }
+        
+        /* Details Grid */
+        .details-grid { 
+          display: grid; 
+          grid-template-columns: 1fr 1fr; 
+          gap: 15px; 
+          margin-bottom: 20px;
+        }
+        .detail-box { 
+          padding: 12px; 
+          border: 1px solid #ddd; 
+          border-radius: 4px;
+          font-size: 11px;
+        }
+        .detail-label { 
+          font-weight: bold; 
+          font-size: 10px; 
+          color: #666; 
+          margin-bottom: 4px; 
+          text-transform: uppercase;
+        }
+        .detail-value { font-size: 12px; margin-bottom: 4px; }
+        
+        /* Training Details */
+        .training-box {
+          padding: 12px;
+          background: #f9fafb;
+          border: 1px solid #e5e7eb;
+          border-radius: 4px;
+          margin-bottom: 20px;
+          font-size: 11px;
+        }
+        .training-box .detail-label { display: inline; }
+        .training-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+        
+        /* Table */
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; font-size: 11px; }
+        th { background: ${secondaryColor}; color: white; font-weight: bold; font-size: 10px; text-transform: uppercase; }
+        .text-right { text-align: right; }
+        
+        /* Totals */
+        .totals { 
+          width: 50%;
+          margin-left: auto;
+          font-size: 11px;
+        }
+        .total-row { 
+          display: flex; 
+          justify-content: space-between; 
+          padding: 6px 0; 
+          border-bottom: 1px solid #eee;
+        }
+        .grand-total { 
+          font-size: 14px; 
+          font-weight: bold; 
+          background: ${secondaryColor}; 
+          color: white; 
+          padding: 12px 15px; 
+          margin-top: 8px; 
+          border-radius: 4px;
+          display: flex;
+          justify-content: space-between;
+        }
+        
+        /* Footer */
+        .footer { 
+          margin-top: 30px; 
+          font-size: 10px; 
+          color: #555;
+          padding-top: 15px;
+          border-top: 1px solid #ddd;
+        }
+        .footer p { margin-bottom: 5px; }
+        
+        .tagline { 
+          font-style: italic;
+          color: ${primaryColor}; 
+          font-size: 12px; 
+          text-align: center; 
+          margin-top: 15px;
+          padding-top: 12px;
+          border-top: 1px solid #eee;
+        }
       </style>
     </head>
     <body>
-      <div class="invoice-container">
-        <div class="header">
+      <!-- Header -->
+      <div class="header">
+        ${logoUrl ? `<img src="${logoUrl}" class="logo-img" alt="Logo" />` : ''}
+        <div class="company-details">
+          <div class="company-name">${settings.company_name || 'MDDRC SDN BHD'}</div>
           <div class="company-info">
-            ${logoUrl ? `<img src="${logoUrl}" class="logo" alt="Logo" />` : ''}
-            <div class="company-name">${companyName}</div>
-            <div class="company-details">
-              ${companyAddress ? companyAddress + '<br>' : ''}
-              ${companyReg ? 'Reg No: ' + companyReg + '<br>' : ''}
-              ${companyPhone ? 'Tel: ' + companyPhone + '<br>' : ''}
-              ${companyEmail ? 'Email: ' + companyEmail : ''}
-            </div>
-          </div>
-          <div class="invoice-title">
-            <h1>INVOICE</h1>
-            <div class="invoice-number">${invoice.invoice_number}</div>
-            <div style="margin-top: 10px;">
-              <span class="status-badge status-${invoice.status}">${invoice.status}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="invoice-meta">
-          <div class="bill-to">
-            <div class="section-title">Bill To</div>
-            <div class="bill-to-name">${invoice.company_name || 'N/A'}</div>
-            <div class="bill-to-address">
-              ${invoice.company_address || ''}
-            </div>
-          </div>
-          <div class="invoice-details">
-            <div class="section-title">Invoice Details</div>
-            <div class="detail-row">
-              <span class="detail-label">Invoice Date:</span>
-              <span class="detail-value">${formatDate(invoice.invoice_date || invoice.created_at)}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Due Date:</span>
-              <span class="detail-value">${formatDate(invoice.due_date)}</span>
-            </div>
-            <div class="detail-row">
-              <span class="detail-label">Session:</span>
-              <span class="detail-value">${invoice.session_name || 'N/A'}</span>
-            </div>
-          </div>
-        </div>
-
-        <table class="items-table">
-          <thead>
-            <tr>
-              <th style="width: 8%; text-align: center;">No.</th>
-              <th style="width: 42%;">Description</th>
-              <th style="width: 12%; text-align: center;">Qty</th>
-              <th style="width: 19%; text-align: right;">Unit Price</th>
-              <th style="width: 19%; text-align: right;">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${lineItemsHtml || `
-              <tr>
-                <td style="padding: 10px; text-align: center;">1</td>
-                <td style="padding: 10px;">Training Fee - ${invoice.session_name || 'Training'}</td>
-                <td style="padding: 10px; text-align: center;">1</td>
-                <td style="padding: 10px; text-align: right;">${formatCurrency(invoice.subtotal || invoice.total_amount)}</td>
-                <td style="padding: 10px; text-align: right;">${formatCurrency(invoice.subtotal || invoice.total_amount)}</td>
-              </tr>
-            `}
-          </tbody>
-        </table>
-
-        <div class="totals">
-          <div class="total-row">
-            <span>Subtotal:</span>
-            <span>${formatCurrency(invoice.subtotal || invoice.total_amount)}</span>
-          </div>
-          ${invoice.tax_amount > 0 ? `
-            <div class="total-row">
-              <span>Tax (${invoice.tax_rate || 6}%):</span>
-              <span>${formatCurrency(invoice.tax_amount)}</span>
-            </div>
-          ` : ''}
-          <div class="total-row grand-total">
-            <span>Total:</span>
-            <span>${formatCurrency(invoice.total_amount)}</span>
-          </div>
-        </div>
-
-        <div class="footer">
-          <div class="bank-details">
-            <div class="bank-title">Payment Details</div>
-            <div>Bank: ${companySettings?.bank_name || 'Maybank'}</div>
-            <div>Account Name: ${companySettings?.bank_account_name || companyName}</div>
-            <div>Account No: ${companySettings?.bank_account_no || 'N/A'}</div>
-          </div>
-          <div class="terms">
-            <strong>Terms & Conditions:</strong><br>
-            ${companySettings?.invoice_terms || 'Payment is due within 30 days of invoice date. Please include the invoice number as payment reference.'}
+            ${settings.company_reg_no ? `(${settings.company_reg_no})` : ''}
+            ${settings.address_line1 ? ` • ${settings.address_line1}` : ''}${settings.address_line2 ? `, ${settings.address_line2}` : ''}<br>
+            ${settings.city || ''}${settings.postcode ? ` ${settings.postcode}` : ''}${settings.state ? `, ${settings.state}` : ''}
+            ${settings.phone ? ` • Tel: ${settings.phone}` : ''}${settings.email ? ` • ${settings.email}` : ''}
+            ${headerCustomFields}
           </div>
         </div>
       </div>
-      <script>
-        window.onload = function() { window.print(); }
-      </script>
+      
+      <div class="invoice-title">INVOICE</div>
+      
+      <div class="details-grid">
+        <div class="detail-box">
+          <div class="detail-label">Bill To:</div>
+          <div class="detail-value" style="font-weight: bold;">${invoice.bill_to_name || invoice.company_name || '-'}</div>
+          ${invoice.bill_to_address ? `<div class="detail-value">${invoice.bill_to_address}</div>` : ''}
+          ${invoice.bill_to_reg_no ? `<div class="detail-value">Reg: ${invoice.bill_to_reg_no}</div>` : ''}
+        </div>
+        <div class="detail-box">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+            <div><div class="detail-label">Invoice No:</div><div class="detail-value">${invoice.invoice_number}</div></div>
+            <div><div class="detail-label">Date:</div><div class="detail-value">${invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('en-MY') : (invoice.issued_at ? new Date(invoice.issued_at).toLocaleDateString('en-MY') : new Date().toLocaleDateString('en-MY'))}</div></div>
+            ${invoice.your_reference ? `<div style="grid-column: span 2;"><div class="detail-label">Your Ref:</div><div class="detail-value">${invoice.your_reference}</div></div>` : ''}
+          </div>
+        </div>
+      </div>
+      
+      <div class="training-box">
+        <div class="training-grid">
+          <div><span class="detail-label">Program:</span> ${invoice.programme_name || '-'}</div>
+          <div><span class="detail-label">Company:</span> ${invoice.company_name || '-'}</div>
+          <div><span class="detail-label">Training Date:</span> ${invoice.training_dates || '-'}</div>
+          <div><span class="detail-label">Venue:</span> ${invoice.venue || '-'}</div>
+        </div>
+      </div>
+      
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 30px;">No</th>
+            <th>Description</th>
+            <th class="text-right" style="width: 50px;">Qty</th>
+            <th class="text-right" style="width: 80px;">Price (RM)</th>
+            <th class="text-right" style="width: 90px;">Total (RM)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(invoice.line_items || []).map((item, idx) => `
+            <tr>
+              <td>${idx + 1}</td>
+              <td>${item.description || '-'}</td>
+              <td class="text-right">${item.quantity || 0}</td>
+              <td class="text-right">${(item.unit_price || 0).toLocaleString('en-MY', {minimumFractionDigits: 2})}</td>
+              <td class="text-right">${(item.amount || 0).toLocaleString('en-MY', {minimumFractionDigits: 2})}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      
+      <div class="totals">
+        <div class="total-row"><span>Sub-Total:</span><span>RM ${(invoice.subtotal || 0).toLocaleString('en-MY', {minimumFractionDigits: 2})}</span></div>
+        ${invoice.mobilisation_fee ? `<div class="total-row"><span>Mobilisation Fee:</span><span>RM ${invoice.mobilisation_fee.toLocaleString('en-MY', {minimumFractionDigits: 2})}</span></div>` : ''}
+        ${invoice.rounding ? `<div class="total-row"><span>Rounding:</span><span>RM ${invoice.rounding.toLocaleString('en-MY', {minimumFractionDigits: 2})}</span></div>` : ''}
+        ${invoice.tax_amount ? `<div class="total-row"><span>Tax (${invoice.tax_rate || 0}%):</span><span>RM ${invoice.tax_amount.toLocaleString('en-MY', {minimumFractionDigits: 2})}</span></div>` : ''}
+        ${invoice.discount ? `<div class="total-row"><span>Discount:</span><span>- RM ${invoice.discount.toLocaleString('en-MY', {minimumFractionDigits: 2})}</span></div>` : ''}
+        <div class="grand-total"><span>GRAND TOTAL</span><span>RM ${(invoice.total_amount || 0).toLocaleString('en-MY', {minimumFractionDigits: 2})}</span></div>
+      </div>
+      
+      <div class="footer">
+        <p><strong>Payment Terms:</strong> ${settings.invoice_terms || 'Upon receipt of invoice'}</p>
+        <p><strong>Bank:</strong> ${settings.bank_name || '-'} | <strong>Account:</strong> ${settings.bank_account_name || settings.company_name || '-'} | <strong>No:</strong> ${settings.bank_account_number || '-'}</p>
+        <p>${settings.invoice_footer_note || 'Thank you for your business!'}</p>
+        ${footerCustomFields}
+      </div>
+      
+      <div class="tagline">"${tagline}"</div>
+      
+      <script>window.onload = function() { window.print(); }</script>
     </body>
     </html>
   `);
-  
   printWindow.document.close();
 };
