@@ -33,12 +33,12 @@ from fpdf import FPDF
 # ==================== SECURITY CONFIGURATION ====================
 # Rate limiting storage (in-memory, consider Redis for production)
 rate_limit_storage = defaultdict(list)
-RATE_LIMIT_REQUESTS = 100  # Max requests per window
+RATE_LIMIT_REQUESTS = 500  # Max requests per window (increased for training sessions with 50+ participants)
 RATE_LIMIT_WINDOW = 60  # Window in seconds
 BLOCKED_IPS = set()  # Manually blocked IPs
 FAILED_LOGIN_ATTEMPTS = defaultdict(list)
-MAX_FAILED_LOGINS = 5  # Max failed attempts before lockout
-LOGIN_LOCKOUT_TIME = 300  # Lockout time in seconds (5 minutes)
+MAX_FAILED_LOGINS = 10  # Max failed attempts before lockout (increased for shared IPs)
+LOGIN_LOCKOUT_TIME = 180  # Lockout time in seconds (3 minutes, reduced from 5)
 
 # Security patterns to detect malicious input
 MALICIOUS_PATTERNS = [
