@@ -16518,6 +16518,141 @@ class QuotationPDF(FPDF):
         """Multi-cell with text sanitization and wrapping"""
         self.multi_cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
     
+    def render_rich_text(self, text, line_height=5, default_size=10):
+        """
+        Render text with formatting tags:
+        - **text** or <b>text</b> = Bold
+        - *text* or <i>text</i> = Italic
+        - <u>text</u> = Underline
+        - <big>text</big> = Larger font (12pt)
+        - <small>text</small> = Smaller font (8pt)
+        - <highlight>text</highlight> or <hl>text</hl> = Yellow highlight
+        - <red>text</red>, <blue>text</blue>, <green>text</green> = Colored text
+        - <center>text</center> = Centered text
+        - <br> or \n = Line break
+        - <hr> = Horizontal line
+        """
+        import re
+        
+        if not text:
+            return
+        
+        # Process the text line by line
+        lines = text.replace('<br>', '\n').replace('<br/>', '\n').split('\n')
+        
+        for line in lines:
+            if not line.strip():
+                self.ln(line_height)
+                continue
+            
+            # Check for horizontal rule
+            if '<hr>' in line or '<hr/>' in line:
+                self.set_draw_color(180, 180, 180)
+                self.line(10, self.get_y() + 2, 200, self.get_y() + 2)
+                self.ln(line_height + 2)
+                continue
+            
+            # Check for centered text
+            is_centered = '<center>' in line
+            if is_centered:
+                line = line.replace('<center>', '').replace('</center>', '')
+            
+            # Parse and render segments with formatting
+            segments = self._parse_rich_segments(line)
+            
+            if is_centered:
+                # Calculate total width for centering
+                total_width = sum(self.get_string_width(sanitize_text_for_pdf(seg['text'])) for seg in segments)
+                start_x = (210 - total_width) / 2
+                self.set_x(start_x)
+            
+            for seg in segments:
+                # Apply formatting
+                style = ''
+                if seg.get('bold'):
+                    style += 'B'
+                if seg.get('italic'):
+                    style += 'I'
+                if seg.get('underline'):
+                    style += 'U'
+                
+                size = seg.get('size', default_size)
+                self.set_font_safe(style, size)
+                
+                # Apply color
+                color = seg.get('color', (0, 0, 0))
+                self.set_text_color(*color)
+                
+                # Apply highlight
+                if seg.get('highlight'):
+                    # Save position
+                    x, y = self.get_x(), self.get_y()
+                    txt_width = self.get_string_width(sanitize_text_for_pdf(seg['text']))
+                    self.set_fill_color(255, 255, 0)  # Yellow
+                    self.rect(x, y, txt_width + 1, line_height, 'F')
+                    self.set_xy(x, y)
+                
+                self.cell_safe(0, line_height, seg['text'], ln=False)
+            
+            self.ln(line_height)
+            self.set_text_color(0, 0, 0)  # Reset to black
+    
+    def _parse_rich_segments(self, text):
+        """Parse text into segments with formatting attributes"""
+        import re
+        
+        segments = []
+        
+        # Pattern to match formatting tags
+        pattern = r'(\*\*([^*]+)\*\*|\*([^*]+)\*|<b>([^<]+)</b>|<i>([^<]+)</i>|<u>([^<]+)</u>|<big>([^<]+)</big>|<small>([^<]+)</small>|<highlight>([^<]+)</highlight>|<hl>([^<]+)</hl>|<red>([^<]+)</red>|<blue>([^<]+)</blue>|<green>([^<]+)</green>)'
+        
+        last_end = 0
+        for match in re.finditer(pattern, text):
+            # Add plain text before this match
+            if match.start() > last_end:
+                plain = text[last_end:match.start()]
+                if plain:
+                    segments.append({'text': plain})
+            
+            # Determine formatting based on matched group
+            full_match = match.group(0)
+            
+            if full_match.startswith('**') or full_match.startswith('<b>'):
+                content = match.group(2) or match.group(4)
+                segments.append({'text': content, 'bold': True})
+            elif full_match.startswith('*') or full_match.startswith('<i>'):
+                content = match.group(3) or match.group(5)
+                segments.append({'text': content, 'italic': True})
+            elif full_match.startswith('<u>'):
+                segments.append({'text': match.group(6), 'underline': True})
+            elif full_match.startswith('<big>'):
+                segments.append({'text': match.group(7), 'size': 12})
+            elif full_match.startswith('<small>'):
+                segments.append({'text': match.group(8), 'size': 8})
+            elif full_match.startswith('<highlight>') or full_match.startswith('<hl>'):
+                content = match.group(9) or match.group(10)
+                segments.append({'text': content, 'highlight': True, 'bold': True})
+            elif full_match.startswith('<red>'):
+                segments.append({'text': match.group(11), 'color': (200, 0, 0)})
+            elif full_match.startswith('<blue>'):
+                segments.append({'text': match.group(12), 'color': (0, 0, 200)})
+            elif full_match.startswith('<green>'):
+                segments.append({'text': match.group(13), 'color': (0, 150, 0)})
+            
+            last_end = match.end()
+        
+        # Add remaining plain text
+        if last_end < len(text):
+            remaining = text[last_end:]
+            if remaining:
+                segments.append({'text': remaining})
+        
+        # If no formatting found, return whole text as one segment
+        if not segments:
+            segments = [{'text': text}]
+        
+        return segments
+    
     def header(self):
         """Invoice-style header with logo - uniform across all pages"""
         cs = self.company_settings
