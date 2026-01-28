@@ -16844,9 +16844,10 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
         cover_letter = cover_letter.replace("{{company_name}}", client.get("company_name", ""))
         cover_letter = cover_letter.replace("{{contact_person}}", client.get("contact_person", ""))
         cover_letter = cover_letter.replace("{{quotation_number}}", quotation.get("quotation_number", ""))
+        cover_letter = cover_letter.replace("{{total_amount}}", f"RM {quotation.get('total_amount', 0):,.2f}")
         
-        pdf.set_font_safe('', 10)
-        pdf.multi_cell_safe(0, 5, cover_letter)
+        # Use rich text rendering for formatted content
+        pdf.render_rich_text(cover_letter, line_height=5, default_size=10)
     else:
         # Default cover letter
         pdf.set_font_safe('B', 10)
