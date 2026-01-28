@@ -452,22 +452,12 @@ async def record_client_response(quotation_id: str, response_data: dict, current
 
 @router.get("/quotations/{quotation_id}/download-pdf")
 async def download_quotation_pdf(quotation_id: str, current_user: User = Depends(get_current_user)):
-    """Download quotation as PDF"""
-    if not check_marketing_access(current_user):
-        raise HTTPException(status_code=403, detail="Marketing access required")
-    
-    quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
-    if not quotation:
-        raise HTTPException(status_code=404, detail="Quotation not found")
-    
-    # Simple PDF generation (placeholder - would use proper PDF library)
-    pdf_content = f"Quotation {quotation.get('quotation_number')}\n\nTotal: RM {quotation.get('total_amount', 0):.2f}".encode()
-    
-    return StreamingResponse(
-        BytesIO(pdf_content),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="quotation_{quotation.get("quotation_number", quotation_id)}.pdf"'}
-    )
+    """Download quotation as PDF - redirects to full implementation in server.py"""
+    # This endpoint is a placeholder. The full implementation with rich text support
+    # is in server.py under /api/marketing/quotations/{quotation_id}/download-pdf
+    # Due to router import order, we need to import and call the full function directly
+    from server import download_quotation_pdf as full_download_pdf
+    return await full_download_pdf(quotation_id, current_user)
 
 
 # =====================================================
