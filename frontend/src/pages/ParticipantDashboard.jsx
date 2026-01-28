@@ -390,6 +390,23 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
       return;
     }
     
+    if (!verificationData.contact_email.trim()) {
+      toast.error("Please provide your email address");
+      return;
+    }
+    
+    if (!verificationData.contact_phone.trim()) {
+      toast.error("Please provide your phone number");
+      return;
+    }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(verificationData.contact_email.trim())) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    
     try {
       // Update user profile with verified name, IC, and contact details
       await axiosInstance.put("/users/profile", {
