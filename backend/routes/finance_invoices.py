@@ -302,7 +302,7 @@ async def approve_invoice(invoice_id: str, current_user: User = Depends(get_curr
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
-    if invoice.get("status") not in ["auto_draft", "finance_review"]:
+    if invoice.get("status") not in ["auto_draft", "finance_review", "draft"]:
         raise HTTPException(status_code=400, detail="Invoice cannot be approved from current status")
     
     await db.invoices.update_one(
