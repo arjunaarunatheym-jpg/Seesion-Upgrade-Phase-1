@@ -10418,13 +10418,26 @@ async def save_additional_invoice(session_id: str, invoice_data: dict, current_u
         
         # Create new additional invoice
         invoice_number = await generate_invoice_number()
+        
+        # Get program name for the invoice
+        program_name = ""
+        if session.get("program_id"):
+            program = await db.programs.find_one({"id": session.get("program_id")}, {"_id": 0, "name": 1})
+            program_name = program.get("name", "") if program else ""
+        
         invoice = {
             "id": str(uuid.uuid4()),
             "invoice_number": invoice_number,
             "session_id": session_id,
             "company_id": company_id,
             "company_name": company.get("name"),
+            "bill_to_name": company.get("name"),
+            "bill_to_address": f"{company.get('address_line1', '')} {company.get('address_line2', '')}".strip(),
+            "bill_to_reg_no": company.get("registration_no", ""),
             "session_name": session.get("name"),
+            "programme_name": program_name,
+            "venue": session.get("location", ""),
+            "training_dates": f"{session.get('start_date', '')} - {session.get('end_date', '')}",
             "pricing_type": "lumpsum",
             "line_items": [{"description": "Training Course Fee", "quantity": 1, "unit_price": invoice_data.get("total_amount", 0), "amount": invoice_data.get("total_amount", 0)}],
             "subtotal": invoice_data.get("total_amount", 0),
