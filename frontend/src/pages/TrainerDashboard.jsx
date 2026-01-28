@@ -14,6 +14,7 @@ import { LogOut, Calendar, ClipboardCheck, Users, FileText, ChevronDown, Chevron
 import MyEarnings from "../components/MyEarnings";
 import { ChecklistsTab } from "../components/trainer/ChecklistsTab";
 import { FeedbackTab } from "../components/trainer/FeedbackTab";
+import { PastTrainingTab } from "../components/shared/PastTrainingTab";
 
 const TrainerDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
