@@ -17043,9 +17043,14 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     # ===== PAGES 3-6: TERMS & CONDITIONS =====
     terms_content = templates.get("terms_conditions_pages", "")
     if terms_content:
-        # Split terms into pages (roughly 2500 chars per page for better fit)
-        page_size = 2500
-        terms_pages = [terms_content[i:i+page_size] for i in range(0, len(terms_content), page_size)]
+        # Use page breaks <pb> or split by length
+        if '<pb>' in terms_content or '<pagebreak>' in terms_content:
+            # Split by explicit page breaks
+            terms_pages = [p.strip() for p in terms_content.replace('<pagebreak>', '<pb>').split('<pb>') if p.strip()]
+        else:
+            # Split terms into pages (roughly 2500 chars per page for better fit)
+            page_size = 2500
+            terms_pages = [terms_content[i:i+page_size] for i in range(0, len(terms_content), page_size)]
         
         for i, page_content in enumerate(terms_pages[:4]):  # Max 4 pages for T&C
             pdf.add_page()
@@ -17056,9 +17061,9 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
                 pdf.cell_safe(0, 8, "TERMS & CONDITIONS", align='C', ln=True)
                 pdf.ln(3)
             
-            pdf.set_font_safe('', 9)
             pdf.set_text_color(0, 0, 0)
-            pdf.multi_cell_safe(0, 4.5, page_content)
+            # Use rich text rendering for formatted content
+            pdf.render_rich_text(page_content, line_height=4.5, default_size=9)
     else:
         # Default terms page
         pdf.add_page()
