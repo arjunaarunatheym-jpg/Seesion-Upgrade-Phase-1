@@ -62,38 +62,41 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [costingRes, categoriesRes, marketingUsersRes, invoicesRes, creditNotesRes] = await Promise.all([
+      const [costingRes, categoriesRes, marketingUsersRes, invoicesRes, creditNotesRes, companiesRes] = await Promise.all([
         axiosInstance.get(`/finance/session/${session.id}/costing`),
         axiosInstance.get('/finance/expense-categories'),
         axiosInstance.get('/finance/marketing-users').catch(() => ({ data: [] })),
         axiosInstance.get('/finance/invoices').catch(() => ({ data: [] })),
-        axiosInstance.get('/finance/credit-notes').catch(() => ({ data: [] }))
+        axiosInstance.get('/finance/credit-notes').catch(() => ({ data: [] })),
+        axiosInstance.get('/companies').catch(() => ({ data: [] }))
       ]);
       
       const costingData = costingRes.data;
       setCosting(costingData);
       setExpenseCategories(categoriesRes.data);
       setMarketingUsers(marketingUsersRes.data);
+      setCompanies(companiesRes.data);
       
       // Filter credit notes for this session
       const sessionCNs = creditNotesRes.data.filter(cn => cn.session_id === session.id);
       setCreditNotes(sessionCNs);
       
-      // Find invoice for this session
-      const sessionInvoice = invoicesRes.data.find(inv => inv.session_id === session.id);
-      if (sessionInvoice) {
-        setInvoiceId(sessionInvoice.id);
-        // Initialize invoice data from saved invoice
-        if (sessionInvoice.total_amount > 0) {
+      // Find ALL invoices for this session
+      const sessionInvoices = invoicesRes.data.filter(inv => inv.session_id === session.id);
+      const primaryInvoice = sessionInvoices.find(inv => inv.company_id === session.company_id);
+      const otherInvoices = sessionInvoices.filter(inv => inv.company_id !== session.company_id);
+      
+      if (primaryInvoice) {
+        setInvoiceId(primaryInvoice.id);
+        if (primaryInvoice.total_amount > 0) {
           setInvoiceData({
-            pricing_type: sessionInvoice.pricing_type || 'lumpsum',
-            lumpsum_amount: sessionInvoice.total_amount?.toString() || '',
-            per_pax_rate: sessionInvoice.pricing_type === 'per_pax' ? 
-              (sessionInvoice.total_amount / (costingData.pax || 1))?.toString() : '',
-            tax_rate: sessionInvoice.tax_rate?.toString() || '6',
+            pricing_type: primaryInvoice.pricing_type || 'lumpsum',
+            lumpsum_amount: primaryInvoice.total_amount?.toString() || '',
+            per_pax_rate: primaryInvoice.pricing_type === 'per_pax' ? 
+              (primaryInvoice.total_amount / (costingData.pax || 1))?.toString() : '',
+            tax_rate: primaryInvoice.tax_rate?.toString() || '6',
           });
         } else if (costingData.invoice_total > 0) {
-          // Fallback to costing data
           setInvoiceData({
             pricing_type: 'lumpsum',
             lumpsum_amount: costingData.invoice_total?.toString() || '',
@@ -102,6 +105,19 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
               ((costingData.less_tax / costingData.invoice_total) * 100).toFixed(1) : '6',
           });
         }
+      }
+      
+      // Load additional invoices
+      if (otherInvoices.length > 0) {
+        setAdditionalInvoices(otherInvoices.map(inv => ({
+          id: inv.id,
+          invoice_number: inv.invoice_number,
+          company_id: inv.company_id,
+          company_name: companiesRes.data.find(c => c.id === inv.company_id)?.name || 'Unknown',
+          amount: inv.total_amount?.toString() || '',
+          tax_rate: inv.tax_rate?.toString() || '6',
+          status: inv.status
+        })));
       }
       
       // Initialize trainer fees
