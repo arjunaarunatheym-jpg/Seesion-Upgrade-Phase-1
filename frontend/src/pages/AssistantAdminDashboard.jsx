@@ -16,6 +16,7 @@ import TestManagement from "./TestManagement";
 import ChecklistManagement from "./ChecklistManagement";
 import FeedbackManagement from "./FeedbackManagement";
 import MyEarnings from "../components/MyEarnings";
+import { PastTrainingTab } from "../components/shared/PastTrainingTab";
 
 const AssistantAdminDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
