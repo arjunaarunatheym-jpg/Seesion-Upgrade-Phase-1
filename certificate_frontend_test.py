@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://tab-extraction.preview.emergentagent.com/api"
+BASE_URL = "https://traintrack-78.preview.emergentagent.com/api"
 USER_EMAIL = "maaman@gmail.com"
 USER_PASSWORD = "mddrc1"
 

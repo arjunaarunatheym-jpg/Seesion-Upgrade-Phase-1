@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import uuid
 
 # Configuration
-BASE_URL = "https://tab-extraction.preview.emergentagent.com/api"
+BASE_URL = "https://traintrack-78.preview.emergentagent.com/api"
 
 # Corrected Test Credentials based on actual database users
 TEST_CREDENTIALS = {
