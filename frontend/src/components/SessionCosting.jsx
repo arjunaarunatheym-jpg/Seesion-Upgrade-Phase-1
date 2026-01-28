@@ -374,9 +374,26 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
   };
 
   const calculateProfit = () => {
-    const invoiceTotal = getInvoiceAmount();
-    const taxRate = parseFloat(invoiceData.tax_rate) || 0;
-    const taxAmount = invoiceTotal * taxRate / 100;
+    // Primary invoice
+    const primaryInvoiceTotal = getInvoiceAmount();
+    const primaryTaxRate = parseFloat(invoiceData.tax_rate) || 0;
+    const primaryTaxAmount = primaryInvoiceTotal * primaryTaxRate / 100;
+    
+    // Additional invoices
+    const additionalTotal = additionalInvoices.reduce((sum, inv) => {
+      const amt = parseFloat(inv.amount) || 0;
+      return sum + amt;
+    }, 0);
+    const additionalTaxAmount = additionalInvoices.reduce((sum, inv) => {
+      const amt = parseFloat(inv.amount) || 0;
+      const rate = parseFloat(inv.tax_rate) || 0;
+      return sum + (amt * rate / 100);
+    }, 0);
+    
+    // Combined totals
+    const invoiceTotal = primaryInvoiceTotal + additionalTotal;
+    const taxAmount = primaryTaxAmount + additionalTaxAmount;
+    const taxRate = invoiceTotal > 0 ? (taxAmount / invoiceTotal * 100) : 0;
     const grossRevenue = invoiceTotal - taxAmount;
     
     const trainerTotal = trainerFees.reduce((sum, f) => sum + (parseFloat(f.fee_amount) || 0), 0);
@@ -399,7 +416,8 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
     return { 
       invoiceTotal, taxAmount, taxRate, grossRevenue, 
       trainerTotal, coordTotal, expensesTotal, 
-      profitBeforeMarketing, marketingAmount, finalProfit, profitPct 
+      profitBeforeMarketing, marketingAmount, finalProfit, profitPct,
+      primaryInvoiceTotal, additionalTotal
     };
   };
 
