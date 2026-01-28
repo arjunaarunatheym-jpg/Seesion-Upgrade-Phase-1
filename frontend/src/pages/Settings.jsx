@@ -400,6 +400,110 @@ const Settings = () => {
         </CardContent>
       </Card>
 
+      {/* Indemnity Form Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileSignature className="w-5 h-5" />
+            Indemnity Form Sections
+          </CardTitle>
+          <CardDescription>
+            Manage the text sections shown in the participant indemnity form wizard. 
+            Participants must accept each section before signing.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {indemnitySections.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <FileSignature className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>No sections defined yet.</p>
+              <p className="text-sm">Add sections to customize the indemnity form.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {indemnitySections.map((section, index) => (
+                <div 
+                  key={section.id || index} 
+                  className="border rounded-lg p-4 bg-gray-50"
+                  data-testid={`indemnity-section-${index}`}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleMoveSection(index, 'up')}
+                        disabled={index === 0}
+                        className="h-6 w-6 p-0"
+                        title="Move up"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleMoveSection(index, 'down')}
+                        disabled={index === indemnitySections.length - 1}
+                        className="h-6 w-6 p-0"
+                        title="Move down"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <span className="text-sm font-medium text-gray-500 w-8">#{section.order}</span>
+                    <Input
+                      value={section.title}
+                      onChange={(e) => handleSectionChange(index, 'title', e.target.value)}
+                      placeholder="Section Title (e.g., Terms & Conditions)"
+                      className="flex-1"
+                      data-testid={`indemnity-title-${index}`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveSection(index)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      title="Remove section"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <Textarea
+                    value={section.content}
+                    onChange={(e) => handleSectionChange(index, 'content', e.target.value)}
+                    placeholder="Section content... (This text will be shown to participants)"
+                    rows={4}
+                    className="w-full"
+                    data-testid={`indemnity-content-${index}`}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+          
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={handleAddSection}
+              data-testid="add-indemnity-section-btn"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Section
+            </Button>
+            {indemnitySections.length > 0 && (
+              <Button
+                onClick={handleSaveIndemnitySections}
+                disabled={savingIndemnity}
+                data-testid="save-indemnity-sections-btn"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {savingIndemnity ? "Saving..." : "Save Indemnity Sections"}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Save Button */}
       <div className="flex justify-end">
         <Button
