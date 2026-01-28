@@ -16,6 +16,10 @@ const Settings = () => {
   const [templateFile, setTemplateFile] = useState(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
+  
+  // Indemnity form sections state
+  const [indemnitySections, setIndemnitySections] = useState([]);
+  const [savingIndemnity, setSavingIndemnity] = useState(false);
 
   const [formData, setFormData] = useState({
     company_name: "",
@@ -27,6 +31,7 @@ const Settings = () => {
 
   useEffect(() => {
     loadSettings();
+    loadIndemnitySections();
   }, []);
 
   const loadSettings = async () => {
