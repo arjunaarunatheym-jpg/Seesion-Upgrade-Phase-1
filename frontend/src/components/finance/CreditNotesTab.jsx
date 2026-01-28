@@ -17,7 +17,7 @@ const CreditNotesTab = ({
   // API Handlers
   const handleApproveCN = async (cnId) => {
     try {
-      await axiosInstance.put(`/finance/credit-notes/${cnId}/approve`);
+      await axiosInstance.post(`/finance/credit-notes/${cnId}/approve`);
       toast.success("Credit note approved");
       onRefresh();
     } catch (error) {
@@ -27,7 +27,7 @@ const CreditNotesTab = ({
 
   const handleIssueCN = async (cnId) => {
     try {
-      await axiosInstance.put(`/finance/credit-notes/${cnId}/issue`);
+      await axiosInstance.post(`/finance/credit-notes/${cnId}/issue`);
       toast.success("Credit note issued");
       onRefresh();
     } catch (error) {
