@@ -223,7 +223,8 @@ const ClaimFormPrint = ({ session, onClose }) => {
   const days = calculateDays();
   const invoiceTotal = costingData.invoice_total || 0;
   const taxAmount = costingData.less_tax || 0;
-  const grossRevenue = costingData.gross_revenue || 0;
+  // Calculate gross revenue from combined invoice total minus tax
+  const grossRevenue = invoiceTotal - taxAmount;
   const trainerFeesTotal = costingData.trainer_fees_total || 0;
   const coordFeeTotal = costingData.coordinator_fee_total || 0;
   const cashExpenses = costingData.cash_expenses_actual || costingData.cash_expenses_estimated || 0;
