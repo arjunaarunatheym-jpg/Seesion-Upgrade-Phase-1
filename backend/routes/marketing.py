@@ -450,14 +450,8 @@ async def record_client_response(quotation_id: str, response_data: dict, current
     return {"message": f"Quotation marked as {response}"}
 
 
-@router.get("/quotations/{quotation_id}/download-pdf")
-async def download_quotation_pdf(quotation_id: str, current_user: User = Depends(get_current_user)):
-    """Download quotation as PDF - redirects to full implementation in server.py"""
-    # This endpoint is a placeholder. The full implementation with rich text support
-    # is in server.py under /api/marketing/quotations/{quotation_id}/download-pdf
-    # Due to router import order, we need to import and call the full function directly
-    from server import download_quotation_pdf as full_download_pdf
-    return await full_download_pdf(quotation_id, current_user)
+# Quotation PDF download is handled by the full implementation in server.py
+# with rich text rendering support (bold, italic, highlight, colors, etc.)
 
 
 # =====================================================
