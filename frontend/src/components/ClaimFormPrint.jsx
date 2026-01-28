@@ -330,19 +330,32 @@ const ClaimFormPrint = ({ session, onClose }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td className="text-center">1</td>
-                      <td>{session.name}</td>
-                      <td className="text-right">{invoiceTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-                      <td className="text-right">{invoiceTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-                    </tr>
-                    <tr><td colSpan="4" style={{ height: '25px' }}></td></tr>
+                    {costingData.all_invoices && costingData.all_invoices.length > 1 ? (
+                      <>
+                        {costingData.all_invoices.map((inv, idx) => (
+                          <tr key={idx}>
+                            <td className="text-center">1</td>
+                            <td>{inv.company_name || session.name} ({inv.invoice_number})</td>
+                            <td className="text-right">{(inv.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                            <td className="text-right">{(inv.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                          </tr>
+                        ))}
+                      </>
+                    ) : (
+                      <tr>
+                        <td className="text-center">1</td>
+                        <td>{session.name}</td>
+                        <td className="text-right">{invoiceTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                        <td className="text-right">{invoiceTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    )}
+                    <tr><td colSpan="4" style={{ height: '10px' }}></td></tr>
                     <tr className="subtotal-row">
                       <td colSpan="3" className="text-right">SUBTOTAL</td>
                       <td className="text-right">{invoiceTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
                     </tr>
                     <tr>
-                      <td colSpan="3" className="text-right">6% GST (if applicable)</td>
+                      <td colSpan="3" className="text-right">Tax (if applicable)</td>
                       <td className="text-right">{taxAmount.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
                     </tr>
                     <tr className="total-row">
