@@ -10431,7 +10431,7 @@ async def save_additional_invoice(session_id: str, invoice_data: dict, current_u
             "tax_rate": invoice_data.get("tax_rate", 0),
             "tax_amount": invoice_data.get("tax_amount", 0),
             "total_amount": invoice_data.get("total_amount", 0),
-            "status": "draft",
+            "status": "auto_draft",
             "is_additional": True,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
