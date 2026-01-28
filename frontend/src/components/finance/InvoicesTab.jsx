@@ -69,7 +69,7 @@ const InvoicesTab = ({
   const handleCancelInvoice = async (invoiceId) => {
     if (!confirm("Are you sure you want to cancel this invoice?")) return;
     try {
-      await axiosInstance.put(`/finance/invoices/${invoiceId}/cancel`);
+      await axiosInstance.post(`/finance/invoices/${invoiceId}/cancel`);
       toast.success("Invoice cancelled");
       onRefresh();
     } catch (error) {
@@ -80,7 +80,7 @@ const InvoicesTab = ({
   const handleReverseVoidedInvoice = async (invoiceId) => {
     if (!confirm("Reverse this voided invoice back to Draft status?")) return;
     try {
-      await axiosInstance.put(`/finance/invoices/${invoiceId}/reverse-void`);
+      await axiosInstance.post(`/finance/invoices/${invoiceId}/reverse-void`);
       toast.success("Invoice reversed to Draft");
       onRefresh();
     } catch (error) {
