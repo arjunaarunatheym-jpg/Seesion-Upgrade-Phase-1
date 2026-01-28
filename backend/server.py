@@ -7412,6 +7412,29 @@ async def upload_certificate_template(file: UploadFile = File(...), current_user
     
     return {"template_url": template_url, "message": "Certificate template uploaded successfully"}
 
+# Indemnity Sections Management
+@api_router.get("/settings/indemnity-sections")
+async def get_indemnity_sections():
+    """Get custom indemnity sections (public - for participant form)"""
+    sections = await db.indemnity_sections.find({}, {"_id": 0}).sort("order", 1).to_list(None)
+    return sections
+
+@api_router.post("/settings/indemnity-sections")
+async def save_indemnity_sections(sections: List[dict], current_user: User = Depends(get_current_user)):
+    """Save custom indemnity sections (admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can manage indemnity sections")
+    
+    # Clear existing and insert new
+    await db.indemnity_sections.delete_many({})
+    
+    for idx, section in enumerate(sections):
+        section["order"] = idx
+        section["updated_at"] = get_malaysia_time().isoformat()
+        await db.indemnity_sections.insert_one(section)
+    
+    return {"message": f"Saved {len(sections)} indemnity sections"}
+
 # Upload Certificate for Participant
 @api_router.post("/certificates/upload/{session_id}/{participant_id}")
 async def upload_participant_certificate(
