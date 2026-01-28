@@ -542,23 +542,25 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
               <p className="text-sm text-gray-600 mb-3">Your Contact Information (for official communications)</p>
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <Label htmlFor="verify-email">Personal Email</Label>
+                  <Label htmlFor="verify-email">Personal Email *</Label>
                   <Input
                     id="verify-email"
                     type="email"
                     value={verificationData.contact_email}
                     onChange={(e) => setVerificationData({ ...verificationData, contact_email: e.target.value })}
                     placeholder="your.email@example.com"
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="verify-phone">Phone Number</Label>
+                  <Label htmlFor="verify-phone">Phone Number *</Label>
                   <Input
                     id="verify-phone"
                     type="tel"
                     value={verificationData.contact_phone}
                     onChange={(e) => setVerificationData({ ...verificationData, contact_phone: e.target.value })}
                     placeholder="e.g., 012-345 6789"
+                    required
                   />
                 </div>
               </div>
