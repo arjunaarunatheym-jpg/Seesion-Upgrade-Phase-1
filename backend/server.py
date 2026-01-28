@@ -1459,7 +1459,17 @@ async def find_or_create_user(user_data: dict, role: str, company_id: str) -> di
             "user": User(**updated_user)
         }
     else:
-        # User not found - create new
+        # User not found by IC - check if email exists for another user
+        # If email exists, generate a temp email to avoid duplicate key error
+        if email and email.strip():
+            email_owner = await db.users.find_one({"email": email.strip()}, {"id": 1})
+            if email_owner:
+                # Email already used by another user - generate temp email
+                if id_number:
+                    email = f"{id_number.replace('-', '').replace(' ', '')}@temp.mddrc.local"
+                else:
+                    email = f"user_{uuid.uuid4().hex[:8]}@temp.mddrc.local"
+        
         # For participants: use default password 'mddrc1' if no password provided
         password = user_data.get("password")
         if role == "participant" and not password:
