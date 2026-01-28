@@ -13,6 +13,14 @@ import { LogOut, FileText, ClipboardCheck, MessageSquare, Award, Play, Users, Cl
 import { FaFacebook, FaInstagram, FaTiktok, FaYoutube, FaTwitter, FaLinkedin } from 'react-icons/fa';
 import IndemnityForm from "../components/IndemnityForm";
 
+// Tab Components
+import { OverviewTab } from "../components/participant/OverviewTab";
+import { CertificatesTab } from "../components/participant/CertificatesTab";
+import { DetailsTab } from "../components/participant/DetailsTab";
+import { TestsTab } from "../components/participant/TestsTab";
+import { ChecklistsTab } from "../components/participant/ChecklistsTab";
+import { SettingsTab } from "../components/participant/SettingsTab";
+
 // Helper function to render social media icon
 const SocialIcon = ({ icon, className = "" }) => {
   const iconClass = `text-2xl ${className}`;
