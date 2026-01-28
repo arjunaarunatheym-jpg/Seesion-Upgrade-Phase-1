@@ -21,14 +21,18 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
   const [invoiceId, setInvoiceId] = useState(null);
   const [creditNotes, setCreditNotes] = useState([]);
   const [showClaimForm, setShowClaimForm] = useState(false);
+  const [companies, setCompanies] = useState([]);
   
-  // Form states
+  // Form states - Primary invoice
   const [invoiceData, setInvoiceData] = useState({
     pricing_type: 'lumpsum',
     lumpsum_amount: '',
     per_pax_rate: '',
     tax_rate: '', // Default blank - user can add if needed
   });
+  
+  // Additional invoices for multi-company sessions
+  const [additionalInvoices, setAdditionalInvoices] = useState([]);
   
   const [trainerFees, setTrainerFees] = useState([]);
   const [coordinatorFee, setCoordinatorFee] = useState({ num_days: 1, daily_rate: 50 });
