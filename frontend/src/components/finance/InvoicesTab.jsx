@@ -48,7 +48,7 @@ const InvoicesTab = ({
   // API Handlers
   const handleApproveInvoice = async (invoiceId) => {
     try {
-      await axiosInstance.put(`/finance/invoices/${invoiceId}/approve`);
+      await axiosInstance.post(`/finance/invoices/${invoiceId}/approve`);
       toast.success("Invoice approved");
       onRefresh();
     } catch (error) {
