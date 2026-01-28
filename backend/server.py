@@ -1403,7 +1403,9 @@ async def get_or_create_participant_access(participant_id: str, session_id: str)
 
 async def find_or_create_user(user_data: dict, role: str, company_id: str) -> dict:
     """
-    Find existing user by IC number (single source of truth)
+    Find existing user based on role:
+    - Supervisors: Email is the unique identifier
+    - Participants: IC number is the unique identifier
     If found: update the user with NEW data (latest wins)
     If not found: create new user
     Returns: user dict with 'is_existing' flag and user data
@@ -1413,10 +1415,17 @@ async def find_or_create_user(user_data: dict, role: str, company_id: str) -> di
     id_number = user_data.get("id_number")
     phone_number = user_data.get("phone_number")
     
-    # Search for existing user ONLY by IC number (unique identifier)
     existing_user = None
-    if id_number:
-        existing_user = await db.users.find_one({"id_number": id_number}, {"_id": 0})
+    
+    # Different lookup strategy based on role
+    if role == "supervisor":
+        # For supervisors: email is the unique identifier
+        if email and email.strip():
+            existing_user = await db.users.find_one({"email": email.strip()}, {"_id": 0})
+    else:
+        # For participants: IC number is the unique identifier
+        if id_number:
+            existing_user = await db.users.find_one({"id_number": id_number}, {"_id": 0})
     
     if existing_user:
         # User found - update with NEW data (latest entry wins)
@@ -1429,16 +1438,15 @@ async def find_or_create_user(user_data: dict, role: str, company_id: str) -> di
         if full_name and full_name.strip():
             update_data["full_name"] = full_name.strip()
         
-        # Only update email if a valid non-empty email is provided
-        # AND the email doesn't already belong to a different user
-        if email and email.strip():
-            # Check if this email is already used by another user
+        # For participants: update email only if it doesn't belong to another user
+        if role != "supervisor" and email and email.strip():
             email_owner = await db.users.find_one({"email": email.strip()}, {"id": 1})
-            if email_owner and email_owner.get("id") != existing_user["id"]:
-                # Email belongs to different user - keep existing email or generate temp
-                pass  # Don't update email
-            else:
+            if not email_owner or email_owner.get("id") == existing_user["id"]:
                 update_data["email"] = email.strip()
+        
+        # For supervisors: update IC if provided
+        if role == "supervisor" and id_number:
+            update_data["id_number"] = id_number
         
         # Remove None values
         update_data = {k: v for k, v in update_data.items() if v is not None}
@@ -1459,27 +1467,28 @@ async def find_or_create_user(user_data: dict, role: str, company_id: str) -> di
             "user": User(**updated_user)
         }
     else:
-        # User not found by IC - check if email exists for another user
-        # If email exists, generate a temp email to avoid duplicate key error
+        # User not found - create new
+        # Check for email conflicts before creating
         if email and email.strip():
             email_owner = await db.users.find_one({"email": email.strip()}, {"id": 1})
             if email_owner:
-                # Email already used by another user - generate temp email
-                if id_number:
-                    email = f"{id_number.replace('-', '').replace(' ', '')}@temp.mddrc.local"
-                else:
-                    email = f"user_{uuid.uuid4().hex[:8]}@temp.mddrc.local"
+                # Email already used - generate temp email for participants only
+                if role != "supervisor":
+                    if id_number:
+                        email = f"{id_number.replace('-', '').replace(' ', '')}@temp.mddrc.local"
+                    else:
+                        email = f"user_{uuid.uuid4().hex[:8]}@temp.mddrc.local"
+                # For supervisors with duplicate email, return error (shouldn't happen as we search by email)
         
-        # For participants: use default password 'mddrc1' if no password provided
+        # Use default password 'mddrc1' for participants/supervisors if no password provided
         password = user_data.get("password")
-        if role == "participant" and not password:
-            password = "mddrc1"  # Default password for participants
+        if role in ["participant", "supervisor"] and not password:
+            password = "mddrc1"
         
         hashed_password = pwd_context.hash(password)
         
         # Auto-generate email if not provided (for unique constraint)
         if not email or email.strip() == "":
-            # Generate unique email using ID number or timestamp
             if id_number:
                 email = f"{id_number.replace('-', '').replace(' ', '')}@temp.mddrc.local"
             else:
