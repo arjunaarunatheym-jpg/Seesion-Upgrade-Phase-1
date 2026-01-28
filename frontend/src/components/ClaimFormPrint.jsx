@@ -25,13 +25,24 @@ const ClaimFormPrint = ({ session, onClose }) => {
       setCostingData(costingRes.data);
       setCompanySettings(settingsRes.data);
       
-      // Find invoice for this session to get invoice number
-      const sessionInvoice = invoicesRes.data.find(inv => inv.session_id === session.id);
-      if (sessionInvoice) {
+      // Find ALL invoices for this session (multi-company support)
+      const sessionInvoices = invoicesRes.data.filter(inv => inv.session_id === session.id);
+      if (sessionInvoices.length > 0) {
+        // Calculate combined totals from all invoices
+        const combinedTotal = sessionInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+        const combinedTax = sessionInvoices.reduce((sum, inv) => sum + (inv.tax_amount || 0), 0);
+        
+        // Format invoice numbers for display
+        const invoiceNumbers = sessionInvoices.map(inv => inv.invoice_number).join(', ');
+        const primaryInvoice = sessionInvoices[0];
+        
         setCostingData(prev => ({
           ...prev,
-          invoice_number: sessionInvoice.invoice_number,
-          invoice_date: sessionInvoice.invoice_date || sessionInvoice.created_at
+          invoice_number: invoiceNumbers,
+          invoice_date: primaryInvoice.invoice_date || primaryInvoice.created_at,
+          invoice_total: combinedTotal,
+          less_tax: combinedTax,
+          all_invoices: sessionInvoices // Store all invoices for detailed display
         }));
       }
     } catch (error) {
