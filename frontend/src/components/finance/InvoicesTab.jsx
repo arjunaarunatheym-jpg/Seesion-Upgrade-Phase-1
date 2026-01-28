@@ -58,7 +58,7 @@ const InvoicesTab = ({
 
   const handleIssueInvoice = async (invoiceId) => {
     try {
-      await axiosInstance.put(`/finance/invoices/${invoiceId}/issue`);
+      await axiosInstance.post(`/finance/invoices/${invoiceId}/issue`);
       toast.success("Invoice issued");
       onRefresh();
     } catch (error) {
