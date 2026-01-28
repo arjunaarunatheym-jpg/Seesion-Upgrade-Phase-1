@@ -531,9 +531,105 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
                   placeholder="e.g. 6"
                 />
               </div>
+              
+              {/* Additional Invoices Section */}
+              {additionalInvoices.length > 0 && (
+                <div className="border-t pt-4 mt-4">
+                  <Label className="text-sm font-semibold text-gray-700 mb-2 block">Additional Invoices (Other Companies)</Label>
+                  <div className="space-y-2">
+                    {additionalInvoices.map((inv, idx) => (
+                      <div key={inv.id || idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
+                          <Select 
+                            value={inv.company_id} 
+                            onValueChange={(v) => {
+                              const updated = [...additionalInvoices];
+                              updated[idx].company_id = v;
+                              updated[idx].company_name = companies.find(c => c.id === v)?.name || '';
+                              setAdditionalInvoices(updated);
+                            }}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Select Company" /></SelectTrigger>
+                            <SelectContent>
+                              {companies.filter(c => c.id !== session.company_id).map(c => (
+                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="w-32">
+                          <Input
+                            type="number"
+                            value={inv.amount}
+                            onChange={(e) => {
+                              const updated = [...additionalInvoices];
+                              updated[idx].amount = e.target.value;
+                              setAdditionalInvoices(updated);
+                            }}
+                            placeholder="Amount"
+                          />
+                        </div>
+                        <div className="w-20">
+                          <Input
+                            type="number"
+                            value={inv.tax_rate}
+                            onChange={(e) => {
+                              const updated = [...additionalInvoices];
+                              updated[idx].tax_rate = e.target.value;
+                              setAdditionalInvoices(updated);
+                            }}
+                            placeholder="Tax %"
+                          />
+                        </div>
+                        {inv.status && <Badge className={inv.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>{inv.status}</Badge>}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setAdditionalInvoices(additionalInvoices.filter((_, i) => i !== idx))}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAdditionalInvoices([...additionalInvoices, { company_id: '', company_name: '', amount: '', tax_rate: '6' }])}
+                className="mt-3"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Invoice (Another Company)
+              </Button>
+              
               {profit.invoiceTotal > 0 && (
-                <div className="text-sm text-blue-600 bg-blue-50 p-2 rounded">
-                  Invoice: RM {profit.invoiceTotal.toLocaleString()} | Tax ({profit.taxRate}%): RM {profit.taxAmount.toLocaleString()} | Gross Revenue: RM {profit.grossRevenue.toLocaleString()}
+                <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded mt-4">
+                  <div className="flex justify-between">
+                    <span>Primary Invoice:</span>
+                    <span>RM {profit.primaryInvoiceTotal.toLocaleString()}</span>
+                  </div>
+                  {profit.additionalTotal > 0 && (
+                    <div className="flex justify-between">
+                      <span>Additional Invoices ({additionalInvoices.length}):</span>
+                      <span>RM {profit.additionalTotal.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold border-t mt-2 pt-2">
+                    <span>Total Session Revenue:</span>
+                    <span>RM {profit.invoiceTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600 text-xs mt-1">
+                    <span>Less Tax ({profit.taxRate.toFixed(1)}%):</span>
+                    <span>RM {profit.taxAmount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between font-semibold">
+                    <span>Gross Revenue:</span>
+                    <span>RM {profit.grossRevenue.toLocaleString()}</span>
+                  </div>
                 </div>
               )}
             </CardContent>
