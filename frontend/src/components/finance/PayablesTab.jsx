@@ -84,7 +84,7 @@ const PayablesTab = ({
       return;
     }
     try {
-      await axiosInstance.put(`/finance/payables/${type}/${id}/mark-paid`);
+      await axiosInstance.post(`/finance/payables/${type}/${id}/mark-paid`);
       toast.success("Marked as paid");
       onRefresh();
     } catch (error) {
@@ -102,7 +102,7 @@ const PayablesTab = ({
     
     try {
       await Promise.all(unpaidRecords.map(r => 
-        axiosInstance.put(`/finance/payables/${type}/${r.id}/mark-paid`)
+        axiosInstance.post(`/finance/payables/${type}/${r.id}/mark-paid`)
       ));
       toast.success(`${unpaidRecords.length} items marked as paid`);
       onRefresh();
