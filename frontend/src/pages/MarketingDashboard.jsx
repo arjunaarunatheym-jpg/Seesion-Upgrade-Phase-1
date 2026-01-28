@@ -17,6 +17,9 @@ import {
   Send, FileCheck, XCircle, Phone, Mail, MapPin, User, Printer
 } from 'lucide-react';
 import MyEarnings from '../components/MyEarnings';
+import { DashboardTab } from '../components/marketing/DashboardTab';
+import { ClientsTab } from '../components/marketing/ClientsTab';
+import { QuotationsTab } from '../components/marketing/QuotationsTab';
 
 const MarketingDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
