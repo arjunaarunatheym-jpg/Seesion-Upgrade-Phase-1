@@ -16,10 +16,10 @@ router = APIRouter(prefix="/security", tags=["security"])
 rate_limit_storage = {}
 BLOCKED_IPS = set()
 FAILED_LOGIN_ATTEMPTS = {}
-RATE_LIMIT_REQUESTS = 100
+RATE_LIMIT_REQUESTS = 500  # Increased for training sessions with 50+ participants
 RATE_LIMIT_WINDOW = 60
-MAX_FAILED_LOGINS = 5
-LOGIN_LOCKOUT_TIME = 300
+MAX_FAILED_LOGINS = 10  # Increased for shared IPs
+LOGIN_LOCKOUT_TIME = 180  # Reduced to 3 minutes
 
 
 def clear_failed_logins(ip: str):
