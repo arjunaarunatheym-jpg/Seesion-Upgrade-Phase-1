@@ -44,10 +44,11 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - ✅ Enhanced participant profile verification (mandatory email/phone)
 - ✅ Indemnity form wizard implementation
 - ✅ API rate limiting increased (500 req/min)
-- ✅ Rich-text quotation PDF templates
+- ✅ Rich-text quotation PDF templates (bold, italic, highlight, colors)
+- ✅ Admin UI for Indemnity Form sections management
 
 ### In Progress
-- 🟡 Admin UI for Indemnity Form sections
+- None
 
 ### Backlog (P2)
 - Backend cleanup (remove redundant server.py code)
