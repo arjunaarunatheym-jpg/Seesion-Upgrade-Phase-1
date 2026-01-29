@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { axiosInstance } from "../App";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import { PastTrainingTab } from "../components/admin/PastTrainingTab";
 import { UsersTab } from "../components/admin/UsersTab";
 import { CertificatesTab } from "../components/admin/CertificatesTab";
 import { QuotationsTab } from "../components/admin/QuotationsTab";
+import RichTextToolbar from "../components/RichTextToolbar";
 
 const AdminDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
