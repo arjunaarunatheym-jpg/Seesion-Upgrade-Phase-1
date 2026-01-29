@@ -2728,7 +2728,13 @@ const AdminDashboard = ({ user, onLogout }) => {
                 <p className="text-sm text-gray-500 mb-2">
                   Content after the salutation. Company header and recipient are auto-generated.
                 </p>
+                <RichTextToolbar 
+                  textareaRef={coverLetterRef}
+                  value={pdfTemplates.cover_letter}
+                  onChange={(val) => setPdfTemplates({ ...pdfTemplates, cover_letter: val })}
+                />
                 <Textarea
+                  ref={coverLetterRef}
                   value={pdfTemplates.cover_letter}
                   onChange={(e) => setPdfTemplates({ ...pdfTemplates, cover_letter: e.target.value })}
                   placeholder="RE: QUOTATION FOR {{programme_name}}
@@ -2737,7 +2743,7 @@ Thank you for your interest in our training programmes. We are pleased to submit
 
 We trust our proposal meets your requirements and look forward to being of service to {{company_name}}."
                   rows={8}
-                  className="font-mono text-sm"
+                  className="font-mono text-sm rounded-t-none"
                 />
               </div>
               
@@ -2746,7 +2752,13 @@ We trust our proposal meets your requirements and look forward to being of servi
                 <p className="text-sm text-gray-500 mb-2">
                   Enter your terms and conditions. Use clear numbering for sections (1., 1.1, 2., etc.)
                 </p>
+                <RichTextToolbar 
+                  textareaRef={termsRef}
+                  value={pdfTemplates.terms_conditions_pages}
+                  onChange={(val) => setPdfTemplates({ ...pdfTemplates, terms_conditions_pages: val })}
+                />
                 <Textarea
+                  ref={termsRef}
                   value={pdfTemplates.terms_conditions_pages}
                   onChange={(e) => setPdfTemplates({ ...pdfTemplates, terms_conditions_pages: e.target.value })}
                   placeholder="TERMS AND CONDITIONS
@@ -2769,7 +2781,7 @@ We trust our proposal meets your requirements and look forward to being of servi
 4.1 The training provider shall not be liable for any indirect damages.
 4.2 Maximum liability is limited to the course fees paid."
                   rows={16}
-                  className="font-mono text-sm"
+                  className="font-mono text-sm rounded-t-none"
                 />
                 <p className="text-xs text-gray-400 mt-1">
                   Content will be paginated automatically across multiple pages in the PDF.
