@@ -252,6 +252,10 @@ const AdminDashboard = ({ user, onLogout }) => {
   const [pdfTemplatesLoading, setPdfTemplatesLoading] = useState(false);
   const [showPdfTemplatesDialog, setShowPdfTemplatesDialog] = useState(false);
   const [showPdfPreview, setShowPdfPreview] = useState(false);
+  
+  // Refs for rich text toolbar
+  const coverLetterRef = useRef(null);
+  const termsRef = useRef(null);
 
   // Finance user form
   const [financeForm, setFinanceForm] = useState({
