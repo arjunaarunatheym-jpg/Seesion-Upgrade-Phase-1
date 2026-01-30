@@ -559,6 +559,8 @@ class SessionCreate(BaseModel):
     commission_type: Optional[str] = None  # percentage or fixed
     commission_rate: Optional[float] = None  # percentage value
     commission_fixed_amount: Optional[float] = None  # fixed amount if applicable
+    # Reuse deleted invoice number
+    reuse_invoice_number: Optional[str] = None  # If set, reuse this deleted invoice number
 
 class ParticipantAccess(BaseModel):
     model_config = ConfigDict(extra="ignore")
