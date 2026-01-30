@@ -295,12 +295,16 @@ const SessionsTab = ({
         create_new_marketing: sessionForm.create_new_marketing,
         new_marketing_name: sessionForm.new_marketing_name || null,
         new_marketing_id: sessionForm.new_marketing_id || null,
+        // Reuse deleted invoice number
+        reuse_invoice_number: sessionForm.reuse_invoice_number || null,
       });
       
       const participantCount = response.data.participant_count || 0;
+      const invoiceNum = response.data.session?.invoice_number;
+      const reuseMsg = sessionForm.reuse_invoice_number ? ` Invoice ${invoiceNum} reused.` : "";
       toast.success(participantCount > 0 
-        ? `Session created with ${participantCount} participants` 
-        : "Session created successfully. You can add participants later.");
+        ? `Session created with ${participantCount} participants.${reuseMsg}` 
+        : `Session created successfully.${reuseMsg}`);
       setSessionForm(initialSessionForm);
       setSessionDialogOpen(false);
       onRefresh();
