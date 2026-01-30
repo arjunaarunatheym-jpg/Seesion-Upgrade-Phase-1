@@ -2575,10 +2575,19 @@ async def get_past_training_sessions(
         else:
             end_of_month = f"{year}-{month+1:02d}-01"
         
-        query["end_date"] = {
-            "$gte": start_of_month,
-            "$lt": end_of_month
+        # Combine with existing query using $and
+        date_filter = {
+            "end_date": {
+                "$gte": start_of_month,
+                "$lt": end_of_month
+            }
         }
+        
+        # Wrap existing query with the date filter
+        if "$and" in query:
+            query["$and"].append(date_filter)
+        else:
+            query = {"$and": [query, date_filter]}
     
     # Get matching sessions
     sessions = await db.sessions.find(query, {"_id": 0}).to_list(1000)
