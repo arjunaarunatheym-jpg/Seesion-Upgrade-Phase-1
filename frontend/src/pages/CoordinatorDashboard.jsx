@@ -979,9 +979,7 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
 
   // Function to navigate to Analytics tab with a specific session
   const handleSelectSessionForReport = async (session) => {
-    console.log("handleSelectSessionForReport called with session:", session?.id);
     await selectSession(session);
-    console.log("Session loaded, switching to analytics tab");
     setActiveTab("analytics");
   };
 
