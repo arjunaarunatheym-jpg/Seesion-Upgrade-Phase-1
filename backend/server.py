@@ -2526,19 +2526,45 @@ async def get_past_training_sessions(
         raise HTTPException(status_code=403, detail="Unauthorized")
     
     # Build query based on user role and archival rules
-    query = {}
     current_date = get_malaysia_time().date()
+    current_date_str = current_date.isoformat()
     
-    # All roles: Show sessions that coordinator has marked as completed
-    # This ensures trainers see past training only after coordinator closes the report
-    query = {
-        "$or": [
-            {"completed_by_coordinator": True},
-            {"completion_status": "completed"},
-            {"completion_status": "archived"},
-            {"is_archived": True}
-        ]
-    }
+    if current_user.role == "trainer":
+        # For trainers: Show sessions that are either:
+        # 1. Completed by coordinator, OR
+        # 2. End date has passed (automatically moved to past training)
+        # AND trainer must be assigned to the session
+        query = {
+            "$and": [
+                # Trainer must be assigned
+                {
+                    "$or": [
+                        {"trainer_assignments.trainer_id": current_user.id},
+                        {"assistant_coordinator_ids": current_user.id}
+                    ]
+                },
+                # Either completed OR end_date has passed
+                {
+                    "$or": [
+                        {"completed_by_coordinator": True},
+                        {"completion_status": "completed"},
+                        {"completion_status": "archived"},
+                        {"is_archived": True},
+                        {"end_date": {"$lt": current_date_str}}  # Past sessions
+                    ]
+                }
+            ]
+        }
+    else:
+        # For admin/coordinator/assistant_admin: Show sessions marked as completed
+        query = {
+            "$or": [
+                {"completed_by_coordinator": True},
+                {"completion_status": "completed"},
+                {"completion_status": "archived"},
+                {"is_archived": True}
+            ]
+        }
     
     # Add date filtering if provided
     if month and year:
