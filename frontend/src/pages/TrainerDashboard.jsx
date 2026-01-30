@@ -304,15 +304,17 @@ const TrainerDashboard = ({ user, onLogout }) => {
     try {
       setLoadingPastTraining(true);
       
-      // Get all sessions where user is trainer
-      const response = await axiosInstance.get("/sessions");
-      const mySessions = response.data.filter(session => 
-        session.trainer_assignments && session.trainer_assignments.some(t => t.trainer_id === user.id)
-      );
+      // Build query params for month/year filter
+      const params = new URLSearchParams();
+      if (selectedMonth) params.append('month', selectedMonth);
+      if (selectedYear) params.append('year', selectedYear);
+      
+      // Use the past-training endpoint which handles trainer filtering on backend
+      const response = await axiosInstance.get(`/sessions/past-training?${params.toString()}`);
       
       // Load participants for each session to check checklist completion
       const sessionsWithParticipants = await Promise.all(
-        mySessions.map(async (session) => {
+        response.data.map(async (session) => {
           try {
             const participantsResponse = await axiosInstance.get(`/sessions/${session.id}/participants`);
             return { ...session, participantsData: participantsResponse.data };
@@ -322,25 +324,7 @@ const TrainerDashboard = ({ user, onLogout }) => {
         })
       );
       
-      // Filter for past training: Show sessions that coordinator has completed/closed
-      const pastSessions = sessionsWithParticipants.filter(session => {
-        // Show in past training if coordinator has marked as completed
-        return session.completed_by_coordinator === true || 
-               session.completion_status === 'completed' || 
-               session.completion_status === 'archived';
-      });
-      
-      // Apply month/year filter if specified
-      let filteredSessions = pastSessions;
-      if (selectedMonth && selectedYear) {
-        filteredSessions = pastSessions.filter(session => {
-          const sessionDate = new Date(session.start_date);
-          return sessionDate.getMonth() + 1 === selectedMonth && 
-                 sessionDate.getFullYear() === selectedYear;
-        });
-      }
-      
-      setPastTrainingSessions(filteredSessions);
+      setPastTrainingSessions(sessionsWithParticipants);
     } catch (error) {
       toast.error("Failed to load past training sessions");
       setPastTrainingSessions([]);
