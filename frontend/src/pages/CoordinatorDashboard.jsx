@@ -1197,27 +1197,12 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
               />
             </TabsContent>
 
-            {/* Tab 3: Training Report */}
+            {/* Tab 3: Training Report - Shows Pending/Past Reports */}
             <TabsContent value="report">
               <ReportTab
-                selectedSession={selectedSession}
-                trainingReport={trainingReport}
-                setTrainingReport={setTrainingReport}
-                aiGeneratedReport={aiGeneratedReport}
-                setAiGeneratedReport={setAiGeneratedReport}
-                professionalReportStatus={professionalReportStatus}
-                generatingDOCX={generatingDOCX}
-                uploadingEdited={uploadingEdited}
-                submittingFinal={submittingFinal}
-                generatingReport={generatingReport}
+                sessions={sessions}
+                onSelectSessionForReport={handleSelectSessionForReport}
                 primaryColor={primaryColor}
-                handlePhotoUpload={handlePhotoUpload}
-                handleGenerateProfessionalReport={handleGenerateProfessionalReport}
-                handleDownloadDOCX={handleDownloadDOCX}
-                handleUploadEditedDOCX={handleUploadEditedDOCX}
-                handleSubmitFinalReport={handleSubmitFinalReport}
-                handleGenerateAIReport={handleGenerateAIReport}
-                handleSaveReport={handleSaveReport}
               />
             </TabsContent>
 
