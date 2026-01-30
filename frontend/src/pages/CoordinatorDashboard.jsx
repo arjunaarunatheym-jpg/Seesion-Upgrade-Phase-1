@@ -676,11 +676,16 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
     
     try {
       const response = await axiosInstance.get(`/training-reports/${selectedSession.id}/download-docx`, {
-        responseType: 'blob',
-        headers: {
-          'Accept': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        }
+        responseType: 'blob'
       });
+      
+      // Check if the response is actually an error (JSON instead of blob)
+      if (response.data.type === 'application/json') {
+        const text = await response.data.text();
+        const error = JSON.parse(text);
+        toast.error(error.detail || "Failed to download report");
+        return;
+      }
       
       // Create blob with proper MIME type
       const blob = new Blob([response.data], { 
@@ -707,10 +712,14 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
       toast.success("DOCX report downloaded! Check your Downloads folder.");
     } catch (error) {
       console.error("Download error:", error);
+      // Reload status in case it's out of sync
+      await loadReportStatus(selectedSession.id);
+      
       if (error.response?.status === 404) {
-        toast.error("Report not found. Please generate the report first.");
+        toast.error("Report file not found. Please regenerate the report.");
+        setProfessionalReportStatus(prev => ({ ...prev, docx_generated: false }));
       } else {
-        toast.error(error.response?.data?.detail || "Failed to download report");
+        toast.error("Failed to download report. Please try again.");
       }
     }
   };
