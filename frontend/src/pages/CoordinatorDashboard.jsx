@@ -203,7 +203,8 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
       // Wait for data to load before proceeding
       await Promise.all([
         loadSessionData(session),
-        loadTrainingReport(session.id)
+        loadTrainingReport(session.id),
+        loadReportStatus(session.id)
       ]);
     } catch (error) {
       console.error("Error selecting session:", error);
