@@ -138,10 +138,14 @@ const ReportTab = ({
           ) : (
             <div className="space-y-2">
               {pendingReports.map((session) => (
-                <div
+                <button
                   key={session.id}
-                  onClick={() => onSelectSessionForReport(session)}
-                  className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors"
+                  data-testid={`pending-report-${session.id}`}
+                  onClick={() => {
+                    console.log("Clicking pending report for session:", session.id);
+                    onSelectSessionForReport(session);
+                  }}
+                  className="w-full flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors text-left"
                 >
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{session.company_name || 'Unknown Company'}</p>
@@ -157,7 +161,7 @@ const ReportTab = ({
                     </div>
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400" />
-                </div>
+                </button>
               ))}
             </div>
           )}
