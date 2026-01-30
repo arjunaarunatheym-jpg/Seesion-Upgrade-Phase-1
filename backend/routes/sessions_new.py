@@ -711,13 +711,34 @@ async def update_session(session_id: str, session_data: dict, current_user: User
 
 @router.delete("/{session_id}")
 async def delete_session(session_id: str, current_user: User = Depends(get_current_user)):
-    """Delete session and all related data"""
+    """Delete session and all related data, saving auto-draft invoice numbers for reuse"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can delete sessions")
     
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Check for auto-draft invoices and save their numbers for reuse
+    invoices = await db.invoices.find({"session_id": session_id}, {"_id": 0}).to_list(100)
+    saved_invoice_numbers = []
+    
+    for invoice in invoices:
+        # Only save numbers from auto-draft/draft invoices (never issued)
+        if invoice.get("status") in ["auto_draft", "draft"]:
+            invoice_number = invoice.get("invoice_number")
+            if invoice_number:
+                # Save to deleted_invoice_numbers collection for reuse
+                await db.deleted_invoice_numbers.insert_one({
+                    "invoice_number": invoice_number,
+                    "original_session_id": session_id,
+                    "original_session_name": session.get("name"),
+                    "original_company_id": session.get("company_id"),
+                    "deleted_at": get_malaysia_time().isoformat(),
+                    "deleted_by": current_user.id,
+                    "is_available": True
+                })
+                saved_invoice_numbers.append(invoice_number)
     
     total_deleted = 0
     
@@ -740,7 +761,8 @@ async def delete_session(session_id: str, current_user: User = Depends(get_curre
     return {
         "message": "Session and all related data deleted successfully",
         "session_name": session.get("name"),
-        "records_deleted": total_deleted
+        "records_deleted": total_deleted,
+        "invoice_numbers_saved_for_reuse": saved_invoice_numbers
     }
 
 
