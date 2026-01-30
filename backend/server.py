@@ -2320,8 +2320,10 @@ async def create_session(session_data: SessionCreate, current_user: User = Depen
     await db.sessions.insert_one(doc)
     
     # Auto-create draft invoice for this session
+    # Check if we should reuse a deleted invoice number
+    reuse_number = session_data.reuse_invoice_number
     try:
-        invoice = await create_auto_invoice_for_session(doc, current_user.id)
+        invoice = await create_auto_invoice_for_session(doc, current_user.id, reuse_invoice_number=reuse_number)
         # Update session with invoice reference
         await db.sessions.update_one(
             {"id": session_obj.id},
@@ -2334,6 +2336,13 @@ async def create_session(session_data: SessionCreate, current_user: User = Depen
         session_obj.invoice_id = invoice["id"]
         session_obj.invoice_number = invoice["invoice_number"]
         session_obj.invoice_status = invoice["status"]
+        
+        # If we reused a deleted invoice number, mark it as used
+        if reuse_number:
+            await db.deleted_invoice_numbers.update_one(
+                {"invoice_number": reuse_number},
+                {"$set": {"is_available": False, "reused_at": get_malaysia_time().isoformat(), "reused_session_id": session_obj.id}}
+            )
     except Exception as e:
         logging.error(f"Failed to create auto-invoice for session {session_obj.id}: {str(e)}")
     
