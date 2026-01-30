@@ -48,6 +48,8 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - ✅ Admin UI for Indemnity Form sections management
 - ✅ Rich-text formatting toolbar for PDF templates editor
 - ✅ Trainer session filtering (current/future vs past training)
+- ✅ Session creation without participants (optional)
+- ✅ Invoice number reuse for deleted auto-draft invoices
 
 ### In Progress
 - None
