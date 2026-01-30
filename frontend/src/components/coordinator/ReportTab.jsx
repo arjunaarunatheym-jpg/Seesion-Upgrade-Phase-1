@@ -169,33 +169,37 @@ const ReportTab = ({
                     <p className="text-xs text-green-700 mt-1">✓ Edited report uploaded: {professionalReportStatus.edited_docx_filename}</p>
                   )}
                 </div>
-                <label>
+                <div>
                   <input
                     type="file"
+                    id="upload-edited-docx"
                     accept=".docx"
                     onChange={handleUploadEditedDOCX}
                     disabled={!professionalReportStatus.docx_generated || professionalReportStatus.pdf_submitted || uploadingEdited}
                     className="hidden"
                   />
-                  <Button
-                    as="span"
-                    disabled={!professionalReportStatus.docx_generated || professionalReportStatus.pdf_submitted || uploadingEdited}
-                    variant="outline"
-                    className="border-amber-400 text-amber-700 hover:bg-amber-100 cursor-pointer"
-                  >
-                    {uploadingEdited ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-700 mr-2"></div>
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-4 h-4 mr-2" />
-                        Upload Edited DOCX
-                      </>
-                    )}
-                  </Button>
-                </label>
+                  <label htmlFor="upload-edited-docx">
+                    <Button
+                      type="button"
+                      disabled={!professionalReportStatus.docx_generated || professionalReportStatus.pdf_submitted || uploadingEdited}
+                      variant="outline"
+                      className="border-amber-400 text-amber-700 hover:bg-amber-100 cursor-pointer"
+                      onClick={() => document.getElementById('upload-edited-docx').click()}
+                    >
+                      {uploadingEdited ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-700 mr-2"></div>
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 mr-2" />
+                          Upload Edited DOCX
+                        </>
+                      )}
+                    </Button>
+                  </label>
+                </div>
               </div>
             </CardContent>
           </Card>
