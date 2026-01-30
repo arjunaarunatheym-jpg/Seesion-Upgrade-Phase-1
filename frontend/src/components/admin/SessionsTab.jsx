@@ -33,6 +33,7 @@ const initialSessionForm = {
   create_new_marketing: false,
   new_marketing_name: "",
   new_marketing_id: "",
+  reuse_invoice_number: "",  // For reusing deleted invoice numbers
 };
 
 const initialNewParticipant = {
