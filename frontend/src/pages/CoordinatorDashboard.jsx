@@ -1068,7 +1068,7 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
             </CardContent>
           </Card>
         ) : (
-          <Tabs defaultValue="sessions" className="space-y-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="flex flex-wrap w-full h-auto justify-start gap-2 bg-gray-100 p-2 rounded-lg sm:grid sm:grid-cols-5">
               <TabsTrigger value="sessions" className="flex-1 min-w-[100px] sm:min-w-0">
                 <Calendar className="w-4 h-4 mr-2" />
