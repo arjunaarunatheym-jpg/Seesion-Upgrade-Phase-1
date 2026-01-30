@@ -49,20 +49,95 @@ async def get_calendar_sessions(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/past-training")
-async def get_past_training(current_user: User = Depends(get_current_user)):
-    """Get completed/archived training sessions"""
-    query = {
-        "$or": [
-            {"completion_status": "completed"},
-            {"completion_status": "archived"},
-            {"is_archived": True}
-        ]
-    }
+async def get_past_training(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get completed/archived training sessions with optional month/year filter"""
+    current_date = get_malaysia_time().date()
+    current_date_str = current_date.isoformat()
     
-    if current_user.role == "coordinator":
-        query["coordinator_id"] = current_user.id
+    if current_user.role == "trainer":
+        # For trainers: Show sessions where:
+        # 1. Trainer is assigned, AND
+        # 2. Either completed by coordinator OR end_date has passed
+        query = {
+            "$and": [
+                # Trainer must be assigned
+                {
+                    "$or": [
+                        {"trainer_assignments.trainer_id": current_user.id},
+                        {"assistant_coordinator_ids": current_user.id}
+                    ]
+                },
+                # Either completed OR end_date has passed
+                {
+                    "$or": [
+                        {"completed_by_coordinator": True},
+                        {"completion_status": "completed"},
+                        {"completion_status": "archived"},
+                        {"is_archived": True},
+                        {"end_date": {"$lt": current_date_str}}  # Past sessions
+                    ]
+                }
+            ]
+        }
+    elif current_user.role == "coordinator":
+        query = {
+            "$and": [
+                {"coordinator_id": current_user.id},
+                {
+                    "$or": [
+                        {"completion_status": "completed"},
+                        {"completion_status": "archived"},
+                        {"is_archived": True}
+                    ]
+                }
+            ]
+        }
     elif current_user.role == "participant":
-        query["participant_ids"] = current_user.id
+        query = {
+            "$and": [
+                {"participant_ids": current_user.id},
+                {
+                    "$or": [
+                        {"completion_status": "completed"},
+                        {"completion_status": "archived"},
+                        {"is_archived": True}
+                    ]
+                }
+            ]
+        }
+    else:
+        # Admin/assistant_admin see all completed sessions
+        query = {
+            "$or": [
+                {"completion_status": "completed"},
+                {"completion_status": "archived"},
+                {"is_archived": True}
+            ]
+        }
+    
+    # Add month/year filter if provided
+    if month and year:
+        start_of_month = f"{year}-{month:02d}-01"
+        if month == 12:
+            end_of_month = f"{year+1}-01-01"
+        else:
+            end_of_month = f"{year}-{month+1:02d}-01"
+        
+        date_filter = {
+            "end_date": {
+                "$gte": start_of_month,
+                "$lt": end_of_month
+            }
+        }
+        
+        if "$and" in query:
+            query["$and"].append(date_filter)
+        else:
+            query = {"$and": [query, date_filter]}
     
     sessions = await db.sessions.find(query, {"_id": 0}).to_list(1000)
     
