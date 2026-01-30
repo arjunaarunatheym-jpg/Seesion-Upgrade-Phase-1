@@ -4,6 +4,26 @@ import { Button } from './ui/button';
 import { Printer, X, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Expense category display names
+const EXPENSE_CATEGORY_NAMES = {
+  'fnb': 'F&B',
+  'hrdc_levy': 'HRDCorp Levy',
+  'wear_tear': 'Wear & Tear',
+  'printing': 'Printing',
+  'transportation': 'Transportation',
+  'accommodation': 'Accommodation',
+  'venue': 'Venue Rental',
+  'equipment': 'Equipment',
+  'materials': 'Materials',
+  'miscellaneous': 'Miscellaneous',
+  'other': 'Other'
+};
+
+const getExpenseCategoryName = (category) => {
+  if (!category) return 'Other';
+  return EXPENSE_CATEGORY_NAMES[category.toLowerCase()] || category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+};
+
 const ClaimFormPrint = ({ session, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [costingData, setCostingData] = useState(null);
