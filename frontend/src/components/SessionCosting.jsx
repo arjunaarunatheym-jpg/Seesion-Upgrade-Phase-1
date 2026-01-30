@@ -556,60 +556,91 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
               {additionalInvoices.length > 0 && (
                 <div className="border-t pt-4 mt-4">
                   <Label className="text-sm font-semibold text-gray-700 mb-2 block">Additional Invoices (Other Companies)</Label>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {additionalInvoices.map((inv, idx) => (
-                      <div key={inv.id || idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        <div className="flex-1">
-                          <Select 
-                            value={inv.company_id} 
-                            onValueChange={(v) => {
-                              const updated = [...additionalInvoices];
-                              updated[idx].company_id = v;
-                              updated[idx].company_name = companies.find(c => c.id === v)?.name || '';
-                              setAdditionalInvoices(updated);
-                            }}
+                      <div key={inv.id || idx} className="p-3 bg-gray-50 rounded-lg space-y-2">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1">
+                            <Select 
+                              value={inv.company_id} 
+                              onValueChange={(v) => {
+                                const updated = [...additionalInvoices];
+                                updated[idx].company_id = v;
+                                updated[idx].company_name = companies.find(c => c.id === v)?.name || '';
+                                setAdditionalInvoices(updated);
+                              }}
+                            >
+                              <SelectTrigger><SelectValue placeholder="Select Company" /></SelectTrigger>
+                              <SelectContent>
+                                {companies.filter(c => c.id !== session.company_id).map(c => (
+                                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="w-32">
+                            <Input
+                              type="number"
+                              value={inv.amount}
+                              onChange={(e) => {
+                                const updated = [...additionalInvoices];
+                                updated[idx].amount = e.target.value;
+                                setAdditionalInvoices(updated);
+                              }}
+                              placeholder="Amount"
+                            />
+                          </div>
+                          <div className="w-20">
+                            <Input
+                              type="number"
+                              value={inv.tax_rate}
+                              onChange={(e) => {
+                                const updated = [...additionalInvoices];
+                                updated[idx].tax_rate = e.target.value;
+                                setAdditionalInvoices(updated);
+                              }}
+                              placeholder="Tax %"
+                            />
+                          </div>
+                          {inv.status && <Badge className={inv.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>{inv.status}</Badge>}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setAdditionalInvoices(additionalInvoices.filter((_, i) => i !== idx))}
+                            className="text-red-500 hover:text-red-700"
                           >
-                            <SelectTrigger><SelectValue placeholder="Select Company" /></SelectTrigger>
-                            <SelectContent>
-                              {companies.filter(c => c.id !== session.company_id).map(c => (
-                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
-                        <div className="w-32">
-                          <Input
-                            type="number"
-                            value={inv.amount}
-                            onChange={(e) => {
-                              const updated = [...additionalInvoices];
-                              updated[idx].amount = e.target.value;
-                              setAdditionalInvoices(updated);
-                            }}
-                            placeholder="Amount"
-                          />
-                        </div>
-                        <div className="w-20">
-                          <Input
-                            type="number"
-                            value={inv.tax_rate}
-                            onChange={(e) => {
-                              const updated = [...additionalInvoices];
-                              updated[idx].tax_rate = e.target.value;
-                              setAdditionalInvoices(updated);
-                            }}
-                            placeholder="Tax %"
-                          />
-                        </div>
-                        {inv.status && <Badge className={inv.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>{inv.status}</Badge>}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setAdditionalInvoices(additionalInvoices.filter((_, i) => i !== idx))}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {/* Invoice Number Reuse Option - only for new invoices */}
+                        {!inv.id && deletedInvoiceNumbers.length > 0 && (
+                          <div className="flex items-center gap-2 pl-1">
+                            <RotateCcw className="w-3 h-3 text-amber-600" />
+                            <Select 
+                              value={inv.reuse_invoice_number || "none"} 
+                              onValueChange={(v) => {
+                                const updated = [...additionalInvoices];
+                                updated[idx].reuse_invoice_number = v === "none" ? "" : v;
+                                setAdditionalInvoices(updated);
+                              }}
+                            >
+                              <SelectTrigger className="h-8 text-xs bg-amber-50 border-amber-200">
+                                <SelectValue placeholder="Reuse invoice number?" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Generate new number</SelectItem>
+                                {deletedInvoiceNumbers.map(d => (
+                                  <SelectItem key={d.invoice_number} value={d.invoice_number}>
+                                    {d.invoice_number}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                        {inv.invoice_number && (
+                          <div className="text-xs text-gray-500 pl-1">Invoice: {inv.invoice_number}</div>
+                        )}
                       </div>
                     ))}
                   </div>
