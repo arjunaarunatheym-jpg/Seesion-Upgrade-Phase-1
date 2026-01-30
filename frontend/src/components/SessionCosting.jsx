@@ -337,7 +337,8 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
             invoice_id: addInv.id || null,
             total_amount: addAmount,
             tax_rate: addTaxRate,
-            tax_amount: addTaxAmount
+            tax_amount: addTaxAmount,
+            reuse_invoice_number: addInv.reuse_invoice_number || null
           });
         }
       }
