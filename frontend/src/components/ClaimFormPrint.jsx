@@ -444,7 +444,7 @@ const ClaimFormPrint = ({ session, onClose }) => {
                   const amount = expense.actual_amount || expense.estimated_amount || 0;
                   return (
                     <tr key={idx}>
-                      <td>{expense.description || expense.category}</td>
+                      <td>{getExpenseCategoryName(expense.category)}</td>
                       <td className="text-center">
                         {expense.expense_type === 'percentage' 
                           ? `${((amount / invoiceTotal) * 100).toFixed(0)}%`
