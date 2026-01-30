@@ -63,13 +63,14 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [costingRes, categoriesRes, marketingUsersRes, invoicesRes, creditNotesRes, companiesRes] = await Promise.all([
+      const [costingRes, categoriesRes, marketingUsersRes, invoicesRes, creditNotesRes, companiesRes, deletedInvRes] = await Promise.all([
         axiosInstance.get(`/finance/session/${session.id}/costing`),
         axiosInstance.get('/finance/expense-categories'),
         axiosInstance.get('/finance/marketing-users').catch(() => ({ data: [] })),
         axiosInstance.get('/finance/invoices').catch(() => ({ data: [] })),
         axiosInstance.get('/finance/credit-notes').catch(() => ({ data: [] })),
-        axiosInstance.get('/companies').catch(() => ({ data: [] }))
+        axiosInstance.get('/companies').catch(() => ({ data: [] })),
+        axiosInstance.get('/finance/deleted-invoice-numbers').catch(() => ({ data: [] }))
       ]);
       
       const costingData = costingRes.data;
@@ -77,6 +78,7 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
       setExpenseCategories(categoriesRes.data);
       setMarketingUsers(marketingUsersRes.data);
       setCompanies(companiesRes.data);
+      setDeletedInvoiceNumbers(deletedInvRes.data || []);
       
       // Filter credit notes for this session
       const sessionCNs = creditNotesRes.data.filter(cn => cn.session_id === session.id);
