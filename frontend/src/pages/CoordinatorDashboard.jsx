@@ -650,6 +650,11 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
   };
 
   const handleDownloadDOCX = async () => {
+    if (!professionalReportStatus?.docx_generated) {
+      toast.error("Please generate the report first before downloading");
+      return;
+    }
+    
     try {
       const response = await axiosInstance.get(`/training-reports/${selectedSession.id}/download-docx`, {
         responseType: 'blob',
@@ -683,7 +688,11 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
       toast.success("DOCX report downloaded! Check your Downloads folder.");
     } catch (error) {
       console.error("Download error:", error);
-      toast.error(error.response?.data?.detail || "Failed to download report");
+      if (error.response?.status === 404) {
+        toast.error("Report not found. Please generate the report first.");
+      } else {
+        toast.error(error.response?.data?.detail || "Failed to download report");
+      }
     }
   };
 
