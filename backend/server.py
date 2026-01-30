@@ -3068,6 +3068,27 @@ async def delete_session(session_id: str, current_user: User = Depends(get_curre
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
+    # Check for auto-draft invoices and save their numbers for reuse
+    invoices = await db.invoices.find({"session_id": session_id}, {"_id": 0}).to_list(100)
+    saved_invoice_numbers = []
+    
+    for invoice in invoices:
+        # Only save numbers from auto-draft invoices (never issued)
+        if invoice.get("status") in ["auto_draft", "draft"]:
+            invoice_number = invoice.get("invoice_number")
+            if invoice_number:
+                # Save to deleted_invoice_numbers collection for reuse
+                await db.deleted_invoice_numbers.insert_one({
+                    "invoice_number": invoice_number,
+                    "original_session_id": session_id,
+                    "original_session_name": session.get("name"),
+                    "original_company_id": session.get("company_id"),
+                    "deleted_at": get_malaysia_time().isoformat(),
+                    "deleted_by": current_user.id,
+                    "is_available": True  # Can be reused
+                })
+                saved_invoice_numbers.append(invoice_number)
+    
     # Delete ALL related data for this session
     total_deleted = 0
     
@@ -3105,8 +3126,42 @@ async def delete_session(session_id: str, current_user: User = Depends(get_curre
     return {
         "message": "Session and all related data deleted successfully",
         "session_name": session.get("name"),
-        "records_deleted": total_deleted
+        "records_deleted": total_deleted,
+        "invoice_numbers_saved_for_reuse": saved_invoice_numbers
     }
+
+
+@api_router.get("/finance/deleted-invoice-numbers")
+async def get_deleted_invoice_numbers(current_user: User = Depends(get_current_user)):
+    """Get list of deleted invoice numbers available for reuse"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Admin or Finance access required")
+    
+    # Get available deleted invoice numbers
+    deleted_numbers = await db.deleted_invoice_numbers.find(
+        {"is_available": True},
+        {"_id": 0}
+    ).sort("invoice_number", 1).to_list(100)
+    
+    return deleted_numbers
+
+
+@api_router.delete("/finance/deleted-invoice-numbers/{invoice_number}")
+async def remove_deleted_invoice_number(invoice_number: str, current_user: User = Depends(get_current_user)):
+    """Remove a deleted invoice number from the reuse pool (permanently discard)"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Admin or Finance access required")
+    
+    # URL decode the invoice number (slashes are encoded)
+    import urllib.parse
+    decoded_number = urllib.parse.unquote(invoice_number)
+    
+    result = await db.deleted_invoice_numbers.delete_one({"invoice_number": decoded_number})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Invoice number not found in deleted pool")
+    
+    return {"message": f"Invoice number {decoded_number} removed from reuse pool"}
 
 
 @api_router.delete("/sessions/bulk/delete-all")
