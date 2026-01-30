@@ -81,6 +81,7 @@ const SessionsTab = ({
   const [newTrainerAssignment, setNewTrainerAssignment] = useState(initialNewTrainerAssignment);
   const [participantMatchStatus, setParticipantMatchStatus] = useState(null);
   const [supervisorMatchStatus, setSupervisorMatchStatus] = useState(null);
+  const [deletedInvoiceNumbers, setDeletedInvoiceNumbers] = useState([]);
   
   // Edit session states
   const [editingSession, setEditingSession] = useState(null);
