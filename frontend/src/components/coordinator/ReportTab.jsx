@@ -141,10 +141,7 @@ const ReportTab = ({
                 <button
                   key={session.id}
                   data-testid={`pending-report-${session.id}`}
-                  onClick={() => {
-                    console.log("Clicking pending report for session:", session.id);
-                    onSelectSessionForReport(session);
-                  }}
+                  onClick={() => onSelectSessionForReport(session)}
                   className="w-full flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors text-left"
                 >
                   <div className="flex-1">
