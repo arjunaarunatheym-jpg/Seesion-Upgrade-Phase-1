@@ -173,6 +173,23 @@ const SessionsTab = ({
     return () => clearTimeout(debounce);
   }, [newSupervisor.full_name, newSupervisor.id_number, newSupervisor.email]);
 
+  // Load deleted invoice numbers available for reuse
+  useEffect(() => {
+    const loadDeletedInvoiceNumbers = async () => {
+      try {
+        const response = await axiosInstance.get("/finance/deleted-invoice-numbers");
+        setDeletedInvoiceNumbers(response.data || []);
+      } catch (error) {
+        console.error("Failed to load deleted invoice numbers:", error);
+        setDeletedInvoiceNumbers([]);
+      }
+    };
+    
+    if (sessionDialogOpen) {
+      loadDeletedInvoiceNumbers();
+    }
+  }, [sessionDialogOpen]);
+
   // Add participant to form
   const handleAddParticipant = () => {
     if (!newParticipant.full_name || !newParticipant.id_number) {
