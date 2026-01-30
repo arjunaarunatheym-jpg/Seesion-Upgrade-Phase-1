@@ -2525,6 +2525,9 @@ async def get_past_training_sessions(
     if current_user.role not in ["admin", "coordinator", "assistant_admin", "trainer"]:
         raise HTTPException(status_code=403, detail="Unauthorized")
     
+    # Debug: log received parameters
+    print(f"Past training request - month: {month}, year: {year}, role: {current_user.role}")
+    
     # Build query based on user role and archival rules
     current_date = get_malaysia_time().date()
     current_date_str = current_date.isoformat()
