@@ -10561,7 +10561,25 @@ async def save_additional_invoice(session_id: str, invoice_data: dict, current_u
             return {"message": "Additional invoice updated", "invoice_id": existing["id"]}
         
         # Create new additional invoice
-        invoice_number = await generate_invoice_number()
+        # Check if we should reuse a deleted invoice number
+        reuse_number = invoice_data.get("reuse_invoice_number")
+        if reuse_number:
+            # Verify the number is available for reuse
+            deleted_record = await db.deleted_invoice_numbers.find_one({
+                "invoice_number": reuse_number,
+                "is_available": True
+            })
+            if deleted_record:
+                invoice_number = reuse_number
+                # Mark as used
+                await db.deleted_invoice_numbers.update_one(
+                    {"invoice_number": reuse_number},
+                    {"$set": {"is_available": False, "reused_at": now.isoformat(), "reused_session_id": session_id}}
+                )
+            else:
+                invoice_number = await generate_invoice_number()
+        else:
+            invoice_number = await generate_invoice_number()
         
         # Get program name for the invoice
         program_name = ""
