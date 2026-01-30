@@ -975,6 +975,14 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
   };
 
 
+  const [activeTab, setActiveTab] = useState("sessions");
+
+  // Function to navigate to Analytics tab with a specific session
+  const handleSelectSessionForReport = async (session) => {
+    await selectSession(session);
+    setActiveTab("analytics");
+  };
+
   // Calculate statistics
   const uniqueParticipantsWithAttendance = attendance.filter((v, i, a) => 
     a.findIndex(t => t.participant_id === v.participant_id) === i
