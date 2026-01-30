@@ -50,9 +50,17 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - ✅ Trainer session filtering (current/future vs past training)
 - ✅ Session creation without participants (optional)
 - ✅ Invoice number reuse for deleted auto-draft invoices
+- ✅ Coordinator Dashboard reporting workflow consolidation (Jan 30, 2026)
+  - Reports tab shows pending and submitted reports
+  - Clicking pending report navigates to Analytics tab with session loaded
 
 ### In Progress
 - None
+
+### Upcoming (P1)
+- Google Drive Feedback Integration (feedback URL per session, certificate release mechanism TBD)
+- Remove picture upload from reporting (reduce storage)
+- Custom Pre/Post Test Results format (blocked on user sample)
 
 ### Backlog (P2)
 - Backend cleanup (remove redundant server.py code)
