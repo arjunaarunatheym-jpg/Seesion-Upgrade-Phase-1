@@ -285,6 +285,24 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
     }
   };
 
+  // Load report status when session changes
+  const loadReportStatus = async (sessionId) => {
+    try {
+      const response = await axiosInstance.get(`/training-reports/${sessionId}/status`);
+      setProfessionalReportStatus(response.data);
+    } catch (error) {
+      console.error("Failed to load report status:", error);
+      setProfessionalReportStatus({
+        docx_generated: false,
+        edited_uploaded: false,
+        pdf_submitted: false,
+        docx_filename: null,
+        edited_docx_filename: null,
+        pdf_filename: null
+      });
+    }
+  };
+
   const loadAttendanceStatus = async (sessionId) => {
     try {
       const response = await axiosInstance.get(`/sessions/${sessionId}/participants/attendance`);
