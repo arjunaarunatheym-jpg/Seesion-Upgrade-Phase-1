@@ -245,10 +245,8 @@ const SessionsTab = ({
   const handleCreateSession = async (e) => {
     e.preventDefault();
     
-    if (sessionForm.participants.length === 0) {
-      toast.error("Please add at least one participant");
-      return;
-    }
+    // Participants are now optional - sessions can be created without participants
+    // and participants can be added later via bulk upload or manual entry
     
     try {
       const program = programs.find(p => p.id === sessionForm.program_id);
@@ -280,7 +278,10 @@ const SessionsTab = ({
         new_marketing_id: sessionForm.new_marketing_id || null,
       });
       
-      toast.success(`Session created with ${response.data.participant_count} participants`);
+      const participantCount = response.data.participant_count || 0;
+      toast.success(participantCount > 0 
+        ? `Session created with ${participantCount} participants` 
+        : "Session created successfully. You can add participants later.");
       setSessionForm(initialSessionForm);
       setSessionDialogOpen(false);
       onRefresh();
