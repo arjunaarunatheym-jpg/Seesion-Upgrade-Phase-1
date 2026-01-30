@@ -880,9 +880,10 @@ const SessionsTab = ({
                   data-testid="submit-session-button"
                   type="submit"
                   className="w-full"
-                  disabled={sessionForm.participants.length === 0}
                 >
-                  Create Session with {sessionForm.participants.length} Participant(s)
+                  {sessionForm.participants.length > 0 
+                    ? `Create Session with ${sessionForm.participants.length} Participant(s)`
+                    : "Create Session"}
                 </Button>
               </form>
             </DialogContent>
