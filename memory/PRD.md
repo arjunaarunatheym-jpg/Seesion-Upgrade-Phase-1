@@ -46,6 +46,8 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - ✅ API rate limiting increased (500 req/min)
 - ✅ Rich-text quotation PDF templates (bold, italic, highlight, colors)
 - ✅ Admin UI for Indemnity Form sections management
+- ✅ Rich-text formatting toolbar for PDF templates editor
+- ✅ Trainer session filtering (current/future vs past training)
 
 ### In Progress
 - None
