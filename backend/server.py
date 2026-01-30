@@ -8500,8 +8500,21 @@ async def log_finance_action(entity_type: str, entity_id: str, action: str,
     await db.finance_audit_log.insert_one(log_entry)
 
 # Auto-create invoice when session is created
-async def create_auto_invoice_for_session(session_data: dict, created_by: str):
-    invoice_number = await generate_invoice_number()
+async def create_auto_invoice_for_session(session_data: dict, created_by: str, reuse_invoice_number: str = None):
+    # Use reused invoice number if provided, otherwise generate new one
+    if reuse_invoice_number:
+        # Verify the number is available for reuse
+        deleted_record = await db.deleted_invoice_numbers.find_one({
+            "invoice_number": reuse_invoice_number,
+            "is_available": True
+        })
+        if deleted_record:
+            invoice_number = reuse_invoice_number
+        else:
+            # Number not available, generate new one
+            invoice_number = await generate_invoice_number()
+    else:
+        invoice_number = await generate_invoice_number()
     
     company = await db.companies.find_one({"id": session_data.get("company_id")}, {"_id": 0})
     programme = await db.programs.find_one({"id": session_data.get("program_id")}, {"_id": 0})
