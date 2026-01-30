@@ -43,8 +43,30 @@ const AnalyticsTab = ({
     );
   }
 
+  // Format date for display
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    return new Date(dateStr).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+
   return (
     <>
+      {/* Session Indicator Banner */}
+      <Card className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+        <CardContent className="py-4">
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-12 bg-blue-500 rounded-full"></div>
+            <div>
+              <p className="text-sm text-blue-600 font-medium">Currently Working On</p>
+              <p className="text-lg font-bold text-gray-900">{selectedSession.company_name || 'Unknown Company'}</p>
+              <p className="text-sm text-gray-600">
+                {selectedSession.program_name || 'Training'} • {formatDate(selectedSession.start_date)} - {formatDate(selectedSession.end_date)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Stats Cards */}
         <Card>
