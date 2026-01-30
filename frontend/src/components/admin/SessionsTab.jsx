@@ -457,6 +457,32 @@ const SessionsTab = ({
                       />
                     </div>
                   </div>
+                  
+                  {/* Reuse Deleted Invoice Number Option */}
+                  {deletedInvoiceNumbers.length > 0 && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <Label className="text-amber-800 font-medium">Reuse Deleted Invoice Number (Optional)</Label>
+                      <p className="text-xs text-amber-600 mb-2">
+                        Select a previously deleted invoice number to maintain sequence, or leave empty for new number.
+                      </p>
+                      <Select
+                        value={sessionForm.reuse_invoice_number}
+                        onValueChange={(value) => setSessionForm({ ...sessionForm, reuse_invoice_number: value === "none" ? "" : value })}
+                      >
+                        <SelectTrigger data-testid="reuse-invoice-select">
+                          <SelectValue placeholder="Generate new invoice number" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Generate new invoice number</SelectItem>
+                          {deletedInvoiceNumbers.map((inv) => (
+                            <SelectItem key={inv.invoice_number} value={inv.invoice_number}>
+                              {inv.invoice_number} (deleted from: {inv.original_session_name || 'Unknown'})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
 
                 {/* Assign Trainers */}
