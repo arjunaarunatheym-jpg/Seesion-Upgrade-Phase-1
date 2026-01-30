@@ -6,7 +6,7 @@ Test password reset functionality for arul@kone.com
 import requests
 from pymongo import MongoClient
 
-BASE_URL = "https://traintrack-78.preview.emergentagent.com/api"
+BASE_URL = "https://report-flow-4.preview.emergentagent.com/api"
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "driving_training_db"
 
