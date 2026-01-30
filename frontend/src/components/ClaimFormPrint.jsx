@@ -412,11 +412,11 @@ const ClaimFormPrint = ({ session, onClose }) => {
             <table>
               <thead>
                 <tr>
-                  <th style={{ width: '35%' }}>DESCRIPTION</th>
-                  <th style={{ width: '15%' }}>RATE</th>
-                  <th style={{ width: '15%' }}>BASE</th>
-                  <th style={{ width: '15%' }}>TOTAL (RM)</th>
-                  <th style={{ width: '20%' }}>REMARKS</th>
+                  <th style={{ width: '30%' }}>DESCRIPTION</th>
+                  <th style={{ width: '12%' }}>RATE</th>
+                  <th style={{ width: '10%' }}>BASE</th>
+                  <th style={{ width: '18%', paddingLeft: '8px' }}>TOTAL (RM)</th>
+                  <th style={{ width: '30%', paddingLeft: '10px' }}>REMARKS</th>
                 </tr>
               </thead>
               <tbody>
@@ -441,8 +441,8 @@ const ClaimFormPrint = ({ session, onClose }) => {
                           : '-'
                         }
                       </td>
-                      <td className="text-right">{amount.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-                      <td>{expense.remark || ''}</td>
+                      <td className="text-right" style={{ paddingRight: '10px' }}>{amount.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                      <td style={{ paddingLeft: '10px' }}>{expense.remark || ''}</td>
                     </tr>
                   );
                 })}
@@ -451,7 +451,7 @@ const ClaimFormPrint = ({ session, onClose }) => {
                 )}
                 <tr className="total-row">
                   <td colSpan="3" className="text-right">TOTAL EXPENSES</td>
-                  <td className="text-right">{cashExpenses.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                  <td className="text-right" style={{ paddingRight: '10px' }}>{cashExpenses.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
                   <td></td>
                 </tr>
               </tbody>
