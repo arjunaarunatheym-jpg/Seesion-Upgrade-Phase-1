@@ -6480,6 +6480,38 @@ async def generate_docx_report(session_id: str, current_user: User = Depends(get
         logging.error(f"Failed to generate DOCX report: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")
 
+
+@api_router.get("/training-reports/{session_id}/status")
+async def get_training_report_status(session_id: str, current_user: User = Depends(get_current_user)):
+    """Get the status of a training report for a session"""
+    
+    if current_user.role not in ["coordinator", "admin", "supervisor"]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    training_report = await db.training_reports.find_one({"session_id": session_id}, {"_id": 0})
+    
+    if not training_report:
+        return {
+            "docx_generated": False,
+            "edited_uploaded": False,
+            "pdf_submitted": False,
+            "docx_filename": None,
+            "edited_docx_filename": None,
+            "pdf_filename": None,
+            "status": None
+        }
+    
+    return {
+        "docx_generated": bool(training_report.get('docx_filename')),
+        "edited_uploaded": bool(training_report.get('edited_docx_filename')),
+        "pdf_submitted": training_report.get('status') == 'submitted',
+        "docx_filename": training_report.get('docx_filename'),
+        "edited_docx_filename": training_report.get('edited_docx_filename'),
+        "pdf_filename": training_report.get('final_pdf_filename'),
+        "status": training_report.get('status')
+    }
+
+
 @api_router.get("/training-reports/{session_id}/download-docx")
 async def download_docx_report(session_id: str, current_user: User = Depends(get_current_user)):
     """Download the generated DOCX report"""
