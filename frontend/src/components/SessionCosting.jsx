@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../components/ui/badge';
 import { 
   DollarSign, Users, Truck, Calculator, Plus, Trash2, Save, 
-  FileText, TrendingUp, User, Building2, Calendar, RefreshCw, FileX, Download
+  FileText, TrendingUp, User, Building2, Calendar, RefreshCw, FileX, Download, RotateCcw
 } from 'lucide-react';
 import ClaimFormPrint from './ClaimFormPrint';
 
@@ -22,6 +22,7 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
   const [creditNotes, setCreditNotes] = useState([]);
   const [showClaimForm, setShowClaimForm] = useState(false);
   const [companies, setCompanies] = useState([]);
+  const [deletedInvoiceNumbers, setDeletedInvoiceNumbers] = useState([]);
   
   // Form states - Primary invoice
   const [invoiceData, setInvoiceData] = useState({
