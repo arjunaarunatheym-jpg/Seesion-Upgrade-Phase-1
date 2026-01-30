@@ -1200,7 +1200,7 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                 completionChecklist={completionChecklist}
                 loadCompletionChecklist={loadCompletionChecklist}
                 handleSubmitCoordinatorFeedback={handleSubmitCoordinatorFeedback}
-                handleMarkAsCompleted={handleMarkAsCompleted}
+                handleMarkAsCompleted={handleMarkSessionCompleted}
               />
             </TabsContent>
 
