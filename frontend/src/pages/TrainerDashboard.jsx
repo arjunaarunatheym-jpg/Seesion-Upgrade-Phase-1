@@ -160,27 +160,18 @@ const TrainerDashboard = ({ user, onLogout }) => {
         })
       );
       
-      // Filter sessions: Show until coordinator completes/closes the session
-      // Sessions remain visible regardless of date, until coordinator marks as completed
-      const activeSessions = sessionsWithParticipants.filter(session => {
-        // Hide if coordinator has marked as completed
-        if (session.completed_by_coordinator === true) return false;
-        if (session.completion_status === 'completed' || session.completion_status === 'archived') return false;
-        
-        // Show all ongoing sessions (regardless of end date)
-        return true;
-      });
+      // Backend now handles date filtering for trainers
+      // Sessions endpoint only returns current/future sessions for trainers
+      // Sort sessions by start_date (upcoming first, then current)
+      sessionsWithParticipants.sort((a, b) => new Date(a.start_date) - new Date(b.start_date));
       
-      // Sort sessions by start_date (most recent/upcoming first)
-      activeSessions.sort((a, b) => new Date(b.start_date) - new Date(a.start_date));
-      
-      setSessions(activeSessions);
+      setSessions(sessionsWithParticipants);
       
       // Auto-select first session if available
-      if (activeSessions.length > 0) {
-        setSelectedSession(activeSessions[0]);
+      if (sessionsWithParticipants.length > 0) {
+        setSelectedSession(sessionsWithParticipants[0]);
         // Load assigned participants for the first session
-        loadSessionParticipants(activeSessions[0].id);
+        loadSessionParticipants(sessionsWithParticipants[0].id);
       }
     } catch (error) {
       console.error("Failed to load sessions:", error);
