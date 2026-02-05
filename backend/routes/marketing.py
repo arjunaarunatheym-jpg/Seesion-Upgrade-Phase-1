@@ -422,6 +422,10 @@ async def mark_quotation_sent(quotation_id: str, current_user: User = Depends(ge
         {"id": quotation_id},
         {"$set": {"status": "sent", "sent_at": get_malaysia_time().isoformat()}}
     )
+    
+    # Sync lead stage
+    await sync_lead_stage_from_quotation(quotation_id, "sent")
+    
     return {"message": "Quotation marked as sent"}
 
 
@@ -447,6 +451,10 @@ async def record_client_response(quotation_id: str, response_data: dict, current
             "client_response_notes": response_data.get("notes")
         }}
     )
+    
+    # Sync lead stage
+    await sync_lead_stage_from_quotation(quotation_id, response)
+    
     return {"message": f"Quotation marked as {response}"}
 
 
