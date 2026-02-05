@@ -650,6 +650,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
               onRefresh={loadData}
               formatCurrency={formatCurrency}
               isAdmin={false}
+              onCreateQuotation={handleCreateQuotationFromLead}
             />
           </TabsContent>
 
