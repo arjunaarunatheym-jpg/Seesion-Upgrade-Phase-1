@@ -64,9 +64,16 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
   - Form organized by category with Bahasa Malaysia instructions
   - Feedback mandatory before certificate download
 - ✅ Excel Feedback Export - Feb 5, 2026
-  - Export button in Coordinator Analytics tab
-  - Generates XLSX with 4 sheets: Session Info, Participants & Test Results, Feedback Responses, Summary
-  - Includes pre/post test scores, feedback ratings, and averages
+- ✅ Marketing Portal Phase 2 - Lead Pipeline (Feb 5, 2026)
+  - Lead Pipeline with 6 stages: Inquiry → Contacted → Quotation Sent → Negotiating → Won → Lost
+  - Pipeline (Kanban) and List views
+  - Lead card with company, contact, expected value, follow-up date
+  - Quick stage change via dropdown
+  - Convert Lead to Client action
+  - Data isolation: Marketing sees own leads, Admin sees all
+  - Quick Stats Dashboard: Total leads, active, conversion rate, avg deal size, avg days to close, won value
+  - Follow-up Reminders: Overdue alert and upcoming this week
+  - Pipeline Breakdown badges by stage
 
 ### In Progress
 - None
