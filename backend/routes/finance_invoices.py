@@ -968,3 +968,119 @@ async def export_audit_trail(
         })
     
     return export_data
+
+
+# ==================== DELETE INVOICE ====================
+
+class DeleteInvoiceRequest(BaseModel):
+    reason: str
+    reuse_number: bool = True  # Whether to add invoice number to reuse pool
+
+
+@router.delete("/invoices/{invoice_id}")
+async def delete_invoice(
+    invoice_id: str,
+    request: DeleteInvoiceRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Permanently delete an invoice and sync with related data.
+    - Removes invoice from database
+    - Updates session to remove invoice_id reference
+    - Adds invoice number to reuse pool (if auto_draft)
+    - Logs the deletion in audit trail
+    """
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin can delete invoices")
+    
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    invoice_number = invoice.get("invoice_number", "")
+    session_id = invoice.get("session_id")
+    company_name = invoice.get("company_name", "Unknown")
+    total_amount = invoice.get("total_amount", 0)
+    status = invoice.get("status", "")
+    is_additional = invoice.get("is_additional_invoice", False)
+    
+    # Check if this is an issued/paid invoice - warn but allow
+    if status in ["issued", "paid"]:
+        # For issued/paid invoices, we still delete but log it prominently
+        pass
+    
+    # Create audit trail entry BEFORE deleting
+    record_ref = f"{invoice_number} - {company_name} - RM {total_amount:,.2f}"
+    await create_audit_trail_entry(
+        action="Invoice Deleted",
+        record_reference=record_ref,
+        entity_type="invoice",
+        entity_id=invoice_id,
+        changed_by=current_user,
+        reason=request.reason,
+        field_changed="deleted",
+        from_value=f"Status: {status}, Amount: RM {total_amount:,.2f}",
+        to_value="DELETED"
+    )
+    
+    # If it's a draft invoice and user wants to reuse the number, add to pool
+    if request.reuse_number and status in ["auto_draft", "draft"] and invoice_number:
+        # Extract session name for reference
+        session = await db.sessions.find_one({"id": session_id}, {"_id": 0, "name": 1}) if session_id else None
+        session_name = session.get("name") if session else "Unknown Session"
+        
+        await db.deleted_invoice_numbers.insert_one({
+            "invoice_number": invoice_number,
+            "deleted_from_session_name": session_name,
+            "deleted_at": get_malaysia_time().isoformat(),
+            "deleted_by": current_user.id,
+            "deletion_reason": request.reason,
+            "original_status": status,
+            "original_amount": total_amount,
+            "is_reused": False,
+            "reused_at": None
+        })
+    
+    # Update session to remove invoice reference
+    if session_id:
+        if is_additional:
+            # For additional invoices, remove from session's additional_invoice_ids array
+            await db.sessions.update_one(
+                {"id": session_id},
+                {"$pull": {"additional_invoice_ids": invoice_id}}
+            )
+        else:
+            # For main invoice, clear the invoice_id and status
+            await db.sessions.update_one(
+                {"id": session_id},
+                {"$set": {
+                    "invoice_id": None,
+                    "invoice_status": None,
+                    "updated_at": get_malaysia_time().isoformat()
+                }}
+            )
+    
+    # Delete related credit notes if any
+    credit_notes_deleted = await db.credit_notes.delete_many({"invoice_id": invoice_id})
+    
+    # Delete the invoice
+    await db.invoices.delete_one({"id": invoice_id})
+    
+    # Log finance action
+    await log_finance_action(
+        "invoice", 
+        invoice_id, 
+        "deleted", 
+        current_user.id,
+        invoice,  # before value is the entire invoice
+        {"deleted": True, "reason": request.reason},
+        request.reason
+    )
+    
+    return {
+        "message": "Invoice deleted successfully",
+        "invoice_number": invoice_number,
+        "session_updated": session_id is not None,
+        "credit_notes_deleted": credit_notes_deleted.deleted_count,
+        "number_added_to_reuse_pool": request.reuse_number and status in ["auto_draft", "draft"]
+    }
