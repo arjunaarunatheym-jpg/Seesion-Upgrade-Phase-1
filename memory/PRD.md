@@ -60,6 +60,9 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
   - Questions organized by category: A. KUALITI KURSUS, B. PENYEDIA LATIHAN, C. TRAINER, D. UMUM
   - Rating (1-5) and Text question types
   - Default 19 questions in Bahasa Malaysia
+  - Participant feedback form with 1-5 number buttons (not stars)
+  - Form organized by category with Bahasa Malaysia instructions
+  - Feedback mandatory before certificate download
 - ✅ Excel Feedback Export - Feb 5, 2026
   - Export button in Coordinator Analytics tab
   - Generates XLSX with 4 sheets: Session Info, Participants & Test Results, Feedback Responses, Summary
