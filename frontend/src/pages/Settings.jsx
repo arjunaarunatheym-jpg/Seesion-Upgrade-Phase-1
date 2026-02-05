@@ -120,6 +120,68 @@ const Settings = () => {
     }
   };
 
+  // Feedback Questions Functions
+  const loadFeedbackQuestions = async () => {
+    try {
+      const response = await axiosInstance.get("/settings/feedback-questions");
+      setFeedbackQuestions(response.data || []);
+    } catch (error) {
+      console.error("Failed to load feedback questions:", error);
+    }
+  };
+
+  const handleAddFeedbackQuestion = () => {
+    const newOrder = feedbackQuestions.length + 1;
+    setFeedbackQuestions([...feedbackQuestions, {
+      id: `Q${newOrder}`,
+      order: newOrder,
+      category: "UMUM",
+      question: "",
+      type: "rating",
+      required: true
+    }]);
+  };
+
+  const handleRemoveFeedbackQuestion = (index) => {
+    const updated = feedbackQuestions.filter((_, i) => i !== index);
+    updated.forEach((q, i) => { q.order = i + 1; });
+    setFeedbackQuestions(updated);
+  };
+
+  const handleMoveFeedbackQuestion = (index, direction) => {
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= feedbackQuestions.length) return;
+    
+    const updated = [...feedbackQuestions];
+    [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
+    updated.forEach((q, i) => { q.order = i + 1; });
+    setFeedbackQuestions(updated);
+  };
+
+  const handleFeedbackQuestionChange = (index, field, value) => {
+    const updated = [...feedbackQuestions];
+    updated[index] = { ...updated[index], [field]: value };
+    setFeedbackQuestions(updated);
+  };
+
+  const handleSaveFeedbackQuestions = async () => {
+    if (feedbackQuestions.some(q => !q.question.trim())) {
+      toast.error("All questions must have text");
+      return;
+    }
+    
+    setSavingFeedback(true);
+    try {
+      await axiosInstance.post("/settings/feedback-questions", feedbackQuestions);
+      toast.success("Feedback questions saved successfully!");
+      loadFeedbackQuestions();
+    } catch (error) {
+      toast.error("Failed to save feedback questions");
+    } finally {
+      setSavingFeedback(false);
+    }
+  };
+
   const handleLogoUpload = async () => {
     if (!logoFile) {
       toast.error("Please select a logo file");
