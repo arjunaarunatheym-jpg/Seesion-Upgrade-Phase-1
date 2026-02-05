@@ -1033,3 +1033,145 @@ async def get_stats_by_user(current_user: User = Depends(get_current_user)):
     
     return user_stats
 
+
+# ==================== LEAD TO QUOTATION ====================
+
+@router.post("/leads/{lead_id}/create-quotation")
+async def create_quotation_from_lead(lead_id: str, current_user: User = Depends(get_current_user)):
+    """Create a quotation from a lead - auto-creates client if needed"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    # Get the lead
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check ownership for non-admins
+    if current_user.role not in ["admin", "super_admin"] and lead.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Check if lead already has a quotation
+    if lead.get("quotation_id"):
+        existing_quotation = await db.quotations.find_one({"id": lead["quotation_id"]}, {"_id": 0})
+        if existing_quotation:
+            return {
+                "message": "Lead already has a quotation",
+                "quotation_id": lead["quotation_id"],
+                "client_id": lead.get("client_id"),
+                "already_exists": True
+            }
+    
+    # Check if client already exists (by company name for this marketing user)
+    client_id = lead.get("client_id")
+    if not client_id:
+        existing_client = await db.marketing_clients.find_one({
+            "company_name": lead["company_name"],
+            "created_by": current_user.id
+        }, {"_id": 0})
+        
+        if existing_client:
+            client_id = existing_client["id"]
+        else:
+            # Auto-create client from lead data
+            new_client = MarketingClient(
+                company_name=lead["company_name"],
+                contact_person=lead.get("contact_person"),
+                contact_email=lead.get("contact_email"),
+                contact_phone=lead.get("contact_phone"),
+                notes=f"Auto-created from lead. Source: {lead.get('source', 'N/A')}",
+                created_by=current_user.id
+            )
+            
+            doc = new_client.model_dump()
+            doc["created_at"] = doc["created_at"].isoformat()
+            await db.marketing_clients.insert_one(doc)
+            client_id = new_client.id
+    
+    # Update lead with client_id
+    await db.leads.update_one(
+        {"id": lead_id},
+        {"$set": {
+            "client_id": client_id,
+            "updated_at": get_malaysia_time().isoformat()
+        }}
+    )
+    
+    # Return client data for quotation form pre-fill
+    client = await db.marketing_clients.find_one({"id": client_id}, {"_id": 0})
+    
+    return {
+        "message": "Client ready for quotation",
+        "client_id": client_id,
+        "client": client,
+        "lead_id": lead_id,
+        "already_exists": False
+    }
+
+
+@router.put("/leads/{lead_id}/link-quotation")
+async def link_quotation_to_lead(lead_id: str, quotation_id: str, current_user: User = Depends(get_current_user)):
+    """Link a quotation to a lead and update stage"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check ownership for non-admins
+    if current_user.role not in ["admin", "super_admin"] and lead.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Verify quotation exists
+    quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    
+    # Update lead with quotation link
+    update_data = {
+        "quotation_id": quotation_id,
+        "updated_at": get_malaysia_time().isoformat()
+    }
+    
+    # Auto-update stage based on quotation status
+    quotation_status = quotation.get("status", "draft")
+    if quotation_status in ["sent", "accepted", "declined"]:
+        if quotation_status == "accepted":
+            update_data["stage"] = "won"
+        elif quotation_status == "declined":
+            update_data["stage"] = "lost"
+        else:
+            update_data["stage"] = "quotation_sent"
+        update_data["stage_changed_at"] = get_malaysia_time().isoformat()
+    
+    await db.leads.update_one({"id": lead_id}, {"$set": update_data})
+    
+    return {"message": "Quotation linked to lead", "stage": update_data.get("stage")}
+
+
+# Hook to sync lead stage when quotation status changes
+async def sync_lead_stage_from_quotation(quotation_id: str, new_status: str):
+    """Called when quotation status changes to sync lead stage"""
+    lead = await db.leads.find_one({"quotation_id": quotation_id}, {"_id": 0})
+    if not lead:
+        return
+    
+    stage_map = {
+        "sent": "quotation_sent",
+        "accepted": "won",
+        "declined": "lost"
+    }
+    
+    new_stage = stage_map.get(new_status)
+    if new_stage and lead.get("stage") != new_stage:
+        await db.leads.update_one(
+            {"quotation_id": quotation_id},
+            {"$set": {
+                "stage": new_stage,
+                "stage_changed_at": get_malaysia_time().isoformat(),
+                "updated_at": get_malaysia_time().isoformat()
+            }}
+        )
+
+
