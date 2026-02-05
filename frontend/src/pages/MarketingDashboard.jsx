@@ -760,12 +760,34 @@ const MarketingDashboard = ({ user, onLogout }) => {
                     <SelectValue placeholder="Select client" />
                   </SelectTrigger>
                   <SelectContent>
+                    <div className="p-2 border-b">
+                      <Input 
+                        placeholder="Search clients..." 
+                        className="h-8"
+                        onChange={(e) => {
+                          const searchVal = e.target.value.toLowerCase();
+                          // Filter is handled by showing/hiding items
+                          document.querySelectorAll('[data-client-item]').forEach(item => {
+                            const name = item.getAttribute('data-client-name')?.toLowerCase() || '';
+                            item.style.display = name.includes(searchVal) ? '' : 'none';
+                          });
+                        }}
+                      />
+                    </div>
                     {clients.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.company_name}</SelectItem>
+                      <SelectItem 
+                        key={c.id} 
+                        value={c.id}
+                        data-client-item
+                        data-client-name={c.company_name}
+                      >
+                        {c.company_name}
+                        {c.contact_person && <span className="text-xs text-gray-500 ml-2">({c.contact_person})</span>}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {clients.length === 0 && <p className="text-xs text-red-500 mt-1">Please add a client first</p>}
+                {clients.length === 0 && <p className="text-xs text-red-500 mt-1">Please add a client first or create from Leads</p>}
               </div>
               <div>
                 <Label>Programme *</Label>
