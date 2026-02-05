@@ -1350,6 +1350,61 @@ const DataManagement = ({ user }) => {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Invoice Dialog */}
+      <Dialog open={deleteInvoiceDialog.open} onOpenChange={(open) => setDeleteInvoiceDialog({ ...deleteInvoiceDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <Trash2 className="w-5 h-5" />
+              Delete Invoice Permanently
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete invoice: <strong>{deleteInvoiceDialog.invoice?.invoice_number}</strong>
+              <br />
+              Company: {deleteInvoiceDialog.invoice?.company_name}
+              <br />
+              Amount: RM {deleteInvoiceDialog.invoice?.total_amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+              <br /><br />
+              <span className="text-red-600 font-medium">⚠️ This action cannot be undone. The session will be updated to reflect this deletion.</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Reason for Deletion *</Label>
+              <Textarea
+                placeholder="Explain why this invoice needs to be deleted..."
+                value={deleteInvoiceForm.reason}
+                onChange={(e) => setDeleteInvoiceForm({ ...deleteInvoiceForm, reason: e.target.value })}
+              />
+            </div>
+            {(deleteInvoiceDialog.invoice?.status === 'auto_draft' || deleteInvoiceDialog.invoice?.status === 'draft') && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="reuseNumber"
+                  checked={deleteInvoiceForm.reuseNumber}
+                  onChange={(e) => setDeleteInvoiceForm({ ...deleteInvoiceForm, reuseNumber: e.target.checked })}
+                  className="rounded border-gray-300"
+                />
+                <Label htmlFor="reuseNumber" className="text-sm font-normal cursor-pointer">
+                  Add invoice number to reuse pool (recommended for draft invoices)
+                </Label>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteInvoiceDialog({ open: false, invoice: null })}>Cancel</Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteInvoice} 
+              disabled={!deleteInvoiceForm.reason}
+            >
+              Delete Invoice
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Backdate Invoice Dialog */}
       <Dialog open={backdateDialog.open} onOpenChange={(open) => setBackdateDialog({ ...backdateDialog, open })}>
         <DialogContent>
