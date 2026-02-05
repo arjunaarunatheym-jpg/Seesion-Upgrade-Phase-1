@@ -1728,6 +1728,11 @@ const AdminDashboard = ({ user, onLogout }) => {
               <span className="hidden sm:inline">Quotations</span>
               <span className="sm:hidden">Quotes</span>
             </TabsTrigger>
+            <TabsTrigger value="marketing-leads" data-testid="marketing-leads-tab" className="flex-1 min-w-[120px] md:min-w-0 bg-gradient-to-r from-teal-500 to-emerald-500 text-white">
+              <Target className="w-4 h-4 mr-2" />
+              <span className="hidden sm:inline">Marketing Leads</span>
+              <span className="sm:hidden">Leads</span>
+            </TabsTrigger>
             <TabsTrigger value="my-payroll" data-testid="my-payroll-tab" className="flex-1 min-w-[120px] md:min-w-0 bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
               <DollarSign className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">My Payroll</span>
