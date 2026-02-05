@@ -7,7 +7,7 @@ import { axiosInstance } from "../../App";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { FileText, MessageSquare, Upload, Download, CheckCircle } from "lucide-react";
+import { FileText, MessageSquare, Upload, Download, CheckCircle, FileSpreadsheet } from "lucide-react";
 
 const AnalyticsTab = ({
   selectedSession,
