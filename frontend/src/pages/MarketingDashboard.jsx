@@ -235,6 +235,25 @@ const MarketingDashboard = ({ user, onLogout }) => {
       remarks: '',
       terms_conditions: ''
     });
+    setCurrentLeadId(null);
+  };
+
+  // Handle creating quotation from lead (auto-creates client)
+  const handleCreateQuotationFromLead = (leadData) => {
+    resetQuotationForm();
+    setEditingQuotation(null);
+    setCurrentLeadId(leadData.lead_id);
+    
+    // Pre-fill client_id from the auto-created client
+    setQuotationForm(prev => ({
+      ...prev,
+      client_id: leadData.client_id
+    }));
+    
+    // Switch to quotations tab and open dialog
+    setActiveTab('quotations');
+    setShowQuotationDialog(true);
+    toast.success('Client created from lead. Now create your quotation.');
   };
 
   const openEditQuotation = (quotation) => {
