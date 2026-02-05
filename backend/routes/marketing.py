@@ -1183,28 +1183,4 @@ async def link_quotation_to_lead(lead_id: str, quotation_id: str, current_user: 
     return {"message": "Quotation linked to lead", "stage": update_data.get("stage")}
 
 
-# Hook to sync lead stage when quotation status changes
-async def sync_lead_stage_from_quotation(quotation_id: str, new_status: str):
-    """Called when quotation status changes to sync lead stage"""
-    lead = await db.leads.find_one({"quotation_id": quotation_id}, {"_id": 0})
-    if not lead:
-        return
-    
-    stage_map = {
-        "sent": "quotation_sent",
-        "accepted": "won",
-        "declined": "lost"
-    }
-    
-    new_stage = stage_map.get(new_status)
-    if new_stage and lead.get("stage") != new_stage:
-        await db.leads.update_one(
-            {"quotation_id": quotation_id},
-            {"$set": {
-                "stage": new_stage,
-                "stage_changed_at": get_malaysia_time().isoformat(),
-                "updated_at": get_malaysia_time().isoformat()
-            }}
-        )
-
 
