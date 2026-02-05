@@ -90,6 +90,7 @@ const DataManagement = ({ user }) => {
   const [overrideForm, setOverrideForm] = useState({ totalAmount: 0, reason: "" });
   const [editPaidForm, setEditPaidForm] = useState({ billToName: "", billToAddress: "", totalAmount: 0, reason: "" });
   const [deletePaymentForm, setDeletePaymentForm] = useState({ reason: "" });
+  const [deleteInvoiceForm, setDeleteInvoiceForm] = useState({ reason: "", reuseNumber: true });
 
   // Credit Note Form states
   const [editCnForm, setEditCnForm] = useState({ companyName: "", reason: "", description: "", amount: 0, percentage: 4, editReason: "" });
