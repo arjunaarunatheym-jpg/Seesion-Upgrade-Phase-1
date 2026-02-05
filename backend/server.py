@@ -7575,6 +7575,255 @@ async def save_indemnity_sections(sections: List[dict], current_user: User = Dep
     
     return {"message": f"Saved {len(sections)} indemnity sections"}
 
+# Feedback Questions Management (Admin)
+@api_router.get("/settings/feedback-questions")
+async def get_feedback_questions():
+    """Get participant feedback questions (public - for participant form)"""
+    questions = await db.feedback_questions.find({}, {"_id": 0}).sort("order", 1).to_list(None)
+    if not questions:
+        # Return default Bahasa Malaysia questions
+        return [
+            {"id": "A1", "order": 1, "category": "KUALITI KURSUS", "question": "Penganjur menepati jangkaan saya", "type": "rating", "required": True},
+            {"id": "A2", "order": 2, "category": "KUALITI KURSUS", "question": "Kandungan kursus adalah jelas dan mudah difahami", "type": "rating", "required": True},
+            {"id": "A3", "order": 3, "category": "KUALITI KURSUS", "question": "Hasil pembelajaran adalah selari dengan objektif dan penyampaian kursus", "type": "rating", "required": True},
+            {"id": "A4", "order": 4, "category": "KUALITI KURSUS", "question": "Bahan pembelajaran sangat jelas, tepat, sangat mencukupi dan membantu", "type": "rating", "required": True},
+            {"id": "A5", "order": 5, "category": "KUALITI KURSUS", "question": "Tempoh kursus adalah mencukupi", "type": "rating", "required": True},
+            {"id": "A6", "order": 6, "category": "KUALITI KURSUS", "question": "Keseluruhannya, saya berpuas hati dengan kandungan kursus ini dan akan mencadangkan kursus ini kepada rakan sekerja saya", "type": "rating", "required": True},
+            {"id": "A7", "order": 7, "category": "KUALITI KURSUS", "question": "Cadangan atau Pandangan anda mengenai KUALITI KURSUS", "type": "text", "required": False},
+            {"id": "B1", "order": 8, "category": "PENYEDIA LATIHAN", "question": "Latihan telah disusun dan dilaksanakan dengan baik", "type": "rating", "required": True},
+            {"id": "B2", "order": 9, "category": "PENYEDIA LATIHAN", "question": "Persekitaran kelas adalah kondusif untuk pembelajaran dan membolehkan saya belajar", "type": "rating", "required": True},
+            {"id": "B3", "order": 10, "category": "PENYEDIA LATIHAN", "question": "Saya yakin dengan kebolehan saya mengaplikasikan kemahiran yang telah saya pelajari daripada latihan", "type": "rating", "required": True},
+            {"id": "B4", "order": 11, "category": "PENYEDIA LATIHAN", "question": "Secara keseluruhannya, saya berpuas hati dengan penganjur/penyedia latihan", "type": "rating", "required": True},
+            {"id": "B5", "order": 12, "category": "PENYEDIA LATIHAN", "question": "Cadangan atau Pandangan anda mengenai PENYEDIA LATIHAN / PENGANJUR / KESELURUHAN", "type": "text", "required": False},
+            {"id": "C1", "order": 13, "category": "TRAINER", "question": "Trainer dapat menarik minat peserta dan membuatkan saya berminat dengan subjek latihan", "type": "rating", "required": True},
+            {"id": "C2", "order": 14, "category": "TRAINER", "question": "Trainer mempunyai pemahaman yang mendalam tentang subjek yang diajar", "type": "rating", "required": True},
+            {"id": "C3", "order": 15, "category": "TRAINER", "question": "Trainer mempunyai ilmu terkini tentang perkembangan terkini dalam subjek", "type": "rating", "required": True},
+            {"id": "C4", "order": 16, "category": "TRAINER", "question": "Trainer menggunakan teknologi untuk menjadikan pembelajaran lebih menarik dan interaktif", "type": "rating", "required": True},
+            {"id": "C5", "order": 17, "category": "TRAINER", "question": "Secara keseluruhannya, saya berpuas hati dengan trainer", "type": "rating", "required": True},
+            {"id": "C6", "order": 18, "category": "TRAINER", "question": "Cadangan atau Pandangan anda mengenai TRAINER/PENCERAMAH/PAKAR", "type": "text", "required": False},
+            {"id": "D1", "order": 19, "category": "UMUM", "question": "Sila nyatakan pandangan atau cadangan anda bagi memperbaiki perkhidmatan kami", "type": "text", "required": False},
+        ]
+    return questions
+
+@api_router.post("/settings/feedback-questions")
+async def save_feedback_questions(questions: List[dict], current_user: User = Depends(get_current_user)):
+    """Save feedback questions (admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can manage feedback questions")
+    
+    # Clear existing and insert new
+    await db.feedback_questions.delete_many({})
+    
+    for idx, question in enumerate(questions):
+        question["order"] = idx + 1
+        question["updated_at"] = get_malaysia_time().isoformat()
+        if "id" not in question or not question["id"]:
+            question["id"] = f"Q{idx+1}"
+        await db.feedback_questions.insert_one(question)
+    
+    return {"message": f"Saved {len(questions)} feedback questions"}
+
+# Excel Export for Session Feedback Report
+@api_router.get("/sessions/{session_id}/export-feedback-excel")
+async def export_session_feedback_excel(session_id: str, current_user: User = Depends(get_current_user)):
+    """Export session feedback data as Excel file"""
+    if current_user.role not in ["admin", "coordinator", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins and coordinators can export feedback")
+    
+    # Get session details
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Get participants
+    participants = await db.participants.find({"session_id": session_id}, {"_id": 0}).to_list(None)
+    
+    # Get feedback questions
+    questions = await db.feedback_questions.find({}, {"_id": 0}).sort("order", 1).to_list(None)
+    if not questions:
+        # Use default questions
+        questions = [
+            {"id": "A1", "category": "KUALITI KURSUS", "question": "Penganjur menepati jangkaan saya", "type": "rating"},
+            {"id": "A2", "category": "KUALITI KURSUS", "question": "Kandungan kursus adalah jelas dan mudah difahami", "type": "rating"},
+            {"id": "A3", "category": "KUALITI KURSUS", "question": "Hasil pembelajaran adalah selari dengan objektif dan penyampaian kursus", "type": "rating"},
+            {"id": "A4", "category": "KUALITI KURSUS", "question": "Bahan pembelajaran sangat jelas, tepat, sangat mencukupi dan membantu", "type": "rating"},
+            {"id": "A5", "category": "KUALITI KURSUS", "question": "Tempoh kursus adalah mencukupi", "type": "rating"},
+            {"id": "A6", "category": "KUALITI KURSUS", "question": "Keseluruhannya, saya berpuas hati dengan kandungan kursus", "type": "rating"},
+            {"id": "A7", "category": "KUALITI KURSUS", "question": "Cadangan mengenai KUALITI KURSUS", "type": "text"},
+            {"id": "B1", "category": "PENYEDIA LATIHAN", "question": "Latihan telah disusun dan dilaksanakan dengan baik", "type": "rating"},
+            {"id": "B2", "category": "PENYEDIA LATIHAN", "question": "Persekitaran kelas kondusif", "type": "rating"},
+            {"id": "B3", "category": "PENYEDIA LATIHAN", "question": "Yakin mengaplikasikan kemahiran", "type": "rating"},
+            {"id": "B4", "category": "PENYEDIA LATIHAN", "question": "Berpuas hati dengan penganjur", "type": "rating"},
+            {"id": "B5", "category": "PENYEDIA LATIHAN", "question": "Cadangan mengenai PENYEDIA LATIHAN", "type": "text"},
+            {"id": "C1", "category": "TRAINER", "question": "Trainer menarik minat peserta", "type": "rating"},
+            {"id": "C2", "category": "TRAINER", "question": "Trainer mempunyai pemahaman mendalam", "type": "rating"},
+            {"id": "C3", "category": "TRAINER", "question": "Trainer mempunyai ilmu terkini", "type": "rating"},
+            {"id": "C4", "category": "TRAINER", "question": "Trainer menggunakan teknologi", "type": "rating"},
+            {"id": "C5", "category": "TRAINER", "question": "Berpuas hati dengan trainer", "type": "rating"},
+            {"id": "C6", "category": "TRAINER", "question": "Cadangan mengenai TRAINER", "type": "text"},
+            {"id": "D1", "category": "UMUM", "question": "Pandangan untuk memperbaiki perkhidmatan", "type": "text"},
+        ]
+    
+    # Get feedback submissions
+    feedbacks = await db.course_feedback.find({"session_id": session_id}, {"_id": 0}).to_list(None)
+    feedback_by_participant = {f.get('participant_id'): f for f in feedbacks}
+    
+    # Get test results
+    test_results = await db.test_results.find({"session_id": session_id}, {"_id": 0}).to_list(None)
+    pre_tests = {r['participant_id']: r for r in test_results if r.get('test_type') == 'pre'}
+    post_tests = {r['participant_id']: r for r in test_results if r.get('test_type') == 'post'}
+    
+    # Get attendance
+    attendance_records = await db.attendance.find({"session_id": session_id}, {"_id": 0}).to_list(None)
+    
+    # Create Excel workbook
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    
+    wb = Workbook()
+    
+    # Sheet 1: Session Info
+    ws_info = wb.active
+    ws_info.title = "Session Info"
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    
+    info_data = [
+        ["FEEDBACK REPORT"],
+        [""],
+        ["Company", session.get("company_name", "N/A")],
+        ["Program", session.get("program_name", "N/A")],
+        ["Trainer", session.get("trainer_name", "N/A")],
+        ["Coordinator", session.get("coordinator_name", "N/A")],
+        ["Venue", session.get("venue_name", "N/A")],
+        ["Start Date", session.get("start_date", "N/A")],
+        ["End Date", session.get("end_date", "N/A")],
+        ["Total Participants", len(participants)],
+    ]
+    for row in info_data:
+        ws_info.append(row)
+    ws_info['A1'].font = Font(bold=True, size=16)
+    
+    # Sheet 2: Participants & Test Results
+    ws_participants = wb.create_sheet("Participants")
+    participant_headers = ["No", "Nama Peserta", "IC Number", "Email", "Pre-Test Score", "Pre-Test %", "Pre-Test Status", "Post-Test Score", "Post-Test %", "Post-Test Status", "Remark"]
+    ws_participants.append(participant_headers)
+    for cell in ws_participants[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+    
+    for idx, p in enumerate(participants, 1):
+        pre = pre_tests.get(p['id'], {})
+        post = post_tests.get(p['id'], {})
+        
+        pre_score = f"{pre.get('correct_answers', 0)}/{pre.get('total_questions', 0)}" if pre else "N/A"
+        pre_pct = round((pre.get('correct_answers', 0) / pre.get('total_questions', 1)) * 100) if pre and pre.get('total_questions') else 0
+        pre_status = "Pass" if pre.get('passed') else "Fail" if pre else "N/A"
+        
+        post_score = f"{post.get('correct_answers', 0)}/{post.get('total_questions', 0)}" if post else "N/A"
+        post_pct = round((post.get('correct_answers', 0) / post.get('total_questions', 1)) * 100) if post and post.get('total_questions') else 0
+        post_status = "Pass" if post.get('passed') else "Fail" if post else "N/A"
+        
+        remark = "Improved (Pass)" if post.get('passed') and (post_pct > pre_pct or post.get('passed')) else "No Change" if pre.get('passed') == post.get('passed') else "Needs Improvement"
+        
+        ws_participants.append([
+            idx,
+            p.get('full_name', 'N/A'),
+            p.get('ic_number', 'N/A'),
+            p.get('email', 'N/A'),
+            pre_score,
+            f"{pre_pct}%",
+            pre_status,
+            post_score,
+            f"{post_pct}%",
+            post_status,
+            remark
+        ])
+    
+    # Sheet 3: Feedback Responses
+    ws_feedback = wb.create_sheet("Feedback Responses")
+    # Build headers: Participant Name + all questions
+    rating_questions = [q for q in questions if q.get('type') == 'rating']
+    text_questions = [q for q in questions if q.get('type') == 'text']
+    
+    fb_headers = ["No", "Nama Peserta"] + [f"{q['id']}: {q['question'][:50]}" for q in rating_questions] + [f"{q['id']}: {q['question'][:50]}" for q in text_questions]
+    ws_feedback.append(fb_headers)
+    for cell in ws_feedback[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(wrap_text=True)
+    
+    for idx, p in enumerate(participants, 1):
+        fb = feedback_by_participant.get(p['id'], {})
+        responses = fb.get('responses', [])
+        response_map = {r.get('question_id', r.get('question', '')): r.get('answer') for r in responses}
+        
+        row_data = [idx, p.get('full_name', 'N/A')]
+        # Add rating responses
+        for q in rating_questions:
+            val = response_map.get(q['id'], response_map.get(q['question'], ''))
+            row_data.append(val if val else '')
+        # Add text responses
+        for q in text_questions:
+            val = response_map.get(q['id'], response_map.get(q['question'], ''))
+            row_data.append(val if val else '')
+        
+        ws_feedback.append(row_data)
+    
+    # Sheet 4: Summary Statistics
+    ws_summary = wb.create_sheet("Summary")
+    ws_summary.append(["FEEDBACK SUMMARY"])
+    ws_summary['A1'].font = Font(bold=True, size=14)
+    ws_summary.append([])
+    
+    # Calculate averages for rating questions
+    ws_summary.append(["Question ID", "Category", "Question", "Average Score", "Response Count"])
+    for cell in ws_summary[3]:
+        cell.fill = header_fill
+        cell.font = header_font
+    
+    for q in rating_questions:
+        scores = []
+        for fb in feedbacks:
+            for r in fb.get('responses', []):
+                if r.get('question_id') == q['id'] or r.get('question') == q['question']:
+                    if isinstance(r.get('answer'), (int, float)):
+                        scores.append(r['answer'])
+        avg = round(sum(scores) / len(scores), 2) if scores else 0
+        ws_summary.append([q['id'], q.get('category', ''), q['question'][:60], avg, len(scores)])
+    
+    # Adjust column widths
+    for ws in wb.worksheets:
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # Save to bytes
+    excel_buffer = io.BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    
+    # Generate filename
+    company_short = (session.get("company_name", "Session") or "Session").replace(" ", "_")[:20]
+    date_str = session.get("start_date", "")[:10].replace("-", "") if session.get("start_date") else ""
+    filename = f"FEEDBACK_REPORT_{company_short}_{date_str}.xlsx"
+    
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        excel_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
 # Upload Certificate for Participant
 @api_router.post("/certificates/upload/{session_id}/{participant_id}")
 async def upload_participant_certificate(
