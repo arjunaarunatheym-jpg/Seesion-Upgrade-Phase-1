@@ -81,6 +81,12 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
   - Quick Stats Dashboard: Total leads, active, conversion rate, avg deal size, avg days to close, won value
   - Follow-up Reminders: Overdue alert and upcoming this week
   - Pipeline Breakdown badges by stage
+  - **Lead → Quotation Flow:** "Quote" button auto-creates client from lead data
+  - Quotation form pre-fills with client, links quotation to lead
+  - Stage auto-syncs when quotation status changes (sent → quotation_sent, accepted → won, declined → lost)
+  - **Admin Marketing Leads Overview:** New tab showing all marketing staff performance
+  - Expandable staff rows to view their leads
+  - Compare active, won, lost, conversion rate, won value by staff
 
 ### In Progress
 - None
