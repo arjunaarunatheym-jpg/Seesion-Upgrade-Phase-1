@@ -572,6 +572,139 @@ const Settings = () => {
         </CardContent>
       </Card>
 
+      {/* Feedback Questions Management */}
+      <Card data-testid="feedback-questions-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="w-5 h-5" />
+            Soalan Maklum Balas Peserta
+          </CardTitle>
+          <CardDescription>
+            Urus soalan maklum balas untuk peserta. Skala 1-5 untuk penilaian.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {feedbackQuestions.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>No questions defined yet.</p>
+              <p className="text-sm">Add questions to customize the feedback form.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {feedbackQuestions.map((question, index) => (
+                <div 
+                  key={question.id || index} 
+                  className="border rounded-lg p-3 bg-gray-50"
+                  data-testid={`feedback-question-${index}`}
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleMoveFeedbackQuestion(index, 'up')}
+                        disabled={index === 0}
+                        className="h-6 w-6 p-0"
+                        title="Move up"
+                      >
+                        <ChevronUp className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleMoveFeedbackQuestion(index, 'down')}
+                        disabled={index === feedbackQuestions.length - 1}
+                        className="h-6 w-6 p-0"
+                        title="Move down"
+                      >
+                        <ChevronDown className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    
+                    <div className="flex-1 space-y-2">
+                      <div className="flex gap-2">
+                        <Input
+                          value={question.id}
+                          onChange={(e) => handleFeedbackQuestionChange(index, 'id', e.target.value)}
+                          placeholder="ID (e.g., A1)"
+                          className="w-20"
+                          data-testid={`feedback-id-${index}`}
+                        />
+                        <Select
+                          value={question.category}
+                          onValueChange={(value) => handleFeedbackQuestionChange(index, 'category', value)}
+                        >
+                          <SelectTrigger className="w-48" data-testid={`feedback-category-${index}`}>
+                            <SelectValue placeholder="Category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="KUALITI KURSUS">A. KUALITI KURSUS</SelectItem>
+                            <SelectItem value="PENYEDIA LATIHAN">B. PENYEDIA LATIHAN</SelectItem>
+                            <SelectItem value="TRAINER">C. TRAINER</SelectItem>
+                            <SelectItem value="UMUM">D. UMUM</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={question.type}
+                          onValueChange={(value) => handleFeedbackQuestionChange(index, 'type', value)}
+                        >
+                          <SelectTrigger className="w-32" data-testid={`feedback-type-${index}`}>
+                            <SelectValue placeholder="Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="rating">Rating (1-5)</SelectItem>
+                            <SelectItem value="text">Text</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Input
+                        value={question.question}
+                        onChange={(e) => handleFeedbackQuestionChange(index, 'question', e.target.value)}
+                        placeholder="Soalan (e.g., Penganjur menepati jangkaan saya)"
+                        className="w-full"
+                        data-testid={`feedback-question-text-${index}`}
+                      />
+                    </div>
+                    
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveFeedbackQuestion(index)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      title="Remove question"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={handleAddFeedbackQuestion}
+              data-testid="add-feedback-question-btn"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Question
+            </Button>
+            {feedbackQuestions.length > 0 && (
+              <Button
+                onClick={handleSaveFeedbackQuestions}
+                disabled={savingFeedback}
+                data-testid="save-feedback-questions-btn"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {savingFeedback ? "Saving..." : "Save Questions"}
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Save Button */}
       <div className="flex justify-end">
         <Button
