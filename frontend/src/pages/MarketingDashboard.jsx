@@ -91,6 +91,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
   const [leads, setLeads] = useState([]);
   const [pipelineStats, setPipelineStats] = useState({});
   const [reminders, setReminders] = useState({ overdue: [], upcoming: [], overdue_count: 0, upcoming_count: 0 });
+  const [currentLeadId, setCurrentLeadId] = useState(null); // Track lead when creating quotation from lead
 
   useEffect(() => {
     loadData();
