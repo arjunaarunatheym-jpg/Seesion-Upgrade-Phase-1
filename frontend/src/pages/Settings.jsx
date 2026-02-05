@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Upload, Save, Image as ImageIcon, Palette, FileText, FileSignature, Plus, Trash2, GripVertical, ChevronUp, ChevronDown } from "lucide-react";
+import { Upload, Save, Image as ImageIcon, Palette, FileText, FileSignature, Plus, Trash2, GripVertical, ChevronUp, ChevronDown, MessageSquare } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Settings = () => {
   const [settings, setSettings] = useState(null);
@@ -20,6 +21,10 @@ const Settings = () => {
   // Indemnity form sections state
   const [indemnitySections, setIndemnitySections] = useState([]);
   const [savingIndemnity, setSavingIndemnity] = useState(false);
+  
+  // Feedback questions state
+  const [feedbackQuestions, setFeedbackQuestions] = useState([]);
+  const [savingFeedback, setSavingFeedback] = useState(false);
 
   const [formData, setFormData] = useState({
     company_name: "",
@@ -32,6 +37,7 @@ const Settings = () => {
   useEffect(() => {
     loadSettings();
     loadIndemnitySections();
+    loadFeedbackQuestions();
   }, []);
 
   const loadSettings = async () => {
