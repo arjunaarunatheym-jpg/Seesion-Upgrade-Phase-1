@@ -1232,6 +1232,8 @@ const DataManagement = ({ user }) => {
                 setEditPaidDialog={setEditPaidDialog}
                 setVoidForm={setVoidForm}
                 setVoidDialog={setVoidDialog}
+                setDeleteForm={setDeleteInvoiceForm}
+                setDeleteDialog={setDeleteInvoiceDialog}
               />
             </TabsContent>
             <TabsContent value="creditnote-management">
