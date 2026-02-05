@@ -584,6 +584,12 @@ const MarketingDashboard = ({ user, onLogout }) => {
             <TabsTrigger value="dashboard" data-testid="dashboard-tab" className="text-xs sm:text-sm px-2 sm:px-3">
               <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Dashboard</span><span className="sm:hidden">Home</span>
             </TabsTrigger>
+            <TabsTrigger value="leads" data-testid="leads-tab" className="text-xs sm:text-sm px-2 sm:px-3">
+              <Target className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Leads
+              {reminders.overdue_count > 0 && (
+                <Badge variant="destructive" className="ml-1 text-xs px-1">{reminders.overdue_count}</Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="clients" data-testid="clients-tab" className="text-xs sm:text-sm px-2 sm:px-3">
               <Building className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Clients
             </TabsTrigger>
@@ -597,6 +603,15 @@ const MarketingDashboard = ({ user, onLogout }) => {
 
           {/* Dashboard Tab */}
           <TabsContent value="dashboard">
+            {/* Pipeline Stats Summary */}
+            <div className="mb-6">
+              <PipelineStatsCard
+                stats={pipelineStats}
+                reminders={reminders}
+                formatCurrency={formatCurrency}
+                onViewReminders={() => setActiveTab('leads')}
+              />
+            </div>
             <DashboardTab
               stats={stats}
               quotations={quotations}
@@ -605,6 +620,16 @@ const MarketingDashboard = ({ user, onLogout }) => {
               onNewQuotation={() => { resetQuotationForm(); setEditingQuotation(null); setShowQuotationDialog(true); }}
               onAddClient={() => { setEditingClient(null); setClientForm({ company_name: '', company_address: '', contact_person: '', contact_phone: '', contact_email: '', notes: '' }); setShowClientDialog(true); }}
               onViewQuotation={viewQuotationDetails}
+            />
+          </TabsContent>
+
+          {/* Leads Tab */}
+          <TabsContent value="leads">
+            <LeadPipelineTab
+              leads={leads}
+              onRefresh={loadData}
+              formatCurrency={formatCurrency}
+              isAdmin={false}
             />
           </TabsContent>
 
