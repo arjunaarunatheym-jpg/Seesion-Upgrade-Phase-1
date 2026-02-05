@@ -278,6 +278,23 @@ const DataManagement = ({ user }) => {
     }
   };
 
+  const handleDeleteInvoice = async () => {
+    try {
+      await axiosInstance.delete(`/finance/invoices/${deleteInvoiceDialog.invoice.id}`, {
+        data: { 
+          reason: deleteInvoiceForm.reason,
+          reuse_number: deleteInvoiceForm.reuseNumber
+        }
+      });
+      toast.success("Invoice deleted successfully and synced with session");
+      setDeleteInvoiceDialog({ open: false, invoice: null });
+      setDeleteInvoiceForm({ reason: "", reuseNumber: true });
+      loadInvoices();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to delete invoice");
+    }
+  };
+
   // Payment Management Actions
   const handleDeletePayment = async () => {
     try {
