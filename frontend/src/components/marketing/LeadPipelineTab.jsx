@@ -525,11 +525,26 @@ const LeadPipelineTab = ({
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-            <Button onClick={handleSave} data-testid="save-lead-btn">
-              {editingLead ? "Update" : "Create"} Lead
-            </Button>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {editingLead && !editingLead.quotation_id && onCreateQuotation && (
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  handleCreateQuotation(editingLead);
+                  setShowDialog(false);
+                }}
+                className="w-full sm:w-auto bg-blue-50 hover:bg-blue-100 text-blue-700"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Create Quotation
+              </Button>
+            )}
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
+              <Button onClick={handleSave} data-testid="save-lead-btn">
+                {editingLead ? "Update" : "Create"} Lead
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
