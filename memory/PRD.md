@@ -35,7 +35,7 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - `/api/marketing/quotations/{id}/download-pdf` - PDF generation with rich text
 - `/api/settings/indemnity-sections` - Admin-managed indemnity content
 
-## Current Status (Jan 2026)
+## Current Status (Feb 2026)
 
 ### Completed
 - ✅ Full frontend refactoring (all dashboard components modularized)
@@ -53,6 +53,15 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - ✅ Coordinator Dashboard reporting workflow consolidation (Jan 30, 2026)
   - Reports tab shows pending and submitted reports
   - Clicking pending report navigates to Analytics tab with session loaded
+- ✅ Participant Feedback System (Soalan Maklum Balas) - Feb 5, 2026
+  - Admin UI in Settings to add/edit/delete/reorder feedback questions
+  - Questions organized by category: A. KUALITI KURSUS, B. PENYEDIA LATIHAN, C. TRAINER, D. UMUM
+  - Rating (1-5) and Text question types
+  - Default 19 questions in Bahasa Malaysia
+- ✅ Excel Feedback Export - Feb 5, 2026
+  - Export button in Coordinator Analytics tab
+  - Generates XLSX with 4 sheets: Session Info, Participants & Test Results, Feedback Responses, Summary
+  - Includes pre/post test scores, feedback ratings, and averages
 
 ### In Progress
 - None
