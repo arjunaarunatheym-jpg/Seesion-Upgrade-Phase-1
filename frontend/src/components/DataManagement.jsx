@@ -61,6 +61,7 @@ const DataManagement = ({ user }) => {
   const [backdateDialog, setBackdateDialog] = useState({ open: false, invoice: null });
   const [overrideDialog, setOverrideDialog] = useState({ open: false, invoice: null });
   const [editPaidDialog, setEditPaidDialog] = useState({ open: false, invoice: null });
+  const [deleteInvoiceDialog, setDeleteInvoiceDialog] = useState({ open: false, invoice: null });
 
   // Payment Management State
   const [payments, setPayments] = useState([]);
