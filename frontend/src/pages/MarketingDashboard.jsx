@@ -86,6 +86,11 @@ const MarketingDashboard = ({ user, onLogout }) => {
   
   // PDF download loading state
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  
+  // Lead Pipeline state
+  const [leads, setLeads] = useState([]);
+  const [pipelineStats, setPipelineStats] = useState({});
+  const [reminders, setReminders] = useState({ overdue: [], upcoming: [], overdue_count: 0, upcoming_count: 0 });
 
   useEffect(() => {
     loadData();
@@ -94,14 +99,17 @@ const MarketingDashboard = ({ user, onLogout }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statsRes, clientsRes, quotationsRes, programmesRes, termsRes, settingsRes, descItemsRes] = await Promise.all([
+      const [statsRes, clientsRes, quotationsRes, programmesRes, termsRes, settingsRes, descItemsRes, leadsRes, pipelineStatsRes, remindersRes] = await Promise.all([
         axiosInstance.get('/marketing/stats'),
         axiosInstance.get('/marketing/clients'),
         axiosInstance.get('/marketing/quotations'),
         axiosInstance.get('/marketing/programmes'),
         axiosInstance.get('/marketing/default-terms'),
         axiosInstance.get('/finance/company-settings'),
-        axiosInstance.get('/marketing/description-items')
+        axiosInstance.get('/marketing/description-items'),
+        axiosInstance.get('/marketing/leads').catch(() => ({ data: [] })),
+        axiosInstance.get('/marketing/stats/pipeline').catch(() => ({ data: {} })),
+        axiosInstance.get('/marketing/leads/reminders/pending').catch(() => ({ data: { overdue: [], upcoming: [], overdue_count: 0, upcoming_count: 0 } })),
       ]);
       
       setStats(statsRes.data || {});
@@ -111,6 +119,9 @@ const MarketingDashboard = ({ user, onLogout }) => {
       setDefaultTerms(termsRes.data?.terms || '');
       setCompanySettings(settingsRes.data);
       setDescriptionItems(descItemsRes.data || []);
+      setLeads(leadsRes.data || []);
+      setPipelineStats(pipelineStatsRes.data || {});
+      setReminders(remindersRes.data || { overdue: [], upcoming: [], overdue_count: 0, upcoming_count: 0 });
     } catch (error) {
       console.error('Failed to load data:', error);
       toast.error('Failed to load data');
