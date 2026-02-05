@@ -749,8 +749,20 @@ async def create_lead(lead_data: LeadCreate, current_user: User = Depends(get_cu
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     
+    # Check for duplicate company name for this user's leads
+    existing = await db.leads.find_one({
+        "company_name": {"$regex": f"^{lead_data.company_name.strip()}$", "$options": "i"},
+        "created_by": current_user.id,
+        "stage": {"$nin": ["won", "lost"]}  # Allow if previous lead was closed
+    })
+    if existing:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"You already have an active lead for '{lead_data.company_name}'. Please update the existing lead instead."
+        )
+    
     lead = Lead(
-        company_name=lead_data.company_name,
+        company_name=lead_data.company_name.strip(),
         contact_person=lead_data.contact_person,
         contact_email=lead_data.contact_email,
         contact_phone=lead_data.contact_phone,
