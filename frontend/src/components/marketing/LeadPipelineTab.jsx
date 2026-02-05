@@ -144,6 +144,30 @@ const LeadPipelineTab = ({
     }
   };
 
+  const handleCreateQuotation = async (lead) => {
+    try {
+      // Call backend to auto-create client and get client data
+      const response = await axiosInstance.post(`/marketing/leads/${lead.id}/create-quotation`);
+      
+      if (response.data.already_exists) {
+        toast.info("Lead already has a quotation");
+      }
+      
+      // Call the parent callback to open quotation form with client pre-filled
+      if (onCreateQuotation) {
+        onCreateQuotation({
+          client_id: response.data.client_id,
+          client: response.data.client,
+          lead_id: lead.id
+        });
+      }
+      
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to prepare quotation");
+    }
+  };
+
   // Filter leads
   const filteredLeads = leads.filter((lead) => {
     const matchesSearch = 
