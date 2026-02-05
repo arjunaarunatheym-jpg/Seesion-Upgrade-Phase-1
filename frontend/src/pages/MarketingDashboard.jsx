@@ -207,8 +207,17 @@ const MarketingDashboard = ({ user, onLogout }) => {
           ...quotationForm,
           terms_conditions: quotationForm.terms_conditions || defaultTerms
         };
-        await axiosInstance.post('/marketing/quotations', payload);
+        const response = await axiosInstance.post('/marketing/quotations', payload);
         toast.success('Quotation created successfully');
+        
+        // If this quotation was created from a lead, link it back
+        if (currentLeadId && response.data?.quotation?.id) {
+          try {
+            await axiosInstance.put(`/marketing/leads/${currentLeadId}/link-quotation?quotation_id=${response.data.quotation.id}`);
+          } catch (linkError) {
+            console.warn('Failed to link quotation to lead:', linkError);
+          }
+        }
       }
       
       setShowQuotationDialog(false);
