@@ -1862,6 +1862,13 @@ const AdminDashboard = ({ user, onLogout }) => {
             />
           </TabsContent>
 
+          {/* Marketing Leads Tab - Admin Overview */}
+          <TabsContent value="marketing-leads">
+            <AdminMarketingOverview
+              formatCurrency={(val) => `RM ${(val || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            />
+          </TabsContent>
+
           {/* My Payroll Tab */}
           <TabsContent value="my-payroll">
             <MyPayroll />
