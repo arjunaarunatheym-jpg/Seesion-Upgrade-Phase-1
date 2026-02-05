@@ -258,6 +258,20 @@ const LeadPipelineTab = ({
             </SelectContent>
           </Select>
           
+          {/* Create Quotation Button - show for active leads without quotation */}
+          {!lead.quotation_id && onCreateQuotation && (
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => handleCreateQuotation(lead)}
+              className="h-7 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700"
+              title="Create Quotation"
+            >
+              <FileText className="w-3 h-3 mr-1" />
+              Quote
+            </Button>
+          )}
+          
           {lead.stage === "won" && !lead.client_id && (
             <Button 
               size="sm" 
@@ -269,6 +283,16 @@ const LeadPipelineTab = ({
               To Client
             </Button>
           )}
+        </div>
+      )}
+      
+      {/* Show quotation link if exists */}
+      {lead.quotation_id && (
+        <div className="mt-2 pt-2 border-t">
+          <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
+            <FileText className="w-3 h-3 mr-1" />
+            Quotation linked
+          </Badge>
         </div>
       )}
     </div>
