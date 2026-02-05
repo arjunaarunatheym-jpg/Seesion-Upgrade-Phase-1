@@ -14,12 +14,14 @@ import {
   DollarSign, Calendar, TrendingUp, LogOut, RefreshCw, Wallet,
   Building, Clock, CheckCircle, FileText, Search, Eye, Download,
   Users, ChevronDown, ChevronRight, BarChart3, Plus, Edit, Trash2,
-  Send, FileCheck, XCircle, Phone, Mail, MapPin, User, Printer
+  Send, FileCheck, XCircle, Phone, Mail, MapPin, User, Printer, Target
 } from 'lucide-react';
 import MyEarnings from '../components/MyEarnings';
 import { DashboardTab } from '../components/marketing/DashboardTab';
 import { ClientsTab } from '../components/marketing/ClientsTab';
 import { QuotationsTab } from '../components/marketing/QuotationsTab';
+import { LeadPipelineTab } from '../components/marketing/LeadPipelineTab';
+import { PipelineStatsCard } from '../components/marketing/PipelineStatsCard';
 
 const MarketingDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
