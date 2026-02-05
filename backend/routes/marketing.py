@@ -616,3 +616,420 @@ async def update_pdf_templates(template_data: dict, current_user: User = Depends
         upsert=True
     )
     return {"message": "Templates updated"}
+
+
+# ==================== LEAD PIPELINE ====================
+
+class Lead(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    company_name: str
+    contact_person: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    source: Optional[str] = None  # referral, website, cold_call, event, other
+    stage: str = "inquiry"  # inquiry, contacted, quotation_sent, negotiating, won, lost
+    notes: Optional[str] = None
+    expected_value: float = 0
+    follow_up_date: Optional[str] = None  # ISO date string
+    lost_reason: Optional[str] = None
+    quotation_id: Optional[str] = None
+    client_id: Optional[str] = None  # Link to client if converted
+    created_by: str  # Marketing user ID
+    created_by_name: Optional[str] = None
+    created_at: datetime = Field(default_factory=get_malaysia_time)
+    updated_at: datetime = Field(default_factory=get_malaysia_time)
+    stage_changed_at: datetime = Field(default_factory=get_malaysia_time)
+
+
+class LeadCreate(BaseModel):
+    company_name: str
+    contact_person: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    source: Optional[str] = None
+    notes: Optional[str] = None
+    expected_value: float = 0
+    follow_up_date: Optional[str] = None
+
+
+class LeadUpdate(BaseModel):
+    company_name: Optional[str] = None
+    contact_person: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    source: Optional[str] = None
+    stage: Optional[str] = None
+    notes: Optional[str] = None
+    expected_value: Optional[float] = None
+    follow_up_date: Optional[str] = None
+    lost_reason: Optional[str] = None
+    quotation_id: Optional[str] = None
+    client_id: Optional[str] = None
+
+
+@router.get("/leads")
+async def get_leads(
+    stage: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get leads - Marketing sees own, Admin sees all"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    query = {}
+    
+    # Marketing users only see their own leads
+    if current_user.role not in ["admin", "super_admin"]:
+        query["created_by"] = current_user.id
+    
+    if stage:
+        query["stage"] = stage
+    
+    leads = await db.leads.find(query, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    return leads
+
+
+@router.get("/leads/{lead_id}")
+async def get_lead(lead_id: str, current_user: User = Depends(get_current_user)):
+    """Get single lead"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check ownership for non-admins
+    if current_user.role not in ["admin", "super_admin"] and lead.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return lead
+
+
+@router.post("/leads")
+async def create_lead(lead_data: LeadCreate, current_user: User = Depends(get_current_user)):
+    """Create new lead"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    lead = Lead(
+        company_name=lead_data.company_name,
+        contact_person=lead_data.contact_person,
+        contact_email=lead_data.contact_email,
+        contact_phone=lead_data.contact_phone,
+        source=lead_data.source,
+        notes=lead_data.notes,
+        expected_value=lead_data.expected_value,
+        follow_up_date=lead_data.follow_up_date,
+        created_by=current_user.id,
+        created_by_name=current_user.full_name
+    )
+    
+    doc = lead.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    doc["updated_at"] = doc["updated_at"].isoformat()
+    doc["stage_changed_at"] = doc["stage_changed_at"].isoformat()
+    
+    await db.leads.insert_one(doc)
+    return lead
+
+
+@router.put("/leads/{lead_id}")
+async def update_lead(lead_id: str, lead_data: LeadUpdate, current_user: User = Depends(get_current_user)):
+    """Update lead"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check ownership for non-admins
+    if current_user.role not in ["admin", "super_admin"] and lead.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    update_data = {k: v for k, v in lead_data.model_dump().items() if v is not None}
+    update_data["updated_at"] = get_malaysia_time().isoformat()
+    
+    # Track stage changes
+    if "stage" in update_data and update_data["stage"] != lead.get("stage"):
+        update_data["stage_changed_at"] = get_malaysia_time().isoformat()
+    
+    await db.leads.update_one({"id": lead_id}, {"$set": update_data})
+    
+    updated_lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    return updated_lead
+
+
+@router.delete("/leads/{lead_id}")
+async def delete_lead(lead_id: str, current_user: User = Depends(get_current_user)):
+    """Delete lead"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check ownership for non-admins
+    if current_user.role not in ["admin", "super_admin"] and lead.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    await db.leads.delete_one({"id": lead_id})
+    return {"message": "Lead deleted"}
+
+
+@router.put("/leads/{lead_id}/stage")
+async def update_lead_stage(lead_id: str, stage: str, current_user: User = Depends(get_current_user)):
+    """Quick update lead stage (for drag-drop)"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    valid_stages = ["inquiry", "contacted", "quotation_sent", "negotiating", "won", "lost"]
+    if stage not in valid_stages:
+        raise HTTPException(status_code=400, detail=f"Invalid stage. Must be one of: {valid_stages}")
+    
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check ownership for non-admins
+    if current_user.role not in ["admin", "super_admin"] and lead.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    await db.leads.update_one(
+        {"id": lead_id},
+        {"$set": {
+            "stage": stage,
+            "updated_at": get_malaysia_time().isoformat(),
+            "stage_changed_at": get_malaysia_time().isoformat()
+        }}
+    )
+    
+    return {"message": f"Lead moved to {stage}"}
+
+
+@router.post("/leads/{lead_id}/convert-to-client")
+async def convert_lead_to_client(lead_id: str, current_user: User = Depends(get_current_user)):
+    """Convert a lead to a client"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check ownership for non-admins
+    if current_user.role not in ["admin", "super_admin"] and lead.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Check if already converted
+    if lead.get("client_id"):
+        raise HTTPException(status_code=400, detail="Lead already converted to client")
+    
+    # Create client from lead
+    client = MarketingClient(
+        company_name=lead["company_name"],
+        contact_person=lead.get("contact_person"),
+        contact_email=lead.get("contact_email"),
+        contact_phone=lead.get("contact_phone"),
+        notes=f"Converted from lead. Original notes: {lead.get('notes', '')}",
+        created_by=current_user.id
+    )
+    
+    doc = client.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.marketing_clients.insert_one(doc)
+    
+    # Update lead with client_id and mark as won
+    await db.leads.update_one(
+        {"id": lead_id},
+        {"$set": {
+            "client_id": client.id,
+            "stage": "won",
+            "updated_at": get_malaysia_time().isoformat(),
+            "stage_changed_at": get_malaysia_time().isoformat()
+        }}
+    )
+    
+    return {"message": "Lead converted to client", "client_id": client.id}
+
+
+# ==================== FOLLOW-UP REMINDERS ====================
+
+@router.get("/leads/reminders/pending")
+async def get_pending_reminders(current_user: User = Depends(get_current_user)):
+    """Get leads with overdue or upcoming follow-ups"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    today = get_malaysia_time().strftime("%Y-%m-%d")
+    
+    query = {
+        "follow_up_date": {"$ne": None, "$lte": today},
+        "stage": {"$nin": ["won", "lost"]}  # Only active leads
+    }
+    
+    # Marketing users only see their own
+    if current_user.role not in ["admin", "super_admin"]:
+        query["created_by"] = current_user.id
+    
+    overdue = await db.leads.find(query, {"_id": 0}).sort("follow_up_date", 1).to_list(100)
+    
+    # Also get upcoming (next 7 days)
+    from datetime import timedelta
+    next_week = (get_malaysia_time() + timedelta(days=7)).strftime("%Y-%m-%d")
+    
+    upcoming_query = {
+        "follow_up_date": {"$gt": today, "$lte": next_week},
+        "stage": {"$nin": ["won", "lost"]}
+    }
+    if current_user.role not in ["admin", "super_admin"]:
+        upcoming_query["created_by"] = current_user.id
+    
+    upcoming = await db.leads.find(upcoming_query, {"_id": 0}).sort("follow_up_date", 1).to_list(100)
+    
+    return {
+        "overdue": overdue,
+        "upcoming": upcoming,
+        "overdue_count": len(overdue),
+        "upcoming_count": len(upcoming)
+    }
+
+
+# ==================== QUICK STATS ====================
+
+@router.get("/stats/pipeline")
+async def get_pipeline_stats(current_user: User = Depends(get_current_user)):
+    """Get lead pipeline statistics - Marketing sees own, Admin sees all"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    query = {}
+    if current_user.role not in ["admin", "super_admin"]:
+        query["created_by"] = current_user.id
+    
+    # Get all leads for this user
+    leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
+    
+    # Count by stage
+    stage_counts = {
+        "inquiry": 0,
+        "contacted": 0,
+        "quotation_sent": 0,
+        "negotiating": 0,
+        "won": 0,
+        "lost": 0
+    }
+    
+    total_value = 0
+    won_value = 0
+    won_count = 0
+    total_days_to_close = 0
+    
+    for lead in leads:
+        stage = lead.get("stage", "inquiry")
+        stage_counts[stage] = stage_counts.get(stage, 0) + 1
+        total_value += lead.get("expected_value", 0)
+        
+        if stage == "won":
+            won_value += lead.get("expected_value", 0)
+            won_count += 1
+            # Calculate days to close
+            if lead.get("created_at") and lead.get("stage_changed_at"):
+                try:
+                    created = datetime.fromisoformat(lead["created_at"].replace("Z", "+00:00")) if isinstance(lead["created_at"], str) else lead["created_at"]
+                    closed = datetime.fromisoformat(lead["stage_changed_at"].replace("Z", "+00:00")) if isinstance(lead["stage_changed_at"], str) else lead["stage_changed_at"]
+                    days = (closed - created).days
+                    total_days_to_close += max(days, 0)
+                except:
+                    pass
+    
+    total_leads = len(leads)
+    closed_leads = stage_counts["won"] + stage_counts["lost"]
+    
+    # Calculate conversion rate
+    conversion_rate = round((won_count / closed_leads * 100), 1) if closed_leads > 0 else 0
+    
+    # Average deal size
+    avg_deal_size = round(won_value / won_count, 2) if won_count > 0 else 0
+    
+    # Average days to close
+    avg_days_to_close = round(total_days_to_close / won_count, 1) if won_count > 0 else 0
+    
+    return {
+        "stage_counts": stage_counts,
+        "total_leads": total_leads,
+        "total_pipeline_value": total_value,
+        "won_value": won_value,
+        "conversion_rate": conversion_rate,
+        "avg_deal_size": avg_deal_size,
+        "avg_days_to_close": avg_days_to_close,
+        "active_leads": total_leads - closed_leads
+    }
+
+
+@router.get("/stats/by-source")
+async def get_stats_by_source(current_user: User = Depends(get_current_user)):
+    """Get lead stats grouped by source"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    query = {}
+    if current_user.role not in ["admin", "super_admin"]:
+        query["created_by"] = current_user.id
+    
+    leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
+    
+    source_stats = {}
+    for lead in leads:
+        source = lead.get("source") or "unknown"
+        if source not in source_stats:
+            source_stats[source] = {"total": 0, "won": 0, "value": 0}
+        source_stats[source]["total"] += 1
+        if lead.get("stage") == "won":
+            source_stats[source]["won"] += 1
+            source_stats[source]["value"] += lead.get("expected_value", 0)
+    
+    return source_stats
+
+
+@router.get("/stats/by-user")
+async def get_stats_by_user(current_user: User = Depends(get_current_user)):
+    """Get lead stats by marketing user (Admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    leads = await db.leads.find({}, {"_id": 0}).to_list(1000)
+    
+    user_stats = {}
+    for lead in leads:
+        user_id = lead.get("created_by", "unknown")
+        user_name = lead.get("created_by_name", "Unknown")
+        
+        if user_id not in user_stats:
+            user_stats[user_id] = {
+                "user_name": user_name,
+                "total": 0,
+                "won": 0,
+                "lost": 0,
+                "active": 0,
+                "total_value": 0,
+                "won_value": 0
+            }
+        
+        user_stats[user_id]["total"] += 1
+        user_stats[user_id]["total_value"] += lead.get("expected_value", 0)
+        
+        stage = lead.get("stage")
+        if stage == "won":
+            user_stats[user_id]["won"] += 1
+            user_stats[user_id]["won_value"] += lead.get("expected_value", 0)
+        elif stage == "lost":
+            user_stats[user_id]["lost"] += 1
+        else:
+            user_stats[user_id]["active"] += 1
+    
+    return user_stats
+
