@@ -96,6 +96,15 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - Remove picture upload from reporting (reduce storage)
 - Custom Pre/Post Test Results format (blocked on user sample)
 
+### Recently Completed
+- ✅ Invoice Delete Feature (Feb 5, 2026)
+  - Delete button in Admin Data Management → Invoices tab
+  - Confirmation dialog with invoice details and warning
+  - Syncs with session (removes invoice_id reference)
+  - Adds draft invoice numbers to reuse pool
+  - Full audit trail logged
+  - Deletes related credit notes
+
 ### Backlog (P2)
 - Backend cleanup (remove redundant server.py code)
 - Billing party deletion fix
