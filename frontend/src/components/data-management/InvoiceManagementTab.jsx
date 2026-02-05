@@ -1,13 +1,13 @@
 /**
  * InvoiceManagementTab Component - Extracted from DataManagement
- * Handles invoice number editing, voiding, backdating, and override
+ * Handles invoice number editing, voiding, backdating, override, and deletion
  */
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { FileText, Hash, Calendar, Edit, Ban, RefreshCw } from "lucide-react";
+import { FileText, Hash, Calendar, Edit, Ban, RefreshCw, Trash2 } from "lucide-react";
 
 const InvoiceManagementTab = ({
   invoices,
@@ -28,6 +28,8 @@ const InvoiceManagementTab = ({
   setEditPaidDialog,
   setVoidForm,
   setVoidDialog,
+  setDeleteForm,
+  setDeleteDialog,
 }) => {
   return (
     <div className="space-y-4">
@@ -39,7 +41,7 @@ const InvoiceManagementTab = ({
                 <FileText className="h-5 w-5" />
                 Invoice Management
               </CardTitle>
-              <CardDescription>Edit invoice numbers, void invoices, backdate, and override validation</CardDescription>
+              <CardDescription>Edit invoice numbers, void invoices, backdate, override validation, and delete</CardDescription>
             </div>
             <div className="flex gap-2 flex-wrap">
               <Input
@@ -163,6 +165,17 @@ const InvoiceManagementTab = ({
                             <Ban className="h-4 w-4 text-destructive" />
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Delete Invoice"
+                          onClick={() => {
+                            setDeleteForm({ reason: "", reuseNumber: invoice.status === "auto_draft" || invoice.status === "draft" });
+                            setDeleteDialog({ open: true, invoice });
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
