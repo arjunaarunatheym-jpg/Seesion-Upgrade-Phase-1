@@ -36,6 +36,13 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - `/api/settings/indemnity-sections` - Admin-managed indemnity content
 - `/api/settings/feedback-questions` - GET/POST feedback questions (Admin)
 - `/api/sessions/{session_id}/export-feedback-excel` - Export feedback as Excel
+- `/api/marketing/leads` - Lead CRUD (Marketing sees own, Admin sees all)
+- `/api/marketing/leads/{id}/stage` - Quick stage update
+- `/api/marketing/leads/{id}/convert-to-client` - Convert lead to client
+- `/api/marketing/leads/reminders/pending` - Get overdue and upcoming follow-ups
+- `/api/marketing/stats/pipeline` - Pipeline statistics
+- `/api/marketing/stats/by-source` - Stats grouped by lead source
+- `/api/marketing/stats/by-user` - Stats by marketing user (Admin only)
 
 ## Current Status (Feb 2026)
 
