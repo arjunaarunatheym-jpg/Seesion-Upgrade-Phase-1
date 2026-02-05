@@ -348,6 +348,43 @@ const AnalyticsTab = ({
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {/* Excel Feedback Export */}
+            <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex-1">
+                <h5 className="font-medium text-green-900">📊 Export Feedback Excel</h5>
+                <p className="text-sm text-green-700">Download complete feedback data (Soalan Maklum Balas) in Excel format</p>
+              </div>
+              <Button
+                onClick={async () => {
+                  if (!selectedSession) return;
+                  try {
+                    const response = await axiosInstance.get(
+                      `/sessions/${selectedSession.id}/export-feedback-excel`,
+                      { responseType: 'blob' }
+                    );
+                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    const companyName = (selectedSession.company_name || 'Session').replace(/\s+/g, '_').substring(0, 20);
+                    const dateStr = selectedSession.start_date ? selectedSession.start_date.substring(0, 10).replace(/-/g, '') : '';
+                    link.download = `FEEDBACK_REPORT_${companyName}_${dateStr}.xlsx`;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    window.URL.revokeObjectURL(url);
+                    toast.success("Feedback report exported!");
+                  } catch (error) {
+                    toast.error("Failed to export feedback report");
+                  }
+                }}
+                className="bg-green-600 hover:bg-green-700"
+                data-testid="export-feedback-excel-btn"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Export Excel
+              </Button>
+            </div>
+
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h4 className="font-semibold text-blue-900 mb-2">Report Generation Workflow:</h4>
               <ol className="list-decimal list-inside space-y-1 text-sm text-blue-800">
