@@ -6,163 +6,151 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { ArrowLeft, Star, Send } from "lucide-react";
+import { ArrowLeft, Send, CheckCircle } from "lucide-react";
 
 const FeedbackForm = () => {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const [session, setSession] = useState(null);
-  const [template, setTemplate] = useState(null);
+  const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [responses, setResponses] = useState({});
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
 
   useEffect(() => {
-    loadSession();
+    loadData();
   }, [sessionId]);
 
-  const loadSession = async () => {
+  const loadData = async () => {
     try {
+      // Load session details
       const sessionResponse = await axiosInstance.get(`/sessions/${sessionId}`);
       setSession(sessionResponse.data);
       
-      // Check if participant has already submitted feedback for this session
+      // Check if participant has already submitted feedback
       try {
         const accessResponse = await axiosInstance.get(`/participant-access/${sessionId}`);
         if (accessResponse.data && accessResponse.data.feedback_completed) {
           setAlreadySubmitted(true);
-          toast.info("You have already submitted feedback for this session.");
+          toast.info("Anda telah menghantar maklum balas untuk sesi ini.");
         }
       } catch (accessError) {
         console.log("Could not check feedback status");
       }
       
-      // Try to load feedback template for the program
-      let feedbackTemplate = null;
-      try {
-        const templateResponse = await axiosInstance.get(`/feedback/templates/program/${sessionResponse.data.program_id}`);
-        // API returns array, get first template
-        const templates = templateResponse.data;
-        if (templates && templates.length > 0) {
-          feedbackTemplate = templates[0];
-        }
-      } catch (templateError) {
-        console.log("No custom template found, using defaults");
-      }
-      
-      // If no custom template, use default questions
-      if (!feedbackTemplate || !feedbackTemplate.questions) {
-        feedbackTemplate = {
-          program_id: sessionResponse.data.program_id,
-          questions: [
-            { question: "Overall Training Experience", type: "rating", required: true },
-            { question: "Training Content Quality", type: "rating", required: true },
-            { question: "Trainer Effectiveness", type: "rating", required: true },
-            { question: "Venue & Facilities", type: "rating", required: true },
-            { question: "Suggestions for Improvement", type: "text", required: false },
-            { question: "Additional Comments", type: "text", required: false }
-          ]
-        };
-      }
-      
-      setTemplate(feedbackTemplate);
+      // Load feedback questions from admin settings
+      const questionsResponse = await axiosInstance.get("/settings/feedback-questions");
+      const feedbackQuestions = questionsResponse.data || [];
+      setQuestions(feedbackQuestions);
       
       // Initialize responses
       const initialResponses = {};
-      if (feedbackTemplate.questions && Array.isArray(feedbackTemplate.questions)) {
-        feedbackTemplate.questions.forEach((q, index) => {
-          initialResponses[index] = q.type === "rating" ? 0 : "";
-        });
-      }
+      feedbackQuestions.forEach((q) => {
+        initialResponses[q.id] = q.type === "rating" ? 0 : "";
+      });
       setResponses(initialResponses);
       
       setLoading(false);
     } catch (error) {
       console.error("Feedback form error:", error);
-      console.error("Error response:", error.response);
-      const errorMsg = error.response?.data?.detail || error.message || "Failed to load session details";
-      toast.error(`Failed to load session details: ${errorMsg}`);
+      toast.error("Gagal memuatkan borang maklum balas");
       navigate("/participant");
     }
   };
 
-  const handleResponseChange = (index, value) => {
-    setResponses({ ...responses, [index]: value });
+  const handleResponseChange = (questionId, value) => {
+    setResponses({ ...responses, [questionId]: value });
   };
 
   const handleSubmit = async () => {
     // Validate required fields
-    const invalidField = template.questions.findIndex((q, idx) => {
+    const invalidQuestion = questions.find((q) => {
       if (!q.required) return false;
-      if (q.type === "rating") return responses[idx] === 0;
-      return !responses[idx] || responses[idx].trim() === "";
+      if (q.type === "rating") return responses[q.id] === 0;
+      return !responses[q.id] || responses[q.id].toString().trim() === "";
     });
 
-    if (invalidField !== -1) {
-      toast.error(`Please complete question ${invalidField + 1}`);
+    if (invalidQuestion) {
+      toast.error(`Sila lengkapkan soalan: ${invalidQuestion.question.substring(0, 50)}...`);
       return;
     }
 
     setSubmitting(true);
     try {
-      const formattedResponses = template.questions.map((q, idx) => ({
+      const formattedResponses = questions.map((q) => ({
+        question_id: q.id,
         question: q.question,
-        answer: responses[idx]
+        category: q.category,
+        type: q.type,
+        answer: responses[q.id]
       }));
 
       await axiosInstance.post("/feedback/submit", {
         session_id: sessionId,
         program_id: session.program_id,
-        feedback_template_id: template.id || null,
         responses: formattedResponses
       });
       
       // Set flag to trigger data reload on participant dashboard
       sessionStorage.setItem('feedbackSubmitted', 'true');
       
-      toast.success("Feedback submitted successfully! Redirecting...", { duration: 2000 });
+      toast.success("Maklum balas berjaya dihantar! Terima kasih.", { duration: 2000 });
       
-      // Give toast time to show, then navigate and force reload
+      // Navigate back after short delay
       setTimeout(() => {
         navigate("/participant", { replace: true });
         window.location.reload();
       }, 1500);
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to submit feedback");
+      toast.error(error.response?.data?.detail || "Gagal menghantar maklum balas");
       setSubmitting(false);
     }
   };
 
-  const RatingStars = ({ label, value, field }) => (
-    <div className="space-y-2">
-      <Label className="text-base font-medium">{label}</Label>
-      <div className="flex gap-2">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <button
-            key={star}
-            onClick={() => handleRatingClick(field, star)}
-            className="transition-transform hover:scale-110"
-            type="button"
-          >
-            <Star
-              className={`w-8 h-8 ${
-                star <= value
-                  ? "fill-yellow-400 text-yellow-400"
-                  : "text-gray-300"
-              }`}
-            />
-          </button>
-        ))}
-        <span className="ml-2 text-gray-600">{value > 0 ? `${value}/5` : "Not rated"}</span>
-      </div>
-    </div>
-  );
+  // Group questions by category
+  const groupedQuestions = questions.reduce((acc, q) => {
+    const category = q.category || "UMUM";
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(q);
+    return acc;
+  }, {});
+
+  const categoryOrder = ["KUALITI KURSUS", "PENYEDIA LATIHAN", "TRAINER", "UMUM"];
+  const categoryLabels = {
+    "KUALITI KURSUS": "A. KUALITI KURSUS",
+    "PENYEDIA LATIHAN": "B. PENYEDIA LATIHAN",
+    "TRAINER": "C. TRAINER",
+    "UMUM": "D. UMUM"
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-lg">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Memuatkan...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (alreadySubmitted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-8">
+        <div className="max-w-2xl mx-auto px-4">
+          <Card className="text-center">
+            <CardContent className="py-12">
+              <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Maklum Balas Telah Dihantar</h2>
+              <p className="text-gray-600 mb-6">Terima kasih kerana menghantar maklum balas anda.</p>
+              <Button onClick={() => navigate("/participant")} data-testid="back-to-dashboard">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Kembali ke Dashboard
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
@@ -178,95 +166,112 @@ const FeedbackForm = () => {
             data-testid="back-to-dashboard"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
+            Kembali ke Dashboard
           </Button>
-          <h1 className="text-3xl font-bold text-gray-900 mt-4">Training Feedback</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mt-4">Borang Maklum Balas Latihan</h1>
           <p className="text-gray-600">{session?.name}</p>
+          <p className="text-sm text-gray-500 mt-1">{session?.company_name}</p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Feedback Matters</CardTitle>
-            <CardDescription>
-              Help us improve our training programs by sharing your experience
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {template?.questions.map((question, index) => (
-              <div key={index} className="space-y-2">
-                <Label className="text-base font-medium">
-                  {question.question}
-                  {question.required && <span className="text-red-500 ml-1">*</span>}
-                </Label>
-                
-                {question.type === "rating" ? (
-                  <div className="flex gap-2">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        onClick={() => handleResponseChange(index, star)}
-                        className="transition-transform hover:scale-110"
-                        type="button"
-                      >
-                        <Star
-                          className={`w-8 h-8 ${
-                            star <= responses[index]
-                              ? "fill-yellow-400 text-yellow-400"
-                              : "text-gray-300"
-                          }`}
-                        />
-                      </button>
-                    ))}
-                    <span className="ml-2 text-gray-600">
-                      {responses[index] > 0 ? `${responses[index]}/5` : "Not rated"}
-                    </span>
-                  </div>
-                ) : (
-                  <Textarea
-                    value={responses[index] || ""}
-                    onChange={(e) => handleResponseChange(index, e.target.value)}
-                    placeholder="Enter your response..."
-                    rows={4}
-                    data-testid={`response-${index}`}
-                  />
-                )}
-              </div>
-            ))}
-
-            {/* Submit Button */}
-            <div className="pt-4">
-              {alreadySubmitted ? (
-                <div className="text-center p-6 bg-green-50 border-2 border-green-200 rounded-lg">
-                  <p className="text-green-700 font-semibold text-lg">✓ Feedback Already Submitted</p>
-                  <p className="text-sm text-green-600 mt-2">You have already submitted feedback for this session.</p>
-                  <Button
-                    onClick={() => navigate("/participant")}
-                    variant="outline"
-                    className="mt-4"
-                  >
-                    Back to Dashboard
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <Button
-                    onClick={handleSubmit}
-                    disabled={submitting}
-                    size="lg"
-                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
-                    data-testid="submit-feedback-button"
-                  >
-                    <Send className="w-4 h-4 mr-2" />
-                    {submitting ? "Submitting..." : "Submit Feedback"}
-                  </Button>
-                  <p className="text-sm text-gray-500 text-center mt-3">
-                    After submitting feedback, your certificate will be available for download
-                  </p>
-                </>
-              )}
-            </div>
+        {/* Instructions */}
+        <Card className="mb-6 bg-blue-50 border-blue-200">
+          <CardContent className="py-4">
+            <p className="text-blue-800 text-sm">
+              <strong>Arahan:</strong> Sila berikan penilaian anda untuk setiap soalan. 
+              Skala: <strong>1</strong> (Sangat Tidak Setuju) hingga <strong>5</strong> (Sangat Setuju).
+              Soalan bertanda <span className="text-red-500">*</span> adalah wajib.
+            </p>
           </CardContent>
         </Card>
+
+        {/* Questions by Category */}
+        {categoryOrder.map((category) => {
+          const categoryQuestions = groupedQuestions[category];
+          if (!categoryQuestions || categoryQuestions.length === 0) return null;
+
+          return (
+            <Card key={category} className="mb-6" data-testid={`category-${category}`}>
+              <CardHeader className="bg-gray-50 border-b">
+                <CardTitle className="text-lg">{categoryLabels[category] || category}</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-6 space-y-6">
+                {categoryQuestions.map((question) => (
+                  <div key={question.id} className="space-y-3" data-testid={`question-${question.id}`}>
+                    <Label className="text-base font-medium text-gray-800 leading-relaxed">
+                      <span className="text-gray-500 mr-2">{question.id}.</span>
+                      {question.question}
+                      {question.required && <span className="text-red-500 ml-1">*</span>}
+                    </Label>
+                    
+                    {question.type === "rating" ? (
+                      <div className="flex gap-2 flex-wrap">
+                        {[1, 2, 3, 4, 5].map((num) => (
+                          <button
+                            key={num}
+                            onClick={() => handleResponseChange(question.id, num)}
+                            className={`w-12 h-12 rounded-lg font-bold text-lg transition-all border-2 ${
+                              responses[question.id] === num
+                                ? "bg-blue-600 text-white border-blue-600 shadow-lg scale-105"
+                                : "bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+                            }`}
+                            type="button"
+                            data-testid={`rating-${question.id}-${num}`}
+                          >
+                            {num}
+                          </button>
+                        ))}
+                        <span className="ml-3 text-sm text-gray-500 self-center">
+                          {responses[question.id] > 0 ? (
+                            <span className="text-blue-600 font-medium">{responses[question.id]}/5</span>
+                          ) : (
+                            "Belum dipilih"
+                          )}
+                        </span>
+                      </div>
+                    ) : (
+                      <Textarea
+                        value={responses[question.id] || ""}
+                        onChange={(e) => handleResponseChange(question.id, e.target.value)}
+                        placeholder="Sila masukkan pandangan anda..."
+                        rows={3}
+                        className="w-full"
+                        data-testid={`text-${question.id}`}
+                      />
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })}
+
+        {/* Submit Button */}
+        <div className="flex justify-end gap-4 mb-8">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/participant")}
+          >
+            Batal
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="bg-blue-600 hover:bg-blue-700 px-8"
+            data-testid="submit-feedback-btn"
+          >
+            {submitting ? (
+              <>
+                <span className="animate-spin mr-2">⏳</span>
+                Menghantar...
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4 mr-2" />
+                Hantar Maklum Balas
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
