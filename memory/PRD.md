@@ -34,6 +34,8 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - `/api/finance/session/{session_id}/additional-invoice` - Create linked invoices
 - `/api/marketing/quotations/{id}/download-pdf` - PDF generation with rich text
 - `/api/settings/indemnity-sections` - Admin-managed indemnity content
+- `/api/settings/feedback-questions` - GET/POST feedback questions (Admin)
+- `/api/sessions/{session_id}/export-feedback-excel` - Export feedback as Excel
 
 ## Current Status (Feb 2026)
 
