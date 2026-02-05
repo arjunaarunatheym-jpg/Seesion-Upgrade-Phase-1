@@ -263,8 +263,11 @@ async def get_quotations(status: str = None, current_user: User = Depends(get_cu
         q["client_name"] = client.get("company_name", "Unknown")
         q["contact_person"] = client.get("contact_person", "")
         q["marketer_name"] = user_map.get(q.get("created_by"), "Unknown")
+        # Normalize created_at to string for sorting
+        if isinstance(q.get("created_at"), datetime):
+            q["created_at"] = q["created_at"].isoformat()
     
-    quotations.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    quotations.sort(key=lambda x: str(x.get("created_at", "")), reverse=True)
     return quotations
 
 
