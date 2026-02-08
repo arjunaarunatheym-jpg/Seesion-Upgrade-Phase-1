@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../ui/dialog";
 import { 
   Plus, Search, Phone, Mail, Building, Calendar, DollarSign, 
-  ChevronRight, Edit, Trash2, UserPlus, AlertCircle, Clock, FileText
+  ChevronRight, Edit, Trash2, UserPlus, AlertCircle, Clock, FileText,
+  Eye, Download, Percent, CheckCircle, XCircle, Send
 } from "lucide-react";
 import { toast } from "sonner";
 import { axiosInstance } from "../../App";
