@@ -1011,11 +1011,11 @@ const MarketingDashboard = ({ user, onLogout }) => {
                 </div>
                 <div className="bg-green-50 p-3 rounded-lg">
                   <h4 className="font-semibold text-green-900 mb-2">Programme</h4>
-                  <p className="font-medium">{viewQuotation.programme_name}</p>
+                  <p className="font-medium">{viewQuotation.programme_name || 'Not specified'}</p>
                   <p className="text-sm">
                     {viewQuotation.pricing_type === 'per_group' 
-                      ? `Group price: ${formatCurrency(viewQuotation.group_price)}`
-                      : `${viewQuotation.num_participants} pax @ ${formatCurrency(viewQuotation.rate_per_pax)}`
+                      ? `Group price: ${formatCurrency(viewQuotation.group_price || 0)}`
+                      : `${viewQuotation.num_participants || '-'} pax @ ${formatCurrency(viewQuotation.rate_per_pax || 0)}`
                     }
                   </p>
                   <p className="text-sm font-bold mt-2">Total: {formatCurrency(viewQuotation.total_amount)}</p>
