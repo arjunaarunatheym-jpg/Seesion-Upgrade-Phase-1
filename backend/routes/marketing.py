@@ -684,6 +684,7 @@ class Lead(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     company_name: str
+    company_address: Optional[str] = None
     contact_person: Optional[str] = None
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
@@ -704,6 +705,7 @@ class Lead(BaseModel):
 
 class LeadCreate(BaseModel):
     company_name: str
+    company_address: Optional[str] = None
     contact_person: Optional[str] = None
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
@@ -715,6 +717,7 @@ class LeadCreate(BaseModel):
 
 class LeadUpdate(BaseModel):
     company_name: Optional[str] = None
+    company_address: Optional[str] = None
     contact_person: Optional[str] = None
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
