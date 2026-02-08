@@ -8,7 +8,7 @@ import requests
 import json
 from datetime import datetime
 
-BASE_URL = "https://report-flow-4.preview.emergentagent.com/api"
+BASE_URL = "https://marketing-flow-test.preview.emergentagent.com/api"
 
 # Corrected credentials
 CREDENTIALS = {

@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 import uuid
 
 # Configuration
-BASE_URL = "https://report-flow-4.preview.emergentagent.com/api"
+BASE_URL = "https://marketing-flow-test.preview.emergentagent.com/api"
 
 # Test Credentials
 TEST_CREDENTIALS = {
