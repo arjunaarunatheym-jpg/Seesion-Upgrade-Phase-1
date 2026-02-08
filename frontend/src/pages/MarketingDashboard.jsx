@@ -1032,7 +1032,18 @@ const MarketingDashboard = ({ user, onLogout }) => {
               )}
               
               <div className="bg-yellow-50 p-3 rounded-lg">
-                <p className="text-sm"><strong>Valid Until:</strong> {new Date(viewQuotation.valid_until).toLocaleDateString()}</p>
+                <p className="text-sm"><strong>Valid Until:</strong> {
+                  (() => {
+                    if (viewQuotation.valid_until) {
+                      return new Date(viewQuotation.valid_until).toLocaleDateString();
+                    }
+                    // Calculate from created_at + validity_days
+                    const created = new Date(viewQuotation.created_at);
+                    const validDays = viewQuotation.validity_days || 30;
+                    const validUntil = new Date(created.getTime() + validDays * 24 * 60 * 60 * 1000);
+                    return validUntil.toLocaleDateString();
+                  })()
+                }</p>
               </div>
               
               {viewQuotation.admin_remarks && (
