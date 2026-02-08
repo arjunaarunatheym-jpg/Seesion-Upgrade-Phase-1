@@ -41,6 +41,13 @@ const LeadPipelineTab = ({
   formatCurrency,
   isAdmin = false,
   onCreateQuotation, // Callback to open quotation form with pre-filled data
+  quotations = [], // Pass quotations to show inline
+  onViewQuotation, // View quotation details
+  onApplyDiscount, // Apply discount dialog
+  onDownloadPdf, // Download PDF
+  onClientResponse, // Accept/Decline quotation
+  onMarkSent, // Mark as sent
+  getStatusBadge, // Status badge component
 }) => {
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
