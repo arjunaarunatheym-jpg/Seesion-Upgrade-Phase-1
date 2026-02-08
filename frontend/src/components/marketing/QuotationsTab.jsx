@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Button } from "../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Plus, Eye, Edit, Send, Download, CheckCircle, XCircle } from "lucide-react";
+import { Plus, Eye, Edit, Send, Download, CheckCircle, XCircle, Percent } from "lucide-react";
 
 const QuotationsTab = ({
   quotations,
@@ -19,6 +19,7 @@ const QuotationsTab = ({
   onDownloadPdf,
   onMarkSent,
   onClientResponse,
+  onApplyDiscount,
   downloadingPdf,
 }) => {
   const filteredQuotations = quotationFilter === 'all' 
