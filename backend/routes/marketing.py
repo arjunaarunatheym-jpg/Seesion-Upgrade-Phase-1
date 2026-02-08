@@ -354,6 +354,27 @@ async def update_quotation(quotation_id: str, quotation_data: dict, current_user
     return {"message": "Quotation updated"}
 
 
+@router.delete("/quotations/{quotation_id}")
+async def delete_quotation(quotation_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a quotation (only drafts can be deleted)"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    existing = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    
+    if current_user.role not in ["admin", "super_admin"] and existing.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if existing.get("status") not in ["draft"]:
+        raise HTTPException(status_code=400, detail="Only draft quotations can be deleted")
+    
+    await db.quotations.delete_one({"id": quotation_id})
+    return {"message": "Quotation deleted"}
+
+
+
 @router.post("/quotations/{quotation_id}/submit")
 async def submit_quotation(quotation_id: str, current_user: User = Depends(get_current_user)):
     """Submit quotation for approval"""
