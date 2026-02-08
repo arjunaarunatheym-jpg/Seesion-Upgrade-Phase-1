@@ -91,6 +91,17 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 ### In Progress
 - None
 
+### Recently Fixed (Dec 2025)
+- ✅ Quotation Amount Bug Fix (Dec 16, 2025)
+  - Fixed: Quotations were saving with RM 0.00 regardless of entered amount
+  - Root cause: Frontend was not calculating/sending subtotal, sst_amount, total_amount to backend
+  - Fix: Added calculation logic in handleSaveQuotation before API call
+- ✅ Quotation Delete Endpoint (Dec 16, 2025)
+  - Added DELETE /api/marketing/quotations/{id} endpoint
+  - Only draft quotations can be deleted
+- ✅ Data Cleanup (Dec 16, 2025)
+  - Removed all duplicate/broken draft quotations (Vinda Malaysia, Taj Curry House, etc.)
+
 ### Upcoming (P1)
 - Google Drive Feedback Integration (feedback URL per session, certificate release mechanism TBD)
 - Remove picture upload from reporting (reduce storage)
