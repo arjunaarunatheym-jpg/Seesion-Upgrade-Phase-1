@@ -325,6 +325,9 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
     }
     
     await db.quotations.insert_one(quotation)
+    
+    # Remove _id before returning (MongoDB adds it)
+    quotation.pop("_id", None)
     return {"message": "Quotation created", "quotation": quotation}
 
 
