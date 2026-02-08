@@ -830,6 +830,25 @@ async def update_lead(lead_id: str, lead_data: LeadUpdate, current_user: User = 
     
     await db.leads.update_one({"id": lead_id}, {"$set": update_data})
     
+    # Sync client data if lead has a linked client and contact info changed
+    if lead.get("client_id"):
+        client_sync_fields = {}
+        if "company_name" in update_data:
+            client_sync_fields["company_name"] = update_data["company_name"]
+        if "contact_person" in update_data:
+            client_sync_fields["contact_person"] = update_data["contact_person"]
+        if "contact_email" in update_data:
+            client_sync_fields["contact_email"] = update_data["contact_email"]
+        if "contact_phone" in update_data:
+            client_sync_fields["contact_phone"] = update_data["contact_phone"]
+        
+        if client_sync_fields:
+            client_sync_fields["updated_at"] = get_malaysia_time().isoformat()
+            await db.marketing_clients.update_one(
+                {"id": lead["client_id"]},
+                {"$set": client_sync_fields}
+            )
+    
     updated_lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
     return updated_lead
 
