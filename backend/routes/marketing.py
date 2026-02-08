@@ -790,6 +790,7 @@ async def create_lead(lead_data: LeadCreate, current_user: User = Depends(get_cu
     
     lead = Lead(
         company_name=lead_data.company_name.strip(),
+        company_address=lead_data.company_address,
         contact_person=lead_data.contact_person,
         contact_email=lead_data.contact_email,
         contact_phone=lead_data.contact_phone,
