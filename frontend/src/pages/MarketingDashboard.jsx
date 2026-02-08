@@ -84,6 +84,15 @@ const MarketingDashboard = ({ user, onLogout }) => {
     venue: ''
   });
   
+  // Discount dialog for negotiation
+  const [showDiscountDialog, setShowDiscountDialog] = useState(false);
+  const [discountingQuotation, setDiscountingQuotation] = useState(null);
+  const [discountForm, setDiscountForm] = useState({
+    discount_type: 'percentage',
+    discount_value: 0,
+    reason: ''
+  });
+  
   // PDF download loading state
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   
