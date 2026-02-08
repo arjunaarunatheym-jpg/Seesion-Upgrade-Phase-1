@@ -525,6 +525,66 @@ async def record_client_response(quotation_id: str, response_data: dict, current
     return {"message": f"Quotation marked as {response}"}
 
 
+
+@router.post("/quotations/{quotation_id}/apply-discount")
+async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, current_user: User = Depends(get_current_user)):
+    """Apply discount to a sent quotation (for negotiation)"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    
+    # Only allow discount on sent quotations (negotiation phase)
+    if quotation.get("status") not in ["sent", "approved"]:
+        raise HTTPException(status_code=400, detail="Discounts can only be applied to approved or sent quotations")
+    
+    # Check ownership for non-admins
+    if current_user.role not in ["admin", "super_admin"] and quotation.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Calculate new totals with discount
+    subtotal = quotation.get("subtotal", 0)
+    discount_type = discount_data.get("discount_type", "percentage")  # percentage or fixed
+    discount_value = float(discount_data.get("discount_value", 0))
+    
+    if discount_type == "percentage":
+        discount_amount = subtotal * (discount_value / 100)
+        discount_percentage = discount_value
+    else:
+        discount_amount = discount_value
+        discount_percentage = (discount_value / subtotal * 100) if subtotal > 0 else 0
+    
+    # Recalculate with discount
+    discounted_subtotal = subtotal - discount_amount
+    sst_percentage = quotation.get("sst_percentage", 0)
+    sst_amount = discounted_subtotal * (sst_percentage / 100)
+    new_total = discounted_subtotal + sst_amount
+    
+    # Update quotation
+    update_data = {
+        "discount_percentage": round(discount_percentage, 2),
+        "discount_amount": round(discount_amount, 2),
+        "sst_amount": round(sst_amount, 2),
+        "total_amount": round(new_total, 2),
+        "discount_reason": discount_data.get("reason", ""),
+        "status": "sent",  # Keep as sent for continued negotiation
+        "updated_at": get_malaysia_time().isoformat()
+    }
+    
+    await db.quotations.update_one({"id": quotation_id}, {"$set": update_data})
+    
+    # Sync updated value to lead
+    await sync_lead_stage_from_quotation(quotation_id, "sent")
+    
+    updated_quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
+    return {
+        "message": "Discount applied successfully",
+        "quotation": updated_quotation
+    }
+
+
 # Quotation PDF download is handled by the full implementation in server.py
 # with rich text rendering support (bold, italic, highlight, colors, etc.)
 
