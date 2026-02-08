@@ -305,8 +305,11 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
     
     # Count quotations in current month (shared sequence across all marketing users)
     month_prefix = f"QUO/MDDRC/{year}/{str(month).zfill(2)}/"
+    # Escape slashes for regex
+    escaped_prefix = month_prefix.replace('/', r'\/')
+    regex_pattern = f"^{escaped_prefix}" + r"\d{5}$"
     count = await db.quotations.count_documents({
-        "quotation_number": {"$regex": f"^{month_prefix.replace('/', '\\/')}\\d{{5}}$"}
+        "quotation_number": {"$regex": regex_pattern}
     })
     quotation_number = f"{month_prefix}{str(count + 1).zfill(5)}"
     
