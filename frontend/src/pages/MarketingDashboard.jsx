@@ -1152,6 +1152,88 @@ const MarketingDashboard = ({ user, onLogout }) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Apply Discount Dialog - for negotiation */}
+      <Dialog open={showDiscountDialog} onOpenChange={setShowDiscountDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Apply Discount (Negotiation)</DialogTitle>
+            <DialogDescription>
+              Apply a discount to this quotation for negotiation purposes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {discountingQuotation && (
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="font-medium">{discountingQuotation.quotation_number}</p>
+                <p className="text-sm text-gray-600">{discountingQuotation.client_name}</p>
+                <p className="text-sm">Original Subtotal: <strong>{formatCurrency(discountingQuotation.subtotal || discountingQuotation.total_amount)}</strong></p>
+                <p className="text-sm">Current Total: <strong>{formatCurrency(discountingQuotation.total_amount)}</strong></p>
+                {discountingQuotation.discount_amount > 0 && (
+                  <p className="text-sm text-orange-600">Existing Discount: {formatCurrency(discountingQuotation.discount_amount)} ({discountingQuotation.discount_percentage}%)</p>
+                )}
+              </div>
+            )}
+            <div>
+              <Label>Discount Type</Label>
+              <Select value={discountForm.discount_type} onValueChange={(v) => setDiscountForm({...discountForm, discount_type: v})}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="percentage">Percentage (%)</SelectItem>
+                  <SelectItem value="fixed">Fixed Amount (RM)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Discount Value {discountForm.discount_type === 'percentage' ? '(%)' : '(RM)'}</Label>
+              <Input
+                type="number"
+                min="0"
+                step={discountForm.discount_type === 'percentage' ? '1' : '0.01'}
+                max={discountForm.discount_type === 'percentage' ? '100' : undefined}
+                value={discountForm.discount_value}
+                onFocus={e => e.target.select()}
+                onChange={(e) => setDiscountForm({...discountForm, discount_value: parseFloat(e.target.value) || 0})}
+                placeholder={discountForm.discount_type === 'percentage' ? 'e.g. 10' : 'e.g. 500'}
+              />
+            </div>
+            <div>
+              <Label>Reason (Optional)</Label>
+              <Input
+                placeholder="e.g. Bulk order discount, Loyal customer"
+                value={discountForm.reason}
+                onChange={(e) => setDiscountForm({...discountForm, reason: e.target.value})}
+              />
+            </div>
+            {discountForm.discount_value > 0 && discountingQuotation && (
+              <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+                <p className="text-sm font-medium text-green-900">Preview:</p>
+                <p className="text-sm">
+                  Discount: {discountForm.discount_type === 'percentage' 
+                    ? `${discountForm.discount_value}% = ${formatCurrency((discountingQuotation.subtotal || discountingQuotation.total_amount) * discountForm.discount_value / 100)}`
+                    : formatCurrency(discountForm.discount_value)
+                  }
+                </p>
+                <p className="text-sm font-bold">
+                  New Total: {formatCurrency(
+                    discountForm.discount_type === 'percentage'
+                      ? (discountingQuotation.subtotal || discountingQuotation.total_amount) * (1 - discountForm.discount_value / 100)
+                      : (discountingQuotation.subtotal || discountingQuotation.total_amount) - discountForm.discount_value
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDiscountDialog(false)}>Cancel</Button>
+            <Button onClick={handleApplyDiscount} className="bg-purple-600 hover:bg-purple-700">
+              Apply Discount
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
