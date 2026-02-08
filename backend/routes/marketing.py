@@ -438,10 +438,13 @@ async def reject_quotation(quotation_id: str, reason: dict = None, current_user:
 
 # Helper function to sync lead stage when quotation status changes
 async def sync_lead_stage_from_quotation(quotation_id: str, new_status: str):
-    """Called when quotation status changes to sync lead stage"""
+    """Called when quotation status changes to sync lead stage and value"""
     lead = await db.leads.find_one({"quotation_id": quotation_id}, {"_id": 0})
     if not lead:
         return
+    
+    # Get quotation to sync value
+    quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
     
     stage_map = {
         "sent": "quotation_sent",
@@ -450,14 +453,22 @@ async def sync_lead_stage_from_quotation(quotation_id: str, new_status: str):
     }
     
     new_stage = stage_map.get(new_status)
+    update_data = {
+        "updated_at": get_malaysia_time().isoformat()
+    }
+    
     if new_stage and lead.get("stage") != new_stage:
+        update_data["stage"] = new_stage
+        update_data["stage_changed_at"] = get_malaysia_time().isoformat()
+    
+    # Sync expected_value with quotation's total_amount
+    if quotation and quotation.get("total_amount"):
+        update_data["expected_value"] = quotation["total_amount"]
+    
+    if len(update_data) > 1:  # More than just updated_at
         await db.leads.update_one(
             {"quotation_id": quotation_id},
-            {"$set": {
-                "stage": new_stage,
-                "stage_changed_at": get_malaysia_time().isoformat(),
-                "updated_at": get_malaysia_time().isoformat()
-            }}
+            {"$set": update_data}
         )
 
 
