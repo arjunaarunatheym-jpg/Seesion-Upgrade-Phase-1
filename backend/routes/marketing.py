@@ -1173,6 +1173,7 @@ async def create_quotation_from_lead(lead_id: str, current_user: User = Depends(
             # Auto-create client from lead data
             new_client = MarketingClient(
                 company_name=lead["company_name"],
+                company_address=lead.get("company_address"),
                 contact_person=lead.get("contact_person"),
                 contact_email=lead.get("contact_email"),
                 contact_phone=lead.get("contact_phone"),
