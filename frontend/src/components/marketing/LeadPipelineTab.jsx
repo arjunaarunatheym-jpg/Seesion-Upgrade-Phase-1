@@ -460,6 +460,15 @@ const LeadPipelineTab = ({
                 data-testid="lead-company-input"
               />
             </div>
+            <div>
+              <Label>Company Address</Label>
+              <Textarea
+                value={form.company_address}
+                onChange={(e) => setForm({ ...form, company_address: e.target.value })}
+                placeholder="Full company address"
+                rows={2}
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Contact Person</Label>
