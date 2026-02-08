@@ -856,22 +856,22 @@ const MarketingDashboard = ({ user, onLogout }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>No. of Participants</Label>
-                  <Input type="number" min="1" value={quotationForm.num_participants} onChange={e => setQuotationForm({...quotationForm, num_participants: parseInt(e.target.value) || 1})} />
+                  <Input type="number" min="1" value={quotationForm.num_participants} onFocus={e => e.target.select()} onChange={e => setQuotationForm({...quotationForm, num_participants: parseInt(e.target.value) || 1})} />
                 </div>
                 <div>
                   <Label>Rate per Pax (RM) *</Label>
-                  <Input type="number" min="0" step="0.01" value={quotationForm.rate_per_pax} onChange={e => setQuotationForm({...quotationForm, rate_per_pax: parseFloat(e.target.value) || 0})} />
+                  <Input type="number" min="0" step="0.01" value={quotationForm.rate_per_pax} onFocus={e => e.target.select()} onChange={e => setQuotationForm({...quotationForm, rate_per_pax: parseFloat(e.target.value) || 0})} />
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Max Participants (for reference)</Label>
-                  <Input type="number" min="1" value={quotationForm.num_participants} onChange={e => setQuotationForm({...quotationForm, num_participants: parseInt(e.target.value) || 1})} />
+                  <Input type="number" min="1" value={quotationForm.num_participants} onFocus={e => e.target.select()} onChange={e => setQuotationForm({...quotationForm, num_participants: parseInt(e.target.value) || 1})} />
                 </div>
                 <div>
                   <Label>Group Price (RM) *</Label>
-                  <Input type="number" min="0" step="0.01" value={quotationForm.group_price} onChange={e => setQuotationForm({...quotationForm, group_price: parseFloat(e.target.value) || 0})} />
+                  <Input type="number" min="0" step="0.01" value={quotationForm.group_price} onFocus={e => e.target.select()} onChange={e => setQuotationForm({...quotationForm, group_price: parseFloat(e.target.value) || 0})} />
                 </div>
               </div>
             )}
@@ -879,11 +879,11 @@ const MarketingDashboard = ({ user, onLogout }) => {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>SST (%)</Label>
-                <Input type="number" min="0" max="100" value={quotationForm.sst_percent} onChange={e => setQuotationForm({...quotationForm, sst_percent: parseFloat(e.target.value) || 0})} />
+                <Input type="number" min="0" max="100" value={quotationForm.sst_percent} onFocus={e => e.target.select()} onChange={e => setQuotationForm({...quotationForm, sst_percent: parseFloat(e.target.value) || 0})} />
               </div>
               <div>
                 <Label>Validity (Days)</Label>
-                <Input type="number" min="1" value={quotationForm.validity_days} onChange={e => setQuotationForm({...quotationForm, validity_days: parseInt(e.target.value) || 30})} />
+                <Input type="number" min="1" value={quotationForm.validity_days} onFocus={e => e.target.select()} onChange={e => setQuotationForm({...quotationForm, validity_days: parseInt(e.target.value) || 30})} />
               </div>
             </div>
             
