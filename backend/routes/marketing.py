@@ -839,6 +839,8 @@ async def update_lead(lead_id: str, lead_data: LeadUpdate, current_user: User = 
         client_sync_fields = {}
         if "company_name" in update_data:
             client_sync_fields["company_name"] = update_data["company_name"]
+        if "company_address" in update_data:
+            client_sync_fields["company_address"] = update_data["company_address"]
         if "contact_person" in update_data:
             client_sync_fields["contact_person"] = update_data["contact_person"]
         if "contact_email" in update_data:
