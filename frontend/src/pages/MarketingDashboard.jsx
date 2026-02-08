@@ -372,6 +372,24 @@ const MarketingDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const handleApplyDiscount = async () => {
+    if (!discountForm.discount_value || discountForm.discount_value <= 0) {
+      toast.error('Please enter a valid discount amount');
+      return;
+    }
+    
+    try {
+      await axiosInstance.post(`/marketing/quotations/${discountingQuotation.id}/apply-discount`, discountForm);
+      toast.success('Discount applied successfully');
+      setShowDiscountDialog(false);
+      setDiscountingQuotation(null);
+      setDiscountForm({ discount_type: 'percentage', discount_value: 0, reason: '' });
+      loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to apply discount');
+    }
+  };
+
   const handleDownloadPdf = async (quotationId) => {
     setDownloadingPdf(true);
     try {
