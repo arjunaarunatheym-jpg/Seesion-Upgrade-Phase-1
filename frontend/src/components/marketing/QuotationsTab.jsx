@@ -116,6 +116,9 @@ const QuotationsTab = ({
                           <Button variant="ghost" size="sm" onClick={() => onDownloadPdf(q.id)} title="Download PDF" className="text-blue-600 h-7 w-7 sm:h-8 sm:w-8 p-0" disabled={downloadingPdf}>
                             <Download className="w-3 h-3 sm:w-4 sm:h-4" />
                           </Button>
+                          <Button variant="ghost" size="sm" onClick={() => onApplyDiscount(q)} title="Apply Discount" className="text-purple-600 h-7 w-7 sm:h-8 sm:w-8 p-0">
+                            <Percent className="w-3 h-3 sm:w-4 sm:h-4" />
+                          </Button>
                           <Button variant="ghost" size="sm" onClick={() => onClientResponse(q.id, 'accepted')} title="Client Accepted" className="text-green-600 h-7 w-7 sm:h-8 sm:w-8 p-0">
                             <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4" />
                           </Button>
