@@ -199,12 +199,30 @@ const MarketingDashboard = ({ user, onLogout }) => {
         return;
       }
       
+      // Calculate financial values before sending
+      const subtotal = quotationForm.pricing_type === 'per_group' 
+        ? Number(quotationForm.group_price) || 0
+        : (Number(quotationForm.num_participants) || 0) * (Number(quotationForm.rate_per_pax) || 0);
+      const sst_amount = subtotal * (Number(quotationForm.sst_percent) || 0) / 100;
+      const total_amount = subtotal + sst_amount;
+      
       if (editingQuotation) {
-        await axiosInstance.put(`/marketing/quotations/${editingQuotation.id}`, quotationForm);
+        const updatePayload = {
+          ...quotationForm,
+          subtotal,
+          sst_amount,
+          sst_percentage: Number(quotationForm.sst_percent) || 0,
+          total_amount
+        };
+        await axiosInstance.put(`/marketing/quotations/${editingQuotation.id}`, updatePayload);
         toast.success('Quotation updated successfully');
       } else {
         const payload = {
           ...quotationForm,
+          subtotal,
+          sst_amount,
+          sst_percentage: Number(quotationForm.sst_percent) || 0,
+          total_amount,
           terms_conditions: quotationForm.terms_conditions || defaultTerms
         };
         const response = await axiosInstance.post('/marketing/quotations', payload);
