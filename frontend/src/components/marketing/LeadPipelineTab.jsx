@@ -299,11 +299,70 @@ const LeadPipelineTab = ({
       
       {/* Show quotation link if exists */}
       {lead.quotation_id && (
-        <div className="mt-2 pt-2 border-t">
-          <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
-            <FileText className="w-3 h-3 mr-1" />
-            Quotation linked
-          </Badge>
+        <div className="mt-2 pt-2 border-t space-y-2">
+          {(() => {
+            const quotation = quotations.find(q => q.id === lead.quotation_id);
+            if (!quotation) return (
+              <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
+                <FileText className="w-3 h-3 mr-1" />
+                Quotation linked
+              </Badge>
+            );
+            
+            return (
+              <div className="bg-gray-50 rounded p-2 text-xs">
+                <div className="flex justify-between items-start mb-1">
+                  <span className="font-medium text-purple-700">{quotation.quotation_number}</span>
+                  {getStatusBadge && getStatusBadge(quotation.status)}
+                </div>
+                <p className="font-bold text-green-700">{formatCurrency(quotation.total_amount)}</p>
+                {quotation.discount_amount > 0 && (
+                  <p className="text-orange-600">Disc: {formatCurrency(quotation.discount_amount)}</p>
+                )}
+                
+                {/* Quotation Actions */}
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {onViewQuotation && (
+                    <Button variant="ghost" size="sm" onClick={() => onViewQuotation(quotation.id)} className="h-6 px-2 text-xs">
+                      <Eye className="w-3 h-3" />
+                    </Button>
+                  )}
+                  
+                  {quotation.status === 'approved' && onMarkSent && (
+                    <Button variant="ghost" size="sm" onClick={() => onMarkSent(quotation.id)} className="h-6 px-2 text-xs text-green-600">
+                      <Send className="w-3 h-3" />
+                    </Button>
+                  )}
+                  
+                  {quotation.status === 'sent' && (
+                    <>
+                      {onApplyDiscount && (
+                        <Button variant="ghost" size="sm" onClick={() => onApplyDiscount(quotation)} className="h-6 px-2 text-xs text-purple-600" title="Apply Discount">
+                          <Percent className="w-3 h-3" />
+                        </Button>
+                      )}
+                      {onClientResponse && (
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => onClientResponse(quotation.id, 'accepted')} className="h-6 px-2 text-xs text-green-600" title="Won">
+                            <CheckCircle className="w-3 h-3" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => onClientResponse(quotation.id, 'declined')} className="h-6 px-2 text-xs text-red-600" title="Lost">
+                            <XCircle className="w-3 h-3" />
+                          </Button>
+                        </>
+                      )}
+                    </>
+                  )}
+                  
+                  {['approved', 'sent', 'accepted'].includes(quotation.status) && onDownloadPdf && (
+                    <Button variant="ghost" size="sm" onClick={() => onDownloadPdf(quotation.id)} className="h-6 px-2 text-xs text-blue-600">
+                      <Download className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
