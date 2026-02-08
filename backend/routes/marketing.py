@@ -536,7 +536,7 @@ async def record_client_response(quotation_id: str, response_data: dict, current
 
 @router.post("/quotations/{quotation_id}/apply-discount")
 async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, current_user: User = Depends(get_current_user)):
-    """Apply discount to a sent quotation (for negotiation)"""
+    """Apply discount to a sent quotation (for negotiation) - creates revision number"""
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     
@@ -570,8 +570,21 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
     sst_amount = discounted_subtotal * (sst_percentage / 100)
     new_total = discounted_subtotal + sst_amount
     
+    # Increment revision number and update quotation number with suffix
+    current_revision = quotation.get("revision_number", 0)
+    new_revision = current_revision + 1
+    
+    # Get base quotation number (without revision suffix)
+    base_number = quotation.get("quotation_number", "")
+    if "-" in base_number:
+        base_number = base_number.split("-")[0]  # Remove existing revision suffix
+    
+    new_quotation_number = f"{base_number}-{str(new_revision).zfill(2)}"
+    
     # Update quotation
     update_data = {
+        "quotation_number": new_quotation_number,
+        "revision_number": new_revision,
         "discount_percentage": round(discount_percentage, 2),
         "discount_amount": round(discount_amount, 2),
         "sst_amount": round(sst_amount, 2),
@@ -588,7 +601,7 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
     
     updated_quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
     return {
-        "message": "Discount applied successfully",
+        "message": f"Discount applied - Revision {new_revision}",
         "quotation": updated_quotation
     }
 
