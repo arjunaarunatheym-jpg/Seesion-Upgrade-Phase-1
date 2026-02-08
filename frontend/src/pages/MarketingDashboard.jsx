@@ -745,6 +745,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
               onDownloadPdf={handleDownloadPdf}
               onMarkSent={handleMarkSent}
               onClientResponse={handleClientResponse}
+              onApplyDiscount={(q) => { setDiscountingQuotation(q); setShowDiscountDialog(true); }}
               downloadingPdf={downloadingPdf}
             />
           </TabsContent>
