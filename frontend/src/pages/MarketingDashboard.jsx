@@ -715,6 +715,13 @@ const MarketingDashboard = ({ user, onLogout }) => {
               formatCurrency={formatCurrency}
               isAdmin={false}
               onCreateQuotation={handleCreateQuotationFromLead}
+              quotations={quotations}
+              onViewQuotation={viewQuotationDetails}
+              onApplyDiscount={(q) => { setDiscountingQuotation(q); setShowDiscountDialog(true); }}
+              onDownloadPdf={handleDownloadPdf}
+              onClientResponse={handleClientResponse}
+              onMarkSent={handleMarkSent}
+              getStatusBadge={getStatusBadge}
             />
           </TabsContent>
 
