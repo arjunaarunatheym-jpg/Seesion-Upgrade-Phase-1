@@ -49,6 +49,7 @@ const LeadPipelineTab = ({
   const [viewMode, setViewMode] = useState("pipeline"); // pipeline or list
   const [form, setForm] = useState({
     company_name: "",
+    company_address: "",
     contact_person: "",
     contact_email: "",
     contact_phone: "",
@@ -61,6 +62,7 @@ const LeadPipelineTab = ({
   const resetForm = () => {
     setForm({
       company_name: "",
+      company_address: "",
       contact_person: "",
       contact_email: "",
       contact_phone: "",
@@ -77,6 +79,7 @@ const LeadPipelineTab = ({
       setEditingLead(lead);
       setForm({
         company_name: lead.company_name || "",
+        company_address: lead.company_address || "",
         contact_person: lead.contact_person || "",
         contact_email: lead.contact_email || "",
         contact_phone: lead.contact_phone || "",
