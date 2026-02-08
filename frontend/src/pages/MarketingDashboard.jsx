@@ -373,20 +373,30 @@ const MarketingDashboard = ({ user, onLogout }) => {
       // Create download link
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
       
       // Get filename from quotation
       const quotation = quotations.find(q => q.id === quotationId);
       const filename = quotation?.quotation_number?.replace(/\//g, '_') || 'quotation';
-      link.download = `Quotation_${filename}.pdf`;
       
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      // For mobile compatibility, open in new tab instead of programmatic download
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        // Open PDF in new tab - user can then save/share from there
+        window.open(url, '_blank');
+        toast.success('PDF opened in new tab');
+      } else {
+        // Desktop: use download link
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Quotation_${filename}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success('PDF downloaded successfully');
+      }
       
-      toast.success('PDF downloaded successfully');
+      // Cleanup after a delay to allow mobile preview
+      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
     } catch (error) {
       console.error('PDF download error:', error);
       toast.error(error.response?.data?.detail || 'Failed to download PDF');
