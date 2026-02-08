@@ -1241,11 +1241,15 @@ async def link_quotation_to_lead(lead_id: str, quotation_id: str, current_user: 
     if not quotation:
         raise HTTPException(status_code=404, detail="Quotation not found")
     
-    # Update lead with quotation link
+    # Update lead with quotation link and sync value
     update_data = {
         "quotation_id": quotation_id,
         "updated_at": get_malaysia_time().isoformat()
     }
+    
+    # Sync expected_value with quotation's total_amount
+    if quotation.get("total_amount"):
+        update_data["expected_value"] = quotation["total_amount"]
     
     # Auto-update stage based on quotation status
     quotation_status = quotation.get("status", "draft")
