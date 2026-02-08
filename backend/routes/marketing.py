@@ -298,14 +298,22 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     
-    # Generate quotation number
-    year = datetime.now().year
-    count = await db.quotations.count_documents({"quotation_number": {"$regex": f"^Q{year}"}})
-    quotation_number = f"Q{year}{str(count + 1).zfill(4)}"
+    # Generate quotation number: QUO/MDDRC/YYYY/MM/XXXXX
+    now = get_malaysia_time()
+    year = now.year
+    month = now.month
+    
+    # Count quotations in current month (shared sequence across all marketing users)
+    month_prefix = f"QUO/MDDRC/{year}/{str(month).zfill(2)}/"
+    count = await db.quotations.count_documents({
+        "quotation_number": {"$regex": f"^{month_prefix.replace('/', '\\/')}\\d{{5}}$"}
+    })
+    quotation_number = f"{month_prefix}{str(count + 1).zfill(5)}"
     
     quotation = {
         "id": str(uuid.uuid4()),
         "quotation_number": quotation_number,
+        "revision_number": 0,  # Track revision count
         "client_id": quotation_data.get("client_id"),
         "programme_id": quotation_data.get("programme_id"),
         "programme_name": quotation_data.get("programme_name"),
