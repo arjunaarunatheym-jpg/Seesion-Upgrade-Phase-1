@@ -17256,13 +17256,13 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.cell_safe(0, 6, f"Dear {client.get('contact_person', 'Sir/Madam')},", ln=True)
     pdf.ln(5)
     
-    # Get programme name for cover letter
-    cover_programme_name = quotation.get("programme_name", "")
-    if not cover_programme_name and quotation.get("programme_id"):
-        cover_programme = await db.programmes.find_one({"id": quotation.get("programme_id")}, {"_id": 0, "name": 1})
+    # Get programme name for cover letter - directly from quotation
+    cover_programme_name = quotation.get("programme_name", "") or ""
+    if not cover_programme_name.strip() and quotation.get("programme_id"):
+        cover_programme = await db.programs.find_one({"id": quotation.get("programme_id")}, {"_id": 0, "name": 1})
         if cover_programme:
             cover_programme_name = cover_programme.get("name", "")
-    if not cover_programme_name:
+    if not cover_programme_name.strip():
         cover_programme_name = "Training Programme"
     
     # Cover letter content (from template or default)
