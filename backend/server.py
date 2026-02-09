@@ -17369,15 +17369,30 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     
     # Table content with text wrapping
     pricing_type = quotation.get("pricing_type", "per_pax")
+    
+    # Get programme name - try from quotation, then from programme collection
+    programme_name = quotation.get("programme_name", "")
+    if not programme_name and quotation.get("programme_id"):
+        programme = await db.programmes.find_one({"id": quotation.get("programme_id")}, {"_id": 0, "name": 1})
+        if programme:
+            programme_name = programme.get("name", "")
+    if not programme_name:
+        programme_name = "Training Programme"
+    
     if pricing_type == "per_group":
         rate_display = f"{quotation.get('group_price', 0):,.2f}"
         qty_display = "1 group"
     else:
-        rate_display = f"{quotation.get('rate_per_pax', 0):,.2f}"
-        qty_display = str(quotation.get("num_participants", 1))
+        num_pax = quotation.get("num_participants", 1)
+        rate_per_pax = quotation.get("rate_per_pax", 0)
+        # If rate_per_pax is 0, calculate from subtotal
+        if rate_per_pax == 0 and num_pax > 0:
+            rate_per_pax = quotation.get("subtotal", 0) / num_pax
+        rate_display = f"{rate_per_pax:,.2f}"
+        qty_display = str(num_pax)
     
     # Draw main programme row
-    programme_name = sanitize_text_for_pdf(quotation.get("programme_name", ""))
+    programme_name = sanitize_text_for_pdf(programme_name)
     
     # Use multi_cell for description to enable text wrapping
     x_start = pdf.get_x()
