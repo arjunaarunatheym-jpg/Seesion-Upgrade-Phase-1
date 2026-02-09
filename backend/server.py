@@ -17379,13 +17379,14 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     # Table content with text wrapping
     pricing_type = quotation.get("pricing_type", "per_pax")
     
-    # Get programme name - try from quotation, then from programme collection
-    programme_name = quotation.get("programme_name", "")
-    if not programme_name and quotation.get("programme_id"):
-        programme = await db.programmes.find_one({"id": quotation.get("programme_id")}, {"_id": 0, "name": 1})
+    # Get programme name - directly from quotation (it's stored there)
+    programme_name = quotation.get("programme_name", "") or ""
+    # Fallback to programs collection if not in quotation
+    if not programme_name.strip() and quotation.get("programme_id"):
+        programme = await db.programs.find_one({"id": quotation.get("programme_id")}, {"_id": 0, "name": 1})
         if programme:
             programme_name = programme.get("name", "")
-    if not programme_name:
+    if not programme_name.strip():
         programme_name = "Training Programme"
     
     if pricing_type == "per_group":
