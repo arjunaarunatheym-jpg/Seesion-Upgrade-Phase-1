@@ -299,6 +299,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
     setQuotationForm({
       client_id: quotation.client_id || '',
       programme_id: quotation.programme_id || '',
+      programme_name: quotation.programme_name || '',
       pricing_type: quotation.pricing_type || 'per_pax',
       num_participants: quotation.num_participants || 1,
       rate_per_pax: quotation.rate_per_pax || 0,
