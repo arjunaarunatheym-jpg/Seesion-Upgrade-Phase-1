@@ -854,7 +854,14 @@ const MarketingDashboard = ({ user, onLogout }) => {
               </div>
               <div>
                 <Label>Programme *</Label>
-                <Select value={quotationForm.programme_id} onValueChange={v => setQuotationForm({...quotationForm, programme_id: v})}>
+                <Select value={quotationForm.programme_id} onValueChange={v => {
+                  const selectedProgramme = programmes.find(p => p.id === v);
+                  setQuotationForm({
+                    ...quotationForm, 
+                    programme_id: v,
+                    programme_name: selectedProgramme?.name || ''
+                  });
+                }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select programme" />
                   </SelectTrigger>
