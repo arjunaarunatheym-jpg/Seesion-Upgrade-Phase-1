@@ -2658,21 +2658,39 @@ const AdminDashboard = ({ user, onLogout }) => {
                 </div>
                 <div className="bg-green-50 p-3 rounded-lg">
                   <h4 className="font-semibold text-green-900 mb-2">Programme</h4>
-                  <p className="font-medium">{selectedQuotation.programme_name}</p>
-                  <p className="text-sm">{selectedQuotation.num_participants} pax @ RM {selectedQuotation.rate_per_pax?.toLocaleString()}</p>
+                  <p className="font-medium">{selectedQuotation.programme_name || 'Not specified'}</p>
+                  <p className="text-sm">
+                    {selectedQuotation.pricing_type === 'per_group' 
+                      ? `Group price: RM ${(selectedQuotation.group_price || selectedQuotation.subtotal || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`
+                      : `${selectedQuotation.num_participants || 1} pax @ RM ${(selectedQuotation.rate_per_pax || (selectedQuotation.subtotal / (selectedQuotation.num_participants || 1)) || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`
+                    }
+                  </p>
                 </div>
               </div>
               
               <div className="bg-gray-50 p-3 rounded-lg">
-                <div className="flex justify-between"><span>Subtotal:</span><span>RM {selectedQuotation.subtotal?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
-                {selectedQuotation.sst_percent > 0 && (
-                  <div className="flex justify-between"><span>SST ({selectedQuotation.sst_percent}%):</span><span>RM {selectedQuotation.sst_amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
+                <div className="flex justify-between"><span>Subtotal:</span><span>RM {(selectedQuotation.subtotal || selectedQuotation.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
+                {selectedQuotation.discount_amount > 0 && (
+                  <div className="flex justify-between text-orange-600"><span>Discount ({selectedQuotation.discount_percentage}%):</span><span>- RM {selectedQuotation.discount_amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
                 )}
-                <div className="flex justify-between font-bold border-t mt-2 pt-2"><span>Total:</span><span>RM {selectedQuotation.total_amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
+                {selectedQuotation.sst_percentage > 0 && (
+                  <div className="flex justify-between"><span>SST ({selectedQuotation.sst_percentage}%):</span><span>RM {selectedQuotation.sst_amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
+                )}
+                <div className="flex justify-between font-bold border-t mt-2 pt-2"><span>Total:</span><span>RM {(selectedQuotation.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
               </div>
               
               <div className="bg-yellow-50 p-3 rounded-lg">
-                <p className="text-sm"><strong>Valid Until:</strong> {new Date(selectedQuotation.valid_until).toLocaleDateString()}</p>
+                <p className="text-sm"><strong>Valid Until:</strong> {
+                  (() => {
+                    if (selectedQuotation.valid_until) {
+                      return new Date(selectedQuotation.valid_until).toLocaleDateString();
+                    }
+                    const created = new Date(selectedQuotation.created_at);
+                    const validDays = selectedQuotation.validity_days || 30;
+                    const validUntil = new Date(created.getTime() + validDays * 24 * 60 * 60 * 1000);
+                    return validUntil.toLocaleDateString();
+                  })()
+                }</p>
               </div>
               
               {selectedQuotation.remarks && (
