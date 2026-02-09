@@ -17256,11 +17256,20 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.cell_safe(0, 6, f"Dear {client.get('contact_person', 'Sir/Madam')},", ln=True)
     pdf.ln(5)
     
+    # Get programme name for cover letter
+    cover_programme_name = quotation.get("programme_name", "")
+    if not cover_programme_name and quotation.get("programme_id"):
+        cover_programme = await db.programmes.find_one({"id": quotation.get("programme_id")}, {"_id": 0, "name": 1})
+        if cover_programme:
+            cover_programme_name = cover_programme.get("name", "")
+    if not cover_programme_name:
+        cover_programme_name = "Training Programme"
+    
     # Cover letter content (from template or default)
     cover_letter = templates.get("cover_letter", "")
     if cover_letter:
         # Replace placeholders
-        cover_letter = cover_letter.replace("{{programme_name}}", quotation.get("programme_name", ""))
+        cover_letter = cover_letter.replace("{{programme_name}}", cover_programme_name)
         cover_letter = cover_letter.replace("{{company_name}}", client.get("company_name", ""))
         cover_letter = cover_letter.replace("{{contact_person}}", client.get("contact_person", ""))
         cover_letter = cover_letter.replace("{{quotation_number}}", quotation.get("quotation_number", ""))
@@ -17271,10 +17280,10 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     else:
         # Default cover letter
         pdf.set_font_safe('B', 10)
-        pdf.cell_safe(0, 6, f"RE: QUOTATION FOR {sanitize_text_for_pdf(quotation.get('programme_name', '')).upper()}", ln=True)
+        pdf.cell_safe(0, 6, f"RE: QUOTATION FOR {sanitize_text_for_pdf(cover_programme_name).upper()}", ln=True)
         pdf.ln(5)
         pdf.set_font_safe('', 10)
-        pdf.multi_cell_safe(0, 5, f"Thank you for your interest in our training programme. We are pleased to submit our quotation for the {quotation.get('programme_name', '')} programme as per your request.")
+        pdf.multi_cell_safe(0, 5, f"Thank you for your interest in our training programme. We are pleased to submit our quotation for the {cover_programme_name} programme as per your request.")
         pdf.ln(3)
         pdf.multi_cell_safe(0, 5, "Please find attached the detailed quotation for your kind perusal and consideration.")
     
