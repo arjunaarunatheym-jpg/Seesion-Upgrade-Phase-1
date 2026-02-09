@@ -17484,7 +17484,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
         pdf.set_font_safe('I', 8)
         pdf.multi_cell_safe(0, 4, f"Remarks: {quotation.get('remarks')}")
     
-    # Signatures at bottom - clean format without lines
+    # Signatures at bottom - clean format with blue signature names
     pdf.ln(10)
     pdf.set_font_safe('', 9)
     y_pos = pdf.get_y()
@@ -17492,18 +17492,20 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.cell_safe(90, 5, "Prepared by:", ln=False)
     pdf.cell_safe(90, 5, "Approved by:", ln=True)
     
-    # Signature names - clean format
+    # Signature names in blue - cursive style
     pdf.ln(8)
-    pdf.set_font_safe('B', 10)
+    pdf.set_font_safe('I', 12)  # Italic for cursive effect
+    pdf.set_text_color(0, 0, 128)  # Dark blue for signature
     marketer_name = marketer.get("full_name", "") if marketer else ""
-    # Get approver full name from database
-    approver_name = approver.get("full_name", "Arjuna Arunatheym") if approver else ""
+    # Get approver full name from database  
+    approver_name = approver.get("full_name", "Arjuna Arunatheym") if approver else "Arjuna Arunatheym"
     pdf.cell_safe(90, 6, marketer_name, ln=False, align='C')
     pdf.cell_safe(90, 6, approver_name, ln=True, align='C')
     
-    # Titles below names
+    # Reset color and add titles below names
+    pdf.set_text_color(0, 0, 0)
     pdf.set_font_safe('', 8)
-    pdf.cell_safe(90, 4, "Marketing Executive", ln=False, align='C')
+    pdf.cell_safe(90, 4, "Marketing Manager", ln=False, align='C')
     pdf.cell_safe(90, 4, "Management", ln=True, align='C')
     
     # ===== PAGES 3-6: TERMS & CONDITIONS =====
