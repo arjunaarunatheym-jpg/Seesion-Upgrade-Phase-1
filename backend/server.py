@@ -17395,9 +17395,33 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     else:
         num_pax = quotation.get("num_participants", 1)
         rate_per_pax = quotation.get("rate_per_pax", 0)
-        # If rate_per_pax is 0, calculate from subtotal
-        if rate_per_pax == 0 and num_pax > 0:
-            rate_per_pax = quotation.get("subtotal", 0) / num_pax
+        subtotal = quotation.get("subtotal", 0)
+        total_amount = quotation.get("total_amount", 0)
+        
+        # If rate_per_pax is 0 but we have subtotal and num_pax, calculate it
+        if rate_per_pax == 0 and num_pax > 0 and subtotal > 0:
+            rate_per_pax = subtotal / num_pax
+        # If still 0 and we have total_amount, use that
+        elif rate_per_pax == 0 and num_pax > 0 and total_amount > 0:
+            rate_per_pax = total_amount / num_pax
+        # If num_pax is 1 and rate is 0, try to derive from total
+        elif num_pax == 1 and rate_per_pax == 0 and total_amount > 0:
+            # Check if total_amount looks like a group price (>1000 and not divisible)
+            # or a per-pax rate for potentially more participants
+            # Try to detect the actual number of pax by checking if there's a reasonable unit price
+            for potential_pax in [2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30]:
+                unit_price = total_amount / potential_pax
+                # Check if unit price is a round number (likely intended)
+                if unit_price == int(unit_price) or (unit_price * 100) == int(unit_price * 100):
+                    # Looks reasonable
+                    if unit_price >= 100 and unit_price <= 5000:
+                        num_pax = potential_pax
+                        rate_per_pax = unit_price
+                        break
+            # Fallback if no match
+            if rate_per_pax == 0:
+                rate_per_pax = total_amount
+        
         rate_display = f"{rate_per_pax:,.2f}"
         qty_display = str(num_pax)
     
