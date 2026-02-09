@@ -53,6 +53,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
   const [quotationForm, setQuotationForm] = useState({
     client_id: '',
     programme_id: '',
+    programme_name: '',
     pricing_type: 'per_pax',
     num_participants: 1,
     rate_per_pax: 0,
