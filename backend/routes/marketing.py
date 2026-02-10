@@ -756,8 +756,8 @@ async def get_pdf_templates(current_user: User = Depends(get_current_user)):
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     
-    templates = await db.pdf_templates.find_one({"id": "quotation_template"}, {"_id": 0})
-    return templates or {"id": "quotation_template", "header": "", "footer": ""}
+    templates = await db.quotation_pdf_templates.find_one({"id": "quotation_pdf_templates"}, {"_id": 0})
+    return templates or {"id": "quotation_pdf_templates", "cover_letter": "", "terms_conditions_pages": "", "primary_color": "#1a365d"}
 
 
 @router.put("/pdf-templates")
@@ -766,8 +766,9 @@ async def update_pdf_templates(template_data: dict, current_user: User = Depends
     if current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    await db.pdf_templates.update_one(
-        {"id": "quotation_template"},
+    template_data["id"] = "quotation_pdf_templates"
+    await db.quotation_pdf_templates.update_one(
+        {"id": "quotation_pdf_templates"},
         {"$set": template_data},
         upsert=True
     )
