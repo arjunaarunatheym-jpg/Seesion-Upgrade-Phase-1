@@ -17265,6 +17265,9 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     if not cover_programme_name.strip():
         cover_programme_name = "Training Programme"
     
+    # Get marketer name for placeholder
+    marketer_full_name = marketer.get("full_name", "") if marketer else ""
+    
     # Cover letter content (from template or default)
     cover_letter = templates.get("cover_letter", "")
     if cover_letter:
@@ -17274,6 +17277,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
         cover_letter = cover_letter.replace("{{contact_person}}", client.get("contact_person", ""))
         cover_letter = cover_letter.replace("{{quotation_number}}", quotation.get("quotation_number", ""))
         cover_letter = cover_letter.replace("{{total_amount}}", f"RM {quotation.get('total_amount', 0):,.2f}")
+        cover_letter = cover_letter.replace("{{marketer_name}}", marketer_full_name)
         
         # Use rich text rendering for formatted content
         pdf.render_rich_text(cover_letter, line_height=5, default_size=10)
