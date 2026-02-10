@@ -973,6 +973,130 @@ async def delete_lead(lead_id: str, current_user: User = Depends(get_current_use
     return {"message": "Lead deleted"}
 
 
+@router.post("/leads/{lead_id}/revive")
+async def revive_lead(lead_id: str, revive_data: dict, current_user: User = Depends(get_current_user)):
+    """Revive a lost lead for future follow-up"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    if lead.get("stage") != "lost":
+        raise HTTPException(status_code=400, detail="Only lost leads can be revived")
+    
+    # Check ownership for non-admins
+    if current_user.role not in ["admin", "super_admin"] and lead.get("created_by") != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = get_malaysia_time()
+    update_data = {
+        "stage": "inquiry",  # Reset to inquiry
+        "follow_up_date": revive_data.get("follow_up_date"),
+        "notes": f"{lead.get('notes', '')}\n\n[Revived on {now.strftime('%d/%m/%Y')}] {revive_data.get('reason', '')}".strip(),
+        "lost_reason": None,  # Clear lost reason
+        "stage_changed_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    await db.leads.update_one({"id": lead_id}, {"$set": update_data})
+    
+    updated_lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    return {"message": "Lead revived successfully", "lead": updated_lead}
+
+
+@router.post("/leads/{lead_id}/mark-won")
+async def mark_lead_won_and_create_session(lead_id: str, win_data: dict, current_user: User = Depends(get_current_user)):
+    """Mark lead as won and optionally create draft session"""
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    now = get_malaysia_time()
+    
+    # Update lead to won
+    lead_update = {
+        "stage": "won",
+        "stage_changed_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    await db.leads.update_one({"id": lead_id}, {"$set": lead_update})
+    
+    result = {"message": "Lead marked as won"}
+    
+    # Create draft session if training date provided
+    training_date = win_data.get("training_date")
+    if training_date:
+        # Get client and quotation info
+        client = None
+        if lead.get("client_id"):
+            client = await db.marketing_clients.find_one({"id": lead["client_id"]}, {"_id": 0})
+        
+        quotation = None
+        if lead.get("quotation_id"):
+            quotation = await db.quotations.find_one({"id": lead["quotation_id"]}, {"_id": 0})
+        
+        # Create or find company
+        company_id = None
+        if client:
+            # Check if company exists
+            existing_company = await db.companies.find_one(
+                {"name": {"$regex": f"^{client['company_name']}$", "$options": "i"}},
+                {"_id": 0}
+            )
+            if existing_company:
+                company_id = existing_company.get("id")
+            else:
+                # Create company
+                company_id = str(uuid.uuid4())
+                await db.companies.insert_one({
+                    "id": company_id,
+                    "name": client["company_name"],
+                    "address": client.get("company_address", ""),
+                    "contact_person": client.get("contact_person", ""),
+                    "contact_email": client.get("contact_email", ""),
+                    "contact_phone": client.get("contact_phone", ""),
+                    "created_at": now.isoformat()
+                })
+        
+        # Get programme info
+        programme_id = quotation.get("programme_id") if quotation else None
+        programme_name = quotation.get("programme_name") if quotation else "Training Programme"
+        
+        # Create draft session
+        session_id = str(uuid.uuid4())
+        session_data = {
+            "id": session_id,
+            "name": f"{client['company_name'] if client else lead['company_name']} - {programme_name}",
+            "program_id": programme_id or "",
+            "company_id": company_id or "",
+            "location": win_data.get("venue", quotation.get("venue", "") if quotation else ""),
+            "start_date": training_date,
+            "end_date": training_date,
+            "status": "draft",  # Draft status for admin review
+            "completion_status": "ongoing",
+            "supervisor_ids": [],
+            "participant_ids": [],
+            "trainer_assignments": [],
+            "grant_id": win_data.get("grant_id", ""),
+            "lead_id": lead_id,
+            "quotation_id": lead.get("quotation_id"),
+            "marketing_user_id": lead.get("created_by"),
+            "created_at": now.isoformat()
+        }
+        
+        await db.sessions.insert_one(session_data)
+        result["session_id"] = session_id
+        result["message"] = "Lead marked as won and draft session created"
+    
+    return result
+
+
+
 @router.put("/leads/{lead_id}/stage")
 async def update_lead_stage(lead_id: str, stage: str, current_user: User = Depends(get_current_user)):
     """Quick update lead stage (for drag-drop)"""
