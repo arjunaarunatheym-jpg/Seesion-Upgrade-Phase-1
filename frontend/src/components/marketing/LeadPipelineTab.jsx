@@ -179,6 +179,22 @@ const LeadPipelineTab = ({
     }
   };
 
+  const handleReviveLead = async (lead) => {
+    const reason = prompt("Enter reason for reviving this lead (optional):");
+    const followUpDate = prompt("Enter follow-up date (YYYY-MM-DD):");
+    
+    try {
+      await axiosInstance.post(`/marketing/leads/${lead.id}/revive`, {
+        reason: reason || "",
+        follow_up_date: followUpDate || null
+      });
+      toast.success("Lead revived successfully!");
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to revive lead");
+    }
+  };
+
   // Filter leads
   const filteredLeads = leads.filter((lead) => {
     const matchesSearch = 
