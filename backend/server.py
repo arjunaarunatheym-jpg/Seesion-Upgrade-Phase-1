@@ -2112,6 +2112,153 @@ async def update_user(user_id: str, user_data: dict, current_user: User = Depend
     return User(**updated_user)
 
 # Check if user exists
+
+@api_router.post("/users/coordinator")
+async def create_coordinator(data: dict, current_user: User = Depends(get_current_user)):
+    """Create a new coordinator user"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin can create coordinators")
+    
+    # Check if email already exists
+    existing = await db.users.find_one({"email": data.get("email")})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user_id = str(uuid.uuid4())
+    hashed_password = hash_password(data.get("password", "mddrc1"))
+    
+    user_doc = {
+        "id": user_id,
+        "email": data.get("email"),
+        "full_name": data.get("full_name"),
+        "id_number": data.get("id_number", ""),
+        "hashed_password": hashed_password,
+        "role": "coordinator",
+        "additional_roles": data.get("additional_roles", []),
+        "is_verified": True,
+        "created_at": get_malaysia_time().isoformat()
+    }
+    
+    await db.users.insert_one(user_doc)
+    return {"id": user_id, "message": "Coordinator created successfully"}
+
+
+@api_router.post("/users/assistant-admin")
+async def create_assistant_admin(data: dict, current_user: User = Depends(get_current_user)):
+    """Create a new assistant admin user"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin can create assistant admins")
+    
+    existing = await db.users.find_one({"email": data.get("email")})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user_id = str(uuid.uuid4())
+    hashed_password = hash_password(data.get("password", "mddrc1"))
+    
+    user_doc = {
+        "id": user_id,
+        "email": data.get("email"),
+        "full_name": data.get("full_name"),
+        "id_number": data.get("id_number", ""),
+        "hashed_password": hashed_password,
+        "role": "assistant_admin",
+        "additional_roles": data.get("additional_roles", []),
+        "is_verified": True,
+        "created_at": get_malaysia_time().isoformat()
+    }
+    
+    await db.users.insert_one(user_doc)
+    return {"id": user_id, "message": "Assistant Admin created successfully"}
+
+
+@api_router.post("/users/finance")
+async def create_finance_user(data: dict, current_user: User = Depends(get_current_user)):
+    """Create a new finance user"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin can create finance users")
+    
+    existing = await db.users.find_one({"email": data.get("email")})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user_id = str(uuid.uuid4())
+    hashed_password = hash_password(data.get("password", "mddrc1"))
+    
+    user_doc = {
+        "id": user_id,
+        "email": data.get("email"),
+        "full_name": data.get("full_name"),
+        "id_number": data.get("id_number", ""),
+        "hashed_password": hashed_password,
+        "role": "finance",
+        "additional_roles": data.get("additional_roles", []),
+        "is_verified": True,
+        "created_at": get_malaysia_time().isoformat()
+    }
+    
+    await db.users.insert_one(user_doc)
+    return {"id": user_id, "message": "Finance user created successfully"}
+
+
+@api_router.post("/users/trainer")
+async def create_trainer(data: dict, current_user: User = Depends(get_current_user)):
+    """Create a new trainer user"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin can create trainers")
+    
+    existing = await db.users.find_one({"email": data.get("email")})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user_id = str(uuid.uuid4())
+    hashed_password = hash_password(data.get("password", "mddrc1"))
+    
+    user_doc = {
+        "id": user_id,
+        "email": data.get("email"),
+        "full_name": data.get("full_name"),
+        "id_number": data.get("id_number", ""),
+        "hashed_password": hashed_password,
+        "role": "trainer",
+        "additional_roles": data.get("additional_roles", []),
+        "is_verified": True,
+        "created_at": get_malaysia_time().isoformat()
+    }
+    
+    await db.users.insert_one(user_doc)
+    return {"id": user_id, "message": "Trainer created successfully"}
+
+
+@api_router.post("/users/marketing")
+async def create_marketing_user(data: dict, current_user: User = Depends(get_current_user)):
+    """Create a new marketing user"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin can create marketing users")
+    
+    existing = await db.users.find_one({"email": data.get("email")})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user_id = str(uuid.uuid4())
+    hashed_password = hash_password(data.get("password", "mddrc1"))
+    
+    user_doc = {
+        "id": user_id,
+        "email": data.get("email"),
+        "full_name": data.get("full_name"),
+        "id_number": data.get("id_number", ""),
+        "hashed_password": hashed_password,
+        "role": "marketing",
+        "additional_roles": data.get("additional_roles", []),
+        "is_verified": True,
+        "created_at": get_malaysia_time().isoformat()
+    }
+    
+    await db.users.insert_one(user_doc)
+    return {"id": user_id, "message": "Marketing user created successfully"}
+
+
 @api_router.post("/users/check-exists")
 async def check_user_exists(
     full_name: Optional[str] = None,
