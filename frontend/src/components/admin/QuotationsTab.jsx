@@ -15,10 +15,12 @@ const QuotationsTab = ({
   quotations,
   allClients,
   descriptionItems,
+  pdfTemplates,
   onRefresh,
   onViewQuotation,
   onRejectQuotation,
   onShowPdfTemplates,
+  onUpdatePdfColor,
 }) => {
   // Filter state
   const [quotationFilter, setQuotationFilter] = useState("all");
