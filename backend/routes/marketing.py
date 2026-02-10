@@ -547,9 +547,9 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
     if not quotation:
         raise HTTPException(status_code=404, detail="Quotation not found")
     
-    # Only allow discount on sent quotations (negotiation phase)
-    if quotation.get("status") not in ["sent", "approved"]:
-        raise HTTPException(status_code=400, detail="Discounts can only be applied to approved or sent quotations")
+    # Only allow discount on SENT quotations (negotiation phase - client has already seen it)
+    if quotation.get("status") != "sent":
+        raise HTTPException(status_code=400, detail="Discounts can only be applied to quotations that have been sent to the client")
     
     # Check ownership for non-admins
     if current_user.role not in ["admin", "super_admin"] and quotation.get("created_by") != current_user.id:
