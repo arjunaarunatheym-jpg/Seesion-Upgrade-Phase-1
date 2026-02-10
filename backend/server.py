@@ -17516,7 +17516,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.set_text_color(0, 0, 0)
     pdf.set_font_safe('', 8)
     pdf.cell_safe(90, 4, "Marketing Manager", ln=False, align='C')
-    pdf.cell_safe(90, 4, "Management", ln=True, align='C')
+    pdf.cell_safe(90, 4, "Chief Executive Officer", ln=True, align='C')
     
     # ===== PAGES 3-6: TERMS & CONDITIONS =====
     terms_content = templates.get("terms_conditions_pages", "")
