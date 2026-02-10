@@ -17236,29 +17236,38 @@ class QuotationPDF(FPDF):
         """Invoice-style header with logo - uniform across all pages"""
         cs = self.company_settings
         
-        self.set_y(10)
+        # Get dynamic layout settings
+        logo_x = int(cs.get('logo_x', 10))
+        logo_y = int(cs.get('logo_y', 8))
+        logo_w = int(cs.get('logo_width', 35))
+        logo_h = int(cs.get('logo_height', 0)) or None  # None = auto-scale
+        header_x = int(cs.get('header_x', 50))
+        header_y = int(cs.get('header_y', 8))
+        
+        self.set_y(logo_y)
         
         # Logo on the left
         logo_url = cs.get('logo_url')
-        logo_x_end = 10
+        logo_x_end = logo_x
         if logo_url:
             logo_path = None
             if logo_url.startswith('/'):
                 logo_path = ROOT_DIR / logo_url.lstrip('/')
             if logo_path and logo_path.exists():
                 try:
-                    self.image(str(logo_path), x=10, y=10, w=30)
-                    logo_x_end = 45
+                    self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w, h=logo_h)
+                    logo_x_end = logo_x + logo_w + 5
                 except Exception:
                     pass
         
-        # Company details next to logo
-        self.set_xy(logo_x_end, 10)
+        # Company details - use header_x if set, otherwise after logo
+        text_x = max(header_x, logo_x_end)
+        self.set_xy(text_x, header_y)
         self.set_font_safe('B', 14)
         self.set_text_color(*self.primary_color)
         self.cell_safe(0, 5, cs.get('company_name', 'MALAYSIAN DEFENSIVE DRIVING AND RIDING CENTRE SDN BHD'), ln=True)
         
-        self.set_x(logo_x_end)
+        self.set_x(text_x)
         self.set_font_safe('', 9)
         self.set_text_color(68, 68, 68)
         
@@ -17274,7 +17283,7 @@ class QuotationPDF(FPDF):
             self.cell_safe(0, 4, ' • '.join(info_parts), ln=True)
         
         # City, postcode, state, contact
-        self.set_x(logo_x_end)
+        self.set_x(text_x)
         contact_parts = []
         location = ', '.join(filter(None, [cs.get('city'), cs.get('postcode'), cs.get('state')]))
         if location:
