@@ -584,7 +584,7 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
     
     new_quotation_number = f"{base_number}-{str(new_revision).zfill(2)}"
     
-    # Update quotation
+    # Update quotation - set to pending_approval for admin review
     update_data = {
         "quotation_number": new_quotation_number,
         "revision_number": new_revision,
@@ -593,18 +593,15 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
         "sst_amount": round(sst_amount, 2),
         "total_amount": round(new_total, 2),
         "discount_reason": discount_data.get("reason", ""),
-        "status": "sent",  # Keep as sent for continued negotiation
+        "status": "pending_approval",  # Discount requires admin approval
         "updated_at": get_malaysia_time().isoformat()
     }
     
     await db.quotations.update_one({"id": quotation_id}, {"$set": update_data})
     
-    # Sync updated value to lead
-    await sync_lead_stage_from_quotation(quotation_id, "sent")
-    
     updated_quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
     return {
-        "message": f"Discount applied - Revision {new_revision}",
+        "message": f"Discount applied - Pending admin approval (Revision {new_revision})",
         "quotation": updated_quotation
     }
 
