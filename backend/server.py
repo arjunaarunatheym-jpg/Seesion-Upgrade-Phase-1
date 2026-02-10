@@ -9777,6 +9777,55 @@ async def update_company_settings(settings_data: dict, current_user: User = Depe
     
     return {"message": "Settings updated successfully"}
 
+
+@api_router.get("/finance/pdf-layout-preview")
+async def get_pdf_layout_preview(current_user: User = Depends(get_current_user)):
+    """Generate a preview PDF with current layout settings"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get company settings
+    company_settings = await db.company_settings.find_one({"id": "company_settings"}, {"_id": 0})
+    if not company_settings:
+        company_settings = {}
+    
+    # Parse primary color
+    primary_color_hex = company_settings.get("primary_color", "#1a365d")
+    try:
+        primary_color_rgb = tuple(int(primary_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+    except:
+        primary_color_rgb = (26, 54, 93)
+    
+    # Create preview PDF
+    pdf = QuotationPDF(company_settings, primary_color_rgb)
+    pdf.add_page()
+    
+    # Add sample content
+    pdf.set_font_safe('B', 12)
+    pdf.ln(10)
+    pdf.cell_safe(0, 8, "QUOTATION LAYOUT PREVIEW", ln=True, align='C')
+    pdf.ln(5)
+    
+    pdf.set_font_safe('', 10)
+    pdf.multi_cell_safe(0, 5, "This is a preview of your PDF layout. Adjust the settings below to customize the header layout:\n\n" +
+        f"• Logo X Position: {company_settings.get('logo_x', 10)}mm\n" +
+        f"• Logo Y Position: {company_settings.get('logo_y', 8)}mm\n" +
+        f"• Logo Width: {company_settings.get('logo_width', 35)}mm\n" +
+        f"• Logo Height: {company_settings.get('logo_height', 0)}mm (0 = auto)\n" +
+        f"• Header X Position: {company_settings.get('header_x', 50)}mm\n" +
+        f"• Header Y Position: {company_settings.get('header_y', 8)}mm\n")
+    
+    # Output PDF
+    pdf_output = pdf.output()
+    
+    return Response(
+        content=bytes(pdf_output),
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline; filename=layout_preview.pdf"}
+    )
+
+
+
 # Upload company logo for documents (payslip, pay advice, invoices)
 @api_router.post("/finance/company-settings/upload-logo")
 async def upload_company_logo(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
