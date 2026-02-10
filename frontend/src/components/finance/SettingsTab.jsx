@@ -691,6 +691,106 @@ const SettingsTab = ({
                 </p>
               </div>
             </div>
+            
+            {/* PDF Header Layout */}
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-2">PDF Header Layout (Logo & Company Name Position)</h4>
+              <p className="text-sm text-gray-500 mb-3">Adjust logo and header text positioning in millimeters (mm). Preview changes after saving.</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div>
+                  <Label className="text-xs">Logo X (mm)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={companySettings.logo_x || 10}
+                    onFocus={e => e.target.select()}
+                    onChange={(e) => setCompanySettings({...companySettings, logo_x: parseInt(e.target.value) || 10})}
+                    className="h-8"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Logo Y (mm)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={companySettings.logo_y || 8}
+                    onFocus={e => e.target.select()}
+                    onChange={(e) => setCompanySettings({...companySettings, logo_y: parseInt(e.target.value) || 8})}
+                    className="h-8"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Logo Width (mm)</Label>
+                  <Input
+                    type="number"
+                    min="10"
+                    max="80"
+                    value={companySettings.logo_width || 35}
+                    onFocus={e => e.target.select()}
+                    onChange={(e) => setCompanySettings({...companySettings, logo_width: parseInt(e.target.value) || 35})}
+                    className="h-8"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Logo Height (mm)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="50"
+                    placeholder="0 = auto"
+                    value={companySettings.logo_height || 0}
+                    onFocus={e => e.target.select()}
+                    onChange={(e) => setCompanySettings({...companySettings, logo_height: parseInt(e.target.value) || 0})}
+                    className="h-8"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Header Text X (mm)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="150"
+                    value={companySettings.header_x || 50}
+                    onFocus={e => e.target.select()}
+                    onChange={(e) => setCompanySettings({...companySettings, header_x: parseInt(e.target.value) || 50})}
+                    className="h-8"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Header Text Y (mm)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={companySettings.header_y || 8}
+                    onFocus={e => e.target.select()}
+                    onChange={(e) => setCompanySettings({...companySettings, header_y: parseInt(e.target.value) || 8})}
+                    className="h-8"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-4"
+                    onClick={async () => {
+                      try {
+                        await axiosInstance.put('/finance/company-settings', companySettings);
+                        const response = await axiosInstance.get('/finance/pdf-layout-preview', { responseType: 'blob' });
+                        const url = URL.createObjectURL(response.data);
+                        window.open(url, '_blank');
+                      } catch (err) {
+                        toast.error('Failed to generate preview');
+                      }
+                    }}
+                  >
+                    Save & Preview PDF Layout
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Custom Fields for Documents */}
