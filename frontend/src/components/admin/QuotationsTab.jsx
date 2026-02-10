@@ -323,8 +323,7 @@ const QuotationsTab = ({
             <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
               <h4 className="font-semibold text-blue-900 mb-2">Cover Letter (Page 1)</h4>
               <p className="text-sm text-blue-700">
-                Customize the introductory letter that appears on the first page of the quotation PDF.
-                Use placeholders like {"{{programme_name}}"}, {"{{company_name}}"}, {"{{contact_person}}"}, {"{{quotation_number}}"}.
+                Customize the introductory letter. Placeholders: {"{{programme_name}}"}, {"{{company_name}}"}, {"{{contact_person}}"}, {"{{quotation_number}}"}, {"{{marketer_name}}"}, {"{{total_amount}}"}
               </p>
             </div>
             <div className="p-4 bg-green-50 rounded-lg border border-green-200">
@@ -332,6 +331,21 @@ const QuotationsTab = ({
               <p className="text-sm text-green-700">
                 Define the terms and conditions that will be included in pages 3-6 of the quotation PDF document.
               </p>
+            </div>
+          </div>
+          
+          {/* Color Settings */}
+          <div className="mt-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+            <h4 className="font-semibold text-purple-900 mb-2">PDF Color Theme</h4>
+            <p className="text-sm text-purple-700 mb-3">Set the primary color for quotation PDF headers and titles</p>
+            <div className="flex items-center gap-3">
+              <input 
+                type="color" 
+                value={pdfTemplates?.primary_color || "#1a365d"}
+                onChange={(e) => onUpdatePdfColor && onUpdatePdfColor(e.target.value)}
+                className="w-10 h-10 rounded cursor-pointer border border-purple-300"
+              />
+              <span className="text-sm text-gray-600">Current: {pdfTemplates?.primary_color || "#1a365d"}</span>
             </div>
           </div>
         </CardContent>
