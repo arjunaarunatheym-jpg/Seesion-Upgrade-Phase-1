@@ -16847,6 +16847,7 @@ async def update_pdf_templates(data: dict, current_user: User = Depends(get_curr
         "id": "quotation_pdf_templates",
         "cover_letter": data.get("cover_letter", ""),
         "terms_conditions_pages": data.get("terms_conditions_pages", ""),
+        "primary_color": data.get("primary_color", "#1a365d"),
         "updated_at": now.isoformat(),
         "updated_by": current_user.id
     }
