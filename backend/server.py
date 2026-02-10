@@ -522,6 +522,11 @@ class Session(BaseModel):
     invoice_id: Optional[str] = None
     invoice_number: Optional[str] = None
     invoice_status: Optional[str] = None
+    # Grant tracking
+    grant_id: Optional[str] = None
+    # Lead/quotation reference for auto-created sessions
+    lead_id: Optional[str] = None
+    quotation_id: Optional[str] = None
     # Enriched fields (populated at runtime)
     company_name: Optional[str] = None
     program_name: Optional[str] = None
