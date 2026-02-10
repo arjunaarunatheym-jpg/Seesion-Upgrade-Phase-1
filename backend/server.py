@@ -1206,8 +1206,13 @@ class CompanySettings(BaseModel):
     secondary_color: str = "#4472C4"  # Accent color
     header_font: str = "Arial"  # Font for headers
     body_font: str = "Arial"  # Font for body text
-    logo_width: int = 150  # Logo width in pixels (default was ~80)
-    logo_position: str = "center"  # center, left, right
+    logo_width: int = 35  # Logo width in mm (PDF uses mm)
+    logo_height: int = 20  # Logo height in mm (0 = auto-scale)
+    logo_x: int = 10  # Logo X position in mm from left
+    logo_y: int = 8  # Logo Y position in mm from top
+    header_x: int = 50  # Header text X position in mm
+    header_y: int = 8  # Header text Y position in mm
+    logo_position: str = "left"  # left, center, right (legacy)
     show_watermark: bool = True  # Show watermark logo in background
     watermark_opacity: float = 0.08  # Watermark opacity (0.0 - 1.0)
     tagline_font: str = "Georgia"  # Font for tagline (elegant)
