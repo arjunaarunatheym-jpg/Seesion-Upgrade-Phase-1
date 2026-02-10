@@ -17686,6 +17686,14 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     # ===== PAGES 3-6: TERMS & CONDITIONS =====
     terms_content = templates.get("terms_conditions_pages", "")
     if terms_content:
+        # Replace placeholders in terms content
+        terms_content = terms_content.replace("{{programme_name}}", cover_programme_name)
+        terms_content = terms_content.replace("{{company_name}}", client.get("company_name", ""))
+        terms_content = terms_content.replace("{{contact_person}}", client.get("contact_person", ""))
+        terms_content = terms_content.replace("{{quotation_number}}", quotation.get("quotation_number", ""))
+        terms_content = terms_content.replace("{{total_amount}}", f"RM {quotation.get('total_amount', 0):,.2f}")
+        terms_content = terms_content.replace("{{marketer_name}}", marketer_full_name)
+        
         # Use page breaks <pb> or split by length
         if '<pb>' in terms_content or '<pagebreak>' in terms_content:
             # Split by explicit page breaks
