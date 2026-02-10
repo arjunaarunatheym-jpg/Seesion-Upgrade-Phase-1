@@ -2759,12 +2759,27 @@ const AdminDashboard = ({ user, onLogout }) => {
           <DialogHeader>
             <DialogTitle>Edit PDF Templates</DialogTitle>
             <DialogDescription>
-              Customize the content for quotation PDFs. Use placeholders: {"{{programme_name}}"}, {"{{company_name}}"}, {"{{contact_person}}"}, {"{{quotation_number}}"}
+              Customize the content for quotation PDFs. Use placeholders: {"{{programme_name}}"}, {"{{company_name}}"}, {"{{contact_person}}"}, {"{{quotation_number}}"}, {"{{marketer_name}}"}, {"{{total_amount}}"}
             </DialogDescription>
           </DialogHeader>
           
           {!showPdfPreview ? (
             <div className="space-y-6">
+              {/* Color Picker */}
+              <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <Label className="text-lg font-semibold text-purple-900">PDF Color Theme</Label>
+                <p className="text-sm text-purple-700 mb-3">Set the primary color for quotation PDF headers and titles</p>
+                <div className="flex items-center gap-3">
+                  <input 
+                    type="color" 
+                    value={pdfTemplates.primary_color || "#1a365d"}
+                    onChange={(e) => setPdfTemplates({ ...pdfTemplates, primary_color: e.target.value })}
+                    className="w-12 h-10 rounded cursor-pointer border-2 border-purple-300"
+                  />
+                  <span className="text-sm font-mono bg-white px-2 py-1 rounded">{pdfTemplates.primary_color || "#1a365d"}</span>
+                </div>
+              </div>
+              
               <div>
                 <Label className="text-lg font-semibold">Cover Letter (Page 1)</Label>
                 <p className="text-sm text-gray-500 mb-2">
@@ -2783,7 +2798,9 @@ const AdminDashboard = ({ user, onLogout }) => {
 
 Thank you for your interest in our training programmes. We are pleased to submit our quotation for the {{programme_name}} as per your request.
 
-We trust our proposal meets your requirements and look forward to being of service to {{company_name}}."
+We trust our proposal meets your requirements and look forward to being of service to {{company_name}}.
+
+Prepared by: {{marketer_name}}"
                   rows={8}
                   className="font-mono text-sm rounded-t-none"
                 />
