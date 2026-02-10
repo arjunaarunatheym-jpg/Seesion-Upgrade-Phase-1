@@ -791,6 +791,7 @@ class QuotationPDFTemplate(BaseModel):
     id: str = "quotation_pdf_templates"  # Singleton
     cover_letter: str = ""  # HTML/text for cover letter page
     terms_conditions_pages: str = ""  # HTML/text for terms & conditions (pages 3-6)
+    primary_color: str = "#1a365d"  # Header/title color for PDF
     updated_at: datetime = Field(default_factory=get_malaysia_time)
     updated_by: Optional[str] = None
 
