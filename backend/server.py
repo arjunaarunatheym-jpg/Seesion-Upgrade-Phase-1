@@ -17205,7 +17205,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     # Get PDF templates
     templates = await db.quotation_pdf_templates.find_one({"id": "quotation_pdf_templates"}, {"_id": 0})
     if not templates:
-        templates = {"cover_letter": "", "terms_conditions_pages": ""}
+        templates = {"cover_letter": "", "terms_conditions_pages": "", "primary_color": "#1a365d"}
     
     # Get description items text
     description_items_text = []
@@ -17222,8 +17222,15 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     if quotation.get("approved_by"):
         approver = await db.users.find_one({"id": quotation.get("approved_by")}, {"_id": 0, "full_name": 1})
     
-    # Generate PDF
-    pdf = QuotationPDF(company_settings)
+    # Parse primary color from templates
+    primary_color_hex = templates.get("primary_color", "#1a365d")
+    try:
+        primary_color_rgb = tuple(int(primary_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+    except:
+        primary_color_rgb = (26, 54, 93)
+    
+    # Generate PDF with custom color
+    pdf = QuotationPDF(company_settings, primary_color_rgb)
     
     # ===== PAGE 1: COVER LETTER =====
     pdf.add_page()
