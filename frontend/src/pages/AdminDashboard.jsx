@@ -1855,10 +1855,21 @@ const AdminDashboard = ({ user, onLogout }) => {
               quotations={quotations}
               allClients={allClients}
               descriptionItems={descriptionItems}
+              pdfTemplates={pdfTemplates}
               onRefresh={loadData}
               onViewQuotation={(q) => { setSelectedQuotation(q); setViewQuotationDialog(true); }}
               onRejectQuotation={(q) => { setSelectedQuotation(q); setRejectDialogOpen(true); }}
               onShowPdfTemplates={() => { loadPdfTemplates(); setShowPdfTemplatesDialog(true); }}
+              onUpdatePdfColor={async (color) => {
+                const updated = { ...pdfTemplates, primary_color: color };
+                setPdfTemplates(updated);
+                try {
+                  await axiosInstance.put('/marketing/pdf-templates', updated);
+                  toast.success('PDF color updated');
+                } catch (err) {
+                  toast.error('Failed to update color');
+                }
+              }}
             />
           </TabsContent>
 
