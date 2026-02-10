@@ -381,6 +381,21 @@ const LeadPipelineTab = ({
           })()}
         </div>
       )}
+      
+      {/* Revive button for lost leads */}
+      {lead.stage === "lost" && (
+        <div className="mt-2 pt-2 border-t">
+          <Button 
+            size="sm" 
+            variant="outline"
+            onClick={() => handleReviveLead(lead)}
+            className="h-7 text-xs w-full text-green-600 border-green-300 hover:bg-green-50"
+          >
+            <Clock className="w-3 h-3 mr-1" />
+            Revive Lead
+          </Button>
+        </div>
+      )}
     </div>
   );
 
