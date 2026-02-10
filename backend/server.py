@@ -17461,9 +17461,19 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.cell_safe(col_desc + col_qty + col_rate, 7, "Subtotal", border=1, align='R')
     pdf.cell_safe(col_amount, 7, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R', ln=True)
     
+    # Discount row if applicable
+    if quotation.get("discount_amount", 0) > 0:
+        discount_pct = quotation.get("discount_percentage", 0)
+        discount_label = f"Discount ({discount_pct}%)" if discount_pct > 0 else "Discount"
+        pdf.set_text_color(255, 102, 0)  # Orange for discount
+        pdf.cell_safe(col_desc + col_qty + col_rate, 7, discount_label, border=1, align='R')
+        pdf.cell_safe(col_amount, 7, f"-{quotation.get('discount_amount', 0):,.2f}", border=1, align='R', ln=True)
+        pdf.set_text_color(0, 0, 0)  # Reset color
+    
     # SST row if applicable
-    if quotation.get("sst_percent", 0) > 0:
-        pdf.cell_safe(col_desc + col_qty + col_rate, 7, f"SST ({quotation.get('sst_percent')}%)", border=1, align='R')
+    sst_pct = quotation.get("sst_percentage", 0) or quotation.get("sst_percent", 0)
+    if sst_pct > 0:
+        pdf.cell_safe(col_desc + col_qty + col_rate, 7, f"SST ({sst_pct}%)", border=1, align='R')
         pdf.cell_safe(col_amount, 7, f"{quotation.get('sst_amount', 0):,.2f}", border=1, align='R', ln=True)
     
     # Total row
