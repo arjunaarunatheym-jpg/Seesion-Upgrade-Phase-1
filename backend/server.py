@@ -16908,12 +16908,12 @@ def strip_html_tags(html_text):
 class QuotationPDF(FPDF):
     """Custom PDF class for quotation document generation - EXACT invoice styling"""
     
-    def __init__(self, company_settings=None):
+    def __init__(self, company_settings=None, primary_color_rgb=None):
         super().__init__()
         self.company_settings = company_settings or {}
         self.set_auto_page_break(auto=True, margin=30)  # Space for footer
-        # Colors from invoice
-        self.primary_color = (26, 54, 93)  # Dark blue #1a365d
+        # Colors - use custom or default
+        self.primary_color = primary_color_rgb if primary_color_rgb else (26, 54, 93)  # Dark blue #1a365d
         self.secondary_color = (68, 114, 196)  # Blue #4472C4
         # Add Unicode font support
         try:
