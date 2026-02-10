@@ -1172,7 +1172,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
 
       {/* Apply Discount Dialog - for negotiation */}
       <Dialog open={showDiscountDialog} onOpenChange={setShowDiscountDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Apply Discount (Negotiation)</DialogTitle>
             <DialogDescription>
