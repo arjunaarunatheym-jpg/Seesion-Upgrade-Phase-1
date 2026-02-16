@@ -502,6 +502,13 @@ const PayablesTab = ({
                               <ChevronDown className="w-5 h-5 text-purple-600" />
                             ) : (
                               <ChevronRight className="w-5 h-5 text-purple-600" />
+                      <CollapsibleTrigger className="w-full">
+                        <div className="bg-purple-100 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-purple-200 transition-colors">
+                          <div className="flex items-center gap-3">
+                            {expandedGroups[`marketing-${group.key}`] ? (
+                              <ChevronDown className="w-5 h-5 text-purple-600" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-purple-600" />
                             )}
                             <Calendar className="w-5 h-5 text-purple-600" />
                             <div className="text-left">
@@ -525,42 +532,31 @@ const PayablesTab = ({
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="divide-y bg-white">
-                        <div>
-                          <h4 className="font-semibold text-purple-900">{group.label}</h4>
-                          <p className="text-sm text-purple-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
-                        </div>
-                        {group.records.some(r => r.status !== 'paid') && (
-                          <Button size="sm" onClick={() => handleBulkMarkPaid('marketing', group.records)}>
-                            <Check className="w-4 h-4 mr-1" />
-                            Pay All ({group.records.filter(r => r.status !== 'paid').length})
-                          </Button>
-                        )}
-                      </div>
-                      <div className="divide-y">
-                        {group.records.map(comm => (
-                          <div key={comm.id} className="p-3 flex justify-between items-center hover:bg-gray-50">
-                            <div>
-                              <p className="font-medium">{comm.marketing_user_name}</p>
-                              <p className="text-sm text-gray-600">{comm.session_name}</p>
-                              <p className="text-xs text-gray-500">{comm.commission_percentage || 0}% of RM {(comm.invoice_amount || 0).toLocaleString()}</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="text-right">
-                                <p className="font-bold">RM {(comm.calculated_amount || 0).toLocaleString()}</p>
-                                <Badge className={comm.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>
-                                  {comm.status || 'pending'}
-                                </Badge>
+                          {group.records.map(comm => (
+                            <div key={comm.id} className="p-3 flex justify-between items-center hover:bg-gray-50">
+                              <div>
+                                <p className="font-medium">{comm.marketing_user_name}</p>
+                                <p className="text-sm text-gray-600">{comm.company_name || 'Unknown Company'}</p>
+                                <p className="text-xs text-gray-500">{comm.commission_rate || 0}% commission</p>
                               </div>
-                              {comm.status !== 'paid' && (
-                                <Button size="sm" variant="outline" onClick={() => handleMarkPaid('marketing', comm.id)}>
-                                  <Check className="w-4 h-4" />
-                                </Button>
-                              )}
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <p className="font-bold">RM {(comm.calculated_amount || 0).toLocaleString()}</p>
+                                  <Badge className={comm.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>
+                                    {comm.status || 'pending'}
+                                  </Badge>
+                                </div>
+                                {comm.status !== 'paid' && (
+                                  <Button size="sm" variant="outline" onClick={() => handleMarkPaid('marketing', comm.id)}>
+                                    <Check className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   ))}
                 </div>
               )}
