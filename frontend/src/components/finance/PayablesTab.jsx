@@ -416,44 +416,67 @@ const PayablesTab = ({
               ) : (
                 <div className="space-y-3">
                   {groupByMonth(payables.coordinator_fees).map(group => (
-                    <div key={group.key} className="border rounded-lg overflow-hidden">
-                      <div className="bg-green-100 px-4 py-3 flex justify-between items-center">
-                        <div>
-                          <h4 className="font-semibold text-green-900">{group.label}</h4>
-                          <p className="text-sm text-green-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
-                        </div>
-                        {group.records.some(r => r.status !== 'paid') && (
-                          <Button size="sm" onClick={() => handleBulkMarkPaid('coordinator', group.records)}>
-                            <Check className="w-4 h-4 mr-1" />
-                            Pay All ({group.records.filter(r => r.status !== 'paid').length})
-                          </Button>
-                        )}
-                      </div>
-                      <div className="divide-y">
-                        {group.records.map(fee => (
-                          <div key={fee.id} className="p-3 flex justify-between items-center hover:bg-gray-50">
-                            <div>
-                              <p className="font-medium">{fee.coordinator_name}</p>
-                              <p className="text-sm text-gray-600">{fee.session_name}</p>
-                              <p className="text-xs text-gray-500">{fee.num_days || 1} day(s) × RM {fee.daily_rate || 0}</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="text-right">
-                                <p className="font-bold">RM {(fee.total_fee || 0).toLocaleString()}</p>
-                                <Badge className={fee.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>
-                                  {fee.status || 'pending'}
-                                </Badge>
-                              </div>
-                              {fee.status !== 'paid' && (
-                                <Button size="sm" variant="outline" onClick={() => handleMarkPaid('coordinator', fee.id)}>
-                                  <Check className="w-4 h-4" />
-                                </Button>
-                              )}
+                    <Collapsible
+                      key={group.key}
+                      open={expandedGroups[`coordinator-${group.key}`] === true}
+                      onOpenChange={() => toggleGroup(`coordinator-${group.key}`)}
+                      className="border rounded-lg overflow-hidden"
+                    >
+                      <CollapsibleTrigger className="w-full">
+                        <div className="bg-green-100 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-green-200 transition-colors">
+                          <div className="flex items-center gap-3">
+                            {expandedGroups[`coordinator-${group.key}`] ? (
+                              <ChevronDown className="w-5 h-5 text-green-600" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-green-600" />
+                            )}
+                            <Calendar className="w-5 h-5 text-green-600" />
+                            <div className="text-left">
+                              <h4 className="font-semibold text-green-900">{group.label}</h4>
+                              <p className="text-sm text-green-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                          {group.records.some(r => r.status !== 'paid') && (
+                            <Button 
+                              size="sm" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleBulkMarkPaid('coordinator', group.records);
+                              }}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Pay All ({group.records.filter(r => r.status !== 'paid').length})
+                            </Button>
+                          )}
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="divide-y bg-white">
+                          {group.records.map(fee => (
+                            <div key={fee.id} className="p-3 flex justify-between items-center hover:bg-gray-50">
+                              <div>
+                                <p className="font-medium">{fee.coordinator_name}</p>
+                                <p className="text-sm text-gray-600">{fee.company_name || 'Unknown Company'}</p>
+                                <p className="text-xs text-gray-500">{fee.num_days || 1} day(s) × RM {fee.daily_rate || 0}</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <p className="font-bold">RM {(fee.total_fee || 0).toLocaleString()}</p>
+                                  <Badge className={fee.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>
+                                    {fee.status || 'pending'}
+                                  </Badge>
+                                </div>
+                                {fee.status !== 'paid' && (
+                                  <Button size="sm" variant="outline" onClick={() => handleMarkPaid('coordinator', fee.id)}>
+                                    <Check className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   ))}
                 </div>
               )}
@@ -464,10 +487,44 @@ const PayablesTab = ({
               {payables.marketing_commissions.length === 0 ? (
                 <p className="text-gray-500 text-center py-8">No marketing commissions</p>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {groupByMonth(payables.marketing_commissions).map(group => (
-                    <div key={group.key} className="border rounded-lg overflow-hidden">
-                      <div className="bg-purple-100 px-4 py-3 flex justify-between items-center">
+                    <Collapsible
+                      key={group.key}
+                      open={expandedGroups[`marketing-${group.key}`] === true}
+                      onOpenChange={() => toggleGroup(`marketing-${group.key}`)}
+                      className="border rounded-lg overflow-hidden"
+                    >
+                      <CollapsibleTrigger className="w-full">
+                        <div className="bg-purple-100 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-purple-200 transition-colors">
+                          <div className="flex items-center gap-3">
+                            {expandedGroups[`marketing-${group.key}`] ? (
+                              <ChevronDown className="w-5 h-5 text-purple-600" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-purple-600" />
+                            )}
+                            <Calendar className="w-5 h-5 text-purple-600" />
+                            <div className="text-left">
+                              <h4 className="font-semibold text-purple-900">{group.label}</h4>
+                              <p className="text-sm text-purple-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
+                            </div>
+                          </div>
+                          {group.records.some(r => r.status !== 'paid') && (
+                            <Button 
+                              size="sm" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleBulkMarkPaid('marketing', group.records);
+                              }}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Pay All ({group.records.filter(r => r.status !== 'paid').length})
+                            </Button>
+                          )}
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="divide-y bg-white">
                         <div>
                           <h4 className="font-semibold text-purple-900">{group.label}</h4>
                           <p className="text-sm text-purple-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
