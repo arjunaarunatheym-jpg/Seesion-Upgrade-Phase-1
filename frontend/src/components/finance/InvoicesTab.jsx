@@ -202,159 +202,193 @@ const InvoicesTab = ({
         ) : filteredInvoices.length === 0 ? (
           <div className="text-center py-8 text-gray-500">No invoices found</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Invoice #</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Date</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Company</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Session</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-500">Amount</th>
-                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Status</th>
-                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredInvoices.map((invoice) => (
-                  <tr key={invoice.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium">{invoice.invoice_number}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('en-MY') : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-sm">{invoice.company_name || '-'}</td>
-                    <td className="px-4 py-3 text-sm">{invoice.session_name || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-right font-medium">
-                      RM {invoice.total_amount?.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-center">{getStatusBadge(invoice.status)}</td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex justify-center gap-1">
-                        {/* Edit Button - Available before issuing */}
-                        {!['issued', 'paid', 'cancelled'].includes(invoice.status) && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            className="text-orange-600"
-                            onClick={() => onEditInvoice(invoice)}
-                            title="Edit Invoice"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        )}
-                        
-                        {/* Approve Button */}
-                        {(invoice.status === 'auto_draft' || invoice.status === 'draft') && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            className="text-green-600"
-                            onClick={() => handleApproveInvoice(invoice.id)}
-                            title="Approve"
-                          >
-                            <Check className="w-4 h-4" />
-                          </Button>
-                        )}
-                        
-                        {/* Issue Button */}
-                        {invoice.status === 'approved' && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            className="text-blue-600"
-                            onClick={() => handleIssueInvoice(invoice.id)}
-                            title="Issue"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </Button>
-                        )}
-                        
-                        {/* Issued Invoice Actions */}
-                        {invoice.status === 'issued' && (
-                          <>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              className="text-green-600"
-                              onClick={() => handlePrintInvoice(invoice)}
-                              title="Download Invoice"
-                            >
-                              <Download className="w-4 h-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              className="text-blue-600"
-                              onClick={() => {
-                                onRecordPayment(invoice.id);
-                                setActiveTab('payments');
-                              }}
-                              title="Record Payment"
-                            >
-                              <CreditCard className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                        
-                        {/* Paid Invoice - Download */}
-                        {invoice.status === 'paid' && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            className="text-green-600"
-                            onClick={() => handlePrintInvoice(invoice)}
-                            title="Download Invoice"
-                          >
-                            <Download className="w-4 h-4" />
-                          </Button>
-                        )}
-                        
-                        {/* Cancel Button */}
-                        {!['paid', 'cancelled', 'voided'].includes(invoice.status) && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            className="text-red-600"
-                            onClick={() => handleCancelInvoice(invoice.id)}
-                            title="Cancel"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        )}
-                        
-                        {/* Voided Invoice Actions */}
-                        {invoice.status === 'voided' && (
-                          <>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                              onClick={() => handleReverseVoidedInvoice(invoice.id)}
-                              title="Reverse Void (back to Draft)"
-                              data-testid={`reverse-void-${invoice.id}`}
-                            >
-                              <RotateCcw className="w-4 h-4 mr-1" />
-                              Undo
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                              onClick={() => handleCreateReplacementInvoice(invoice.id)}
-                              title="Create Replacement Invoice"
-                              data-testid={`create-replacement-${invoice.id}`}
-                            >
-                              <Plus className="w-4 h-4 mr-1" />
-                              Replace
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-3">
+            {groupedByMonth.map((group) => (
+              <Collapsible
+                key={group.key}
+                open={expandedMonths[group.key] !== false}
+                onOpenChange={() => toggleMonth(group.key)}
+                className="border rounded-lg overflow-hidden"
+              >
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="w-5 h-5 text-blue-600" />
+                      <h3 className="text-lg font-semibold text-gray-700">{group.label}</h3>
+                      <Badge variant="outline" className="text-blue-600 border-blue-300">
+                        {group.invoices.length} invoices
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="font-bold text-blue-700">
+                        RM {group.total.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                      </span>
+                      {expandedMonths[group.key] !== false ? (
+                        <ChevronDown className="w-5 h-5 text-blue-500" />
+                      ) : (
+                        <ChevronRight className="w-5 h-5 text-blue-500" />
+                      )}
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Invoice #</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Date</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Company</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Session</th>
+                          <th className="px-4 py-3 text-right text-sm font-medium text-gray-500">Amount</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Status</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {group.invoices.map((invoice) => (
+                          <tr key={invoice.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm font-medium">{invoice.invoice_number}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('en-MY') : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm">{invoice.company_name || '-'}</td>
+                            <td className="px-4 py-3 text-sm">{invoice.session_name || '-'}</td>
+                            <td className="px-4 py-3 text-sm text-right font-medium">
+                              RM {invoice.total_amount?.toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 text-center">{getStatusBadge(invoice.status)}</td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="flex justify-center gap-1">
+                                {/* Edit Button - Available before issuing */}
+                                {!['issued', 'paid', 'cancelled'].includes(invoice.status) && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="text-orange-600"
+                                    onClick={() => onEditInvoice(invoice)}
+                                    title="Edit Invoice"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                
+                                {/* Approve Button */}
+                                {(invoice.status === 'auto_draft' || invoice.status === 'draft') && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="text-green-600"
+                                    onClick={() => handleApproveInvoice(invoice.id)}
+                                    title="Approve"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                
+                                {/* Issue Button */}
+                                {invoice.status === 'approved' && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="text-blue-600"
+                                    onClick={() => handleIssueInvoice(invoice.id)}
+                                    title="Issue"
+                                  >
+                                    <FileText className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                
+                                {/* Issued Invoice Actions */}
+                                {invoice.status === 'issued' && (
+                                  <>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      className="text-green-600"
+                                      onClick={() => handlePrintInvoice(invoice)}
+                                      title="Download Invoice"
+                                    >
+                                      <Download className="w-4 h-4" />
+                                    </Button>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      className="text-blue-600"
+                                      onClick={() => {
+                                        onRecordPayment(invoice.id);
+                                        setActiveTab('payments');
+                                      }}
+                                      title="Record Payment"
+                                    >
+                                      <CreditCard className="w-4 h-4" />
+                                    </Button>
+                                  </>
+                                )}
+                                
+                                {/* Paid Invoice - Download */}
+                                {invoice.status === 'paid' && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="text-green-600"
+                                    onClick={() => handlePrintInvoice(invoice)}
+                                    title="Download Invoice"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                
+                                {/* Cancel Button */}
+                                {!['paid', 'cancelled', 'voided'].includes(invoice.status) && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="text-red-600"
+                                    onClick={() => handleCancelInvoice(invoice.id)}
+                                    title="Cancel"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                
+                                {/* Voided Invoice Actions */}
+                                {invoice.status === 'voided' && (
+                                  <>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                                      onClick={() => handleReverseVoidedInvoice(invoice.id)}
+                                      title="Reverse Void (back to Draft)"
+                                      data-testid={`reverse-void-${invoice.id}`}
+                                    >
+                                      <RotateCcw className="w-4 h-4 mr-1" />
+                                      Undo
+                                    </Button>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                                      onClick={() => handleCreateReplacementInvoice(invoice.id)}
+                                      title="Create Replacement Invoice"
+                                      data-testid={`create-replacement-${invoice.id}`}
+                                    >
+                                      <Plus className="w-4 h-4 mr-1" />
+                                      Replace
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
           </div>
         )}
       </CardContent>
