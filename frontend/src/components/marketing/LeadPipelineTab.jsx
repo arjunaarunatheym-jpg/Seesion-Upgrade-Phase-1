@@ -709,6 +709,100 @@ const LeadPipelineTab = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Mark as Won Dialog */}
+      <Dialog open={wonDialogOpen} onOpenChange={setWonDialogOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-700">
+              <CheckCircle className="w-5 h-5" />
+              Mark Lead as Won
+            </DialogTitle>
+          </DialogHeader>
+          {wonLead && (
+            <div className="space-y-4 py-2">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="font-medium">{wonLead.company_name}</p>
+                <p className="text-sm text-gray-600">{wonLead.contact_person}</p>
+                {wonLead.expected_value > 0 && (
+                  <p className="text-sm text-green-600 font-medium mt-1">
+                    Expected Value: {formatCurrency(wonLead.expected_value)}
+                  </p>
+                )}
+              </div>
+              
+              <p className="text-sm text-gray-600">
+                Enter training details to create a draft session:
+              </p>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Training Start Date *</Label>
+                  <Input
+                    type="date"
+                    value={wonForm.training_date}
+                    onChange={(e) => setWonForm({ ...wonForm, training_date: e.target.value })}
+                    data-testid="won-training-date"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">End Date</Label>
+                  <Input
+                    type="date"
+                    value={wonForm.end_date}
+                    onChange={(e) => setWonForm({ ...wonForm, end_date: e.target.value })}
+                    min={wonForm.training_date}
+                    data-testid="won-end-date"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <Label className="text-xs">Number of Participants (Pax)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 20"
+                  value={wonForm.num_participants}
+                  onChange={(e) => setWonForm({ ...wonForm, num_participants: e.target.value })}
+                  data-testid="won-num-participants"
+                />
+              </div>
+              
+              <div>
+                <Label className="text-xs">Venue / Location</Label>
+                <Input
+                  placeholder="Training venue address"
+                  value={wonForm.venue}
+                  onChange={(e) => setWonForm({ ...wonForm, venue: e.target.value })}
+                  data-testid="won-venue"
+                />
+              </div>
+              
+              <div>
+                <Label className="text-xs">Grant ID (if applicable)</Label>
+                <Input
+                  placeholder="e.g. HRDF-123456"
+                  value={wonForm.grant_id}
+                  onChange={(e) => setWonForm({ ...wonForm, grant_id: e.target.value })}
+                  data-testid="won-grant-id"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWonDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleMarkWon} 
+              className="bg-green-600 hover:bg-green-700"
+              data-testid="confirm-mark-won-btn"
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Mark as Won & Create Session
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
