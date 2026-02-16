@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
-import { FileSpreadsheet, RefreshCw, Edit, Check, FileText, Download, CreditCard, X, RotateCcw, Plus } from "lucide-react";
+import { FileSpreadsheet, RefreshCw, Edit, Check, FileText, Download, CreditCard, X, RotateCcw, Plus, ChevronDown, ChevronRight, Calendar } from "lucide-react";
 
 const InvoicesTab = ({
   invoices,
@@ -22,12 +23,46 @@ const InvoicesTab = ({
 }) => {
   // Filter state
   const [statusFilter, setStatusFilter] = useState("all");
+  
+  // Collapsible state for month groups
+  const [expandedMonths, setExpandedMonths] = useState({});
 
   // Filter invoices by status
   const filteredInvoices = useMemo(() => {
     if (statusFilter === "all") return invoices;
     return invoices.filter(inv => inv.status === statusFilter);
   }, [invoices, statusFilter]);
+
+  // Group invoices by month
+  const groupedByMonth = useMemo(() => {
+    const groups = {};
+    filteredInvoices.forEach(inv => {
+      const dateStr = inv.invoice_date || inv.created_at;
+      if (!dateStr) return;
+      const date = new Date(dateStr);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const label = date.toLocaleString('en', { month: 'long', year: 'numeric' });
+      
+      if (!groups[key]) {
+        groups[key] = {
+          key,
+          label,
+          invoices: [],
+          total: 0
+        };
+      }
+      groups[key].invoices.push(inv);
+      groups[key].total += inv.total_amount || 0;
+    });
+    return Object.values(groups).sort((a, b) => b.key.localeCompare(a.key));
+  }, [filteredInvoices]);
+
+  const toggleMonth = (monthKey) => {
+    setExpandedMonths(prev => ({
+      ...prev,
+      [monthKey]: !prev[monthKey]
+    }));
+  };
 
   // Status badge helper
   const getStatusBadge = (status) => {
