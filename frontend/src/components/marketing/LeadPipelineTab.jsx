@@ -147,12 +147,52 @@ const LeadPipelineTab = ({
   };
 
   const handleStageChange = async (leadId, newStage) => {
+    // If changing to "won", open the won dialog instead
+    if (newStage === "won") {
+      const lead = leads.find(l => l.id === leadId);
+      setWonLead(lead);
+      setWonForm({
+        training_date: "",
+        end_date: "",
+        num_participants: "",
+        venue: lead?.company_address || "",
+        grant_id: "",
+      });
+      setWonDialogOpen(true);
+      return;
+    }
+    
     try {
       await axiosInstance.put(`/marketing/leads/${leadId}/stage?stage=${newStage}`);
       toast.success(`Lead moved to ${newStage}`);
       onRefresh();
     } catch (error) {
       toast.error("Failed to update stage");
+    }
+  };
+
+  const handleMarkWon = async () => {
+    if (!wonLead) return;
+    
+    if (!wonForm.training_date) {
+      toast.error("Training start date is required");
+      return;
+    }
+    
+    try {
+      await axiosInstance.post(`/marketing/leads/${wonLead.id}/mark-won`, {
+        training_date: wonForm.training_date,
+        end_date: wonForm.end_date || wonForm.training_date,
+        num_participants: parseInt(wonForm.num_participants) || 0,
+        venue: wonForm.venue,
+        grant_id: wonForm.grant_id,
+      });
+      toast.success("Lead marked as Won! Draft session created.");
+      setWonDialogOpen(false);
+      setWonLead(null);
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to mark as won");
     }
   };
 
