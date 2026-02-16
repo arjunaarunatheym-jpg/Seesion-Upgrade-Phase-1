@@ -1070,6 +1070,9 @@ async def mark_lead_won_and_create_session(lead_id: str, win_data: dict, current
         
         # Create draft session
         session_id = str(uuid.uuid4())
+        end_date = win_data.get("end_date") or training_date
+        num_participants = win_data.get("num_participants", 0)
+        
         session_data = {
             "id": session_id,
             "name": f"{client['company_name'] if client else lead['company_name']} - {programme_name}",
@@ -1077,7 +1080,8 @@ async def mark_lead_won_and_create_session(lead_id: str, win_data: dict, current
             "company_id": company_id or "",
             "location": win_data.get("venue", quotation.get("venue", "") if quotation else ""),
             "start_date": training_date,
-            "end_date": training_date,
+            "end_date": end_date,
+            "expected_participants": num_participants,
             "status": "draft",  # Draft status for admin review
             "completion_status": "ongoing",
             "supervisor_ids": [],
