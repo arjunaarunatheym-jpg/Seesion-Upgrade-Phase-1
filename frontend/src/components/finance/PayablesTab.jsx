@@ -502,13 +502,6 @@ const PayablesTab = ({
                               <ChevronDown className="w-5 h-5 text-purple-600" />
                             ) : (
                               <ChevronRight className="w-5 h-5 text-purple-600" />
-                      <CollapsibleTrigger className="w-full">
-                        <div className="bg-purple-100 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-purple-200 transition-colors">
-                          <div className="flex items-center gap-3">
-                            {expandedGroups[`marketing-${group.key}`] ? (
-                              <ChevronDown className="w-5 h-5 text-purple-600" />
-                            ) : (
-                              <ChevronRight className="w-5 h-5 text-purple-600" />
                             )}
                             <Calendar className="w-5 h-5 text-purple-600" />
                             <div className="text-left">
