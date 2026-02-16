@@ -44,6 +44,14 @@ const PayablesTab = ({
     }
   };
 
+  // Toggle group expansion
+  const toggleGroup = (groupKey) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey]
+    }));
+  };
+
   // Group payables by month
   const groupByMonth = (records) => {
     const groups = {};
