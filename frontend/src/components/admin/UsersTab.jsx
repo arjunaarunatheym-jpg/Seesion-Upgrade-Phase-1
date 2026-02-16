@@ -23,10 +23,20 @@ const UsersTab = ({
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   
+  // Collapsible state - track which groups are expanded
+  const [expandedGroups, setExpandedGroups] = useState({});
+  
   // Reset password state
   const [resetPasswordUser, setResetPasswordUser] = useState(null);
   const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
+
+  const toggleGroup = (groupId) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupId]: !prev[groupId]
+    }));
+  };
 
   const toggleUserSelection = (userId) => {
     setSelectedUsers(prev =>
