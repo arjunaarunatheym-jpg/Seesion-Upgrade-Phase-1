@@ -341,46 +341,69 @@ const PayablesTab = ({
               {payables.trainer_fees.length === 0 ? (
                 <p className="text-gray-500 text-center py-8">No trainer fees</p>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {groupByMonth(payables.trainer_fees).map(group => (
-                    <div key={group.key} className="border rounded-lg overflow-hidden">
-                      <div className="bg-blue-100 px-4 py-3 flex justify-between items-center">
-                        <div>
-                          <h4 className="font-semibold text-blue-900">{group.label}</h4>
-                          <p className="text-sm text-blue-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
-                        </div>
-                        {group.records.some(r => r.status !== 'paid') && (
-                          <Button size="sm" onClick={() => handleBulkMarkPaid('trainer', group.records)}>
-                            <Check className="w-4 h-4 mr-1" />
-                            Pay All ({group.records.filter(r => r.status !== 'paid').length})
-                          </Button>
-                        )}
-                      </div>
-                      <div className="divide-y">
-                        {group.records.map(fee => (
-                          <div key={fee.id} className="p-3 flex justify-between items-center hover:bg-gray-50">
-                            <div>
-                              <p className="font-medium">{fee.trainer_name}</p>
-                              <p className="text-sm text-gray-600">{fee.session_name}</p>
-                              <p className="text-xs text-gray-500">Role: {fee.trainer_role || 'Trainer'}</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="text-right">
-                                <p className="font-bold">RM {(fee.fee_amount || 0).toLocaleString()}</p>
-                                <Badge className={fee.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>
-                                  {fee.status || 'pending'}
-                                </Badge>
-                              </div>
-                              {fee.status !== 'paid' && (
-                                <Button size="sm" variant="outline" onClick={() => handleMarkPaid('trainer', fee.id)}>
-                                  <Check className="w-4 h-4" />
-                                </Button>
-                              )}
+                    <Collapsible
+                      key={group.key}
+                      open={expandedGroups[`trainer-${group.key}`] === true}
+                      onOpenChange={() => toggleGroup(`trainer-${group.key}`)}
+                      className="border rounded-lg overflow-hidden"
+                    >
+                      <CollapsibleTrigger className="w-full">
+                        <div className="bg-blue-100 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-blue-200 transition-colors">
+                          <div className="flex items-center gap-3">
+                            {expandedGroups[`trainer-${group.key}`] ? (
+                              <ChevronDown className="w-5 h-5 text-blue-600" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-blue-600" />
+                            )}
+                            <Calendar className="w-5 h-5 text-blue-600" />
+                            <div className="text-left">
+                              <h4 className="font-semibold text-blue-900">{group.label}</h4>
+                              <p className="text-sm text-blue-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                          {group.records.some(r => r.status !== 'paid') && (
+                            <Button 
+                              size="sm" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleBulkMarkPaid('trainer', group.records);
+                              }}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Pay All ({group.records.filter(r => r.status !== 'paid').length})
+                            </Button>
+                          )}
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="divide-y bg-white">
+                          {group.records.map(fee => (
+                            <div key={fee.id} className="p-3 flex justify-between items-center hover:bg-gray-50">
+                              <div>
+                                <p className="font-medium">{fee.trainer_name}</p>
+                                <p className="text-sm text-gray-600">{fee.company_name || 'Unknown Company'}</p>
+                                <p className="text-xs text-gray-500">Role: {fee.role || fee.trainer_role || 'Trainer'}</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <p className="font-bold">RM {(fee.fee_amount || 0).toLocaleString()}</p>
+                                  <Badge className={fee.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>
+                                    {fee.status || 'pending'}
+                                  </Badge>
+                                </div>
+                                {fee.status !== 'paid' && (
+                                  <Button size="sm" variant="outline" onClick={() => handleMarkPaid('trainer', fee.id)}>
+                                    <Check className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   ))}
                 </div>
               )}
@@ -391,7 +414,7 @@ const PayablesTab = ({
               {payables.coordinator_fees.length === 0 ? (
                 <p className="text-gray-500 text-center py-8">No coordinator fees</p>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {groupByMonth(payables.coordinator_fees).map(group => (
                     <div key={group.key} className="border rounded-lg overflow-hidden">
                       <div className="bg-green-100 px-4 py-3 flex justify-between items-center">
