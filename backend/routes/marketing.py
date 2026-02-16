@@ -648,13 +648,17 @@ async def create_description_item(item_data: dict, current_user: User = Depends(
         "id": str(uuid.uuid4()),
         "name": item_data.get("name"),
         "description": item_data.get("description"),
+        "category": item_data.get("category", "inclusions"),
         "unit": item_data.get("unit", "pax"),
         "default_rate": item_data.get("default_rate", 0),
+        "sort_order": item_data.get("sort_order", 0),
         "created_by": current_user.id,
         "created_at": get_malaysia_time().isoformat()
     }
     
     await db.description_items.insert_one(item)
+    # Remove _id added by MongoDB before returning
+    item.pop("_id", None)
     return {"message": "Item created", "item": item}
 
 
