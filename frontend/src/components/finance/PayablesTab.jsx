@@ -10,10 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Lock, Unlock, Download, Printer, RefreshCw, Check } from "lucide-react";
+import { Lock, Unlock, Download, Printer, RefreshCw, Check, ChevronDown, ChevronRight, Calendar } from "lucide-react";
 
 const PayablesTab = ({
   payables,
@@ -23,6 +24,9 @@ const PayablesTab = ({
   const [payablesMonth, setPayablesMonth] = useState(new Date().getMonth() + 1);
   const [payablesYear, setPayablesYear] = useState(currentYear);
   const [currentPeriodStatus, setCurrentPeriodStatus] = useState({ status: 'open', exists: false });
+  
+  // Track expanded month groups - all collapsed by default
+  const [expandedGroups, setExpandedGroups] = useState({});
   const [reopenDialog, setReopenDialog] = useState({ open: false, reason: '' });
 
   // Load period status when month/year changes
