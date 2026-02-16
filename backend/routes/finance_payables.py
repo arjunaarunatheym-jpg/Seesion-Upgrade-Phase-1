@@ -782,8 +782,12 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1}).to_list(1000)
-    session_map = {s["id"]: {"name": s["name"], "start_date": s.get("start_date")} for s in sessions}
+    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1, "company_id": 1}).to_list(1000)
+    session_map = {s["id"]: {"name": s["name"], "start_date": s.get("start_date"), "company_id": s.get("company_id")} for s in sessions}
+    
+    # Get companies for lookup
+    companies = await db.companies.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
+    company_map = {c["id"]: c["name"] for c in companies}
     
     comms = await db.marketing_commissions.find({}, {"_id": 0}).to_list(1000)
     
@@ -793,6 +797,8 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
         if session_id not in session_map:
             await db.marketing_commissions.delete_one({"id": comm.get("id")})
             continue
+        
+        session_info = session_map.get(session_id, {})
         
         # FIX: Get ALL invoices for the session, not just one
         invoices = await db.invoices.find({"session_id": session_id}, {"_id": 0, "total_amount": 1, "tax_amount": 1}).to_list(100)
@@ -829,8 +835,9 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
         
         user = await db.users.find_one({"id": comm.get("marketing_user_id")}, {"_id": 0, "full_name": 1})
         comm["marketing_user_name"] = user.get("full_name") if user else "Unknown"
-        comm["session_name"] = session_map.get(session_id, {}).get("name", "Unknown Session")
-        comm["session_start_date"] = session_map.get(session_id, {}).get("start_date")
+        comm["session_name"] = session_info.get("name", "Unknown Session")
+        comm["session_start_date"] = session_info.get("start_date")
+        comm["company_name"] = company_map.get(session_info.get("company_id"), "Unknown Company")
         comm["calculated_amount"] = calculated_amount
         result.append(comm)
     
