@@ -10766,7 +10766,7 @@ async def get_pending_coordinator_fees(current_user: User = Depends(get_current_
 
 @api_router.get("/finance/payables/marketing-commissions")
 async def get_pending_marketing_commissions(current_user: User = Depends(get_current_user)):
-    """Get all marketing commissions - calculated on-the-fly to match Profit Summary"""
+    """Get all marketing commissions - use values from session costing directly"""
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -10783,11 +10783,10 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
             await db.marketing_commissions.delete_one({"id": comm.get("id")})
             continue
         
-        # Calculate the commission amount on-the-fly (same logic as Profit Summary)
-        # Get session costing data
-        invoice = await db.invoices.find_one({"session_id": session_id}, {"_id": 0, "total_amount": 1, "tax_amount": 1})
-        invoice_total = invoice.get("total_amount", 0) if invoice else 0
-        tax_amount = invoice.get("tax_amount", 0) if invoice else 0
+        # Get ALL invoices for this session (not just one)
+        invoices = await db.invoices.find({"session_id": session_id}, {"_id": 0, "total_amount": 1, "tax_amount": 1}).to_list(100)
+        invoice_total = sum(inv.get("total_amount", 0) for inv in invoices)
+        tax_amount = sum(inv.get("tax_amount", 0) for inv in invoices)
         gross_revenue = invoice_total - tax_amount
         
         # Get expenses
