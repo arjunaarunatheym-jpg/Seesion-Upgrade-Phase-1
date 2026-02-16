@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 import uuid
 import os
+import base64
+from io import BytesIO
 
 from core import db, get_current_user, get_malaysia_time
 from models import User, CompanySettings
