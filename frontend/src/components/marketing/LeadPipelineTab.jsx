@@ -66,6 +66,17 @@ const LeadPipelineTab = ({
     expected_value: 0,
     follow_up_date: "",
   });
+  
+  // Won Dialog State
+  const [wonDialogOpen, setWonDialogOpen] = useState(false);
+  const [wonLead, setWonLead] = useState(null);
+  const [wonForm, setWonForm] = useState({
+    training_date: "",
+    end_date: "",
+    num_participants: "",
+    venue: "",
+    grant_id: "",
+  });
 
   const resetForm = () => {
     setForm({
