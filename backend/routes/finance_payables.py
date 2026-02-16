@@ -530,16 +530,18 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
             await db.marketing_commissions.delete_one({"id": comm.get("id")})
             continue
         
-        invoice = await db.invoices.find_one({"session_id": session_id}, {"_id": 0, "total_amount": 1, "tax_amount": 1})
-        invoice_total = invoice.get("total_amount", 0) if invoice else 0
-        tax_amount = invoice.get("tax_amount", 0) if invoice else 0
+        # FIX: Get ALL invoices for the session, not just one
+        invoices = await db.invoices.find({"session_id": session_id}, {"_id": 0, "total_amount": 1, "tax_amount": 1}).to_list(100)
+        invoice_total = sum(inv.get("total_amount", 0) for inv in invoices)
+        tax_amount = sum(inv.get("tax_amount", 0) for inv in invoices)
         gross_revenue = invoice_total - tax_amount
         
         trainer_fees = await db.trainer_fees.find({"session_id": session_id}, {"_id": 0, "fee_amount": 1}).to_list(100)
         trainer_fees_total = sum(f.get("fee_amount", 0) for f in trainer_fees)
         
-        coord_fee = await db.coordinator_fees.find_one({"session_id": session_id}, {"_id": 0, "total_fee": 1})
-        coordinator_fee_total = coord_fee.get("total_fee", 0) if coord_fee else 0
+        # FIX: Get ALL coordinator fees, not just one
+        coord_fees = await db.coordinator_fees.find({"session_id": session_id}, {"_id": 0, "total_fee": 1}).to_list(100)
+        coordinator_fee_total = sum(cf.get("total_fee", 0) for cf in coord_fees)
         
         expenses = await db.session_expenses.find({"session_id": session_id}, {"_id": 0, "actual_amount": 1, "estimated_amount": 1}).to_list(100)
         cash_expenses_actual = sum(e.get("actual_amount", 0) for e in expenses)
@@ -554,6 +556,7 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
         else:
             calculated_amount = comm.get("fixed_amount") or 0.0
         
+        # Always update if there's a discrepancy
         if abs(calculated_amount - (comm.get("calculated_amount") or 0)) > 0.01:
             await db.marketing_commissions.update_one(
                 {"id": comm.get("id")},
@@ -568,6 +571,126 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
         result.append(comm)
     
     return result
+
+
+class RecalculateCommissionsRequest(BaseModel):
+    year: Optional[int] = None
+    month: Optional[int] = None
+    session_id: Optional[str] = None
+
+
+@router.post("/recalculate-commissions")
+async def recalculate_marketing_commissions(
+    request: RecalculateCommissionsRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Admin endpoint to recalculate and fix historical marketing commission data.
+    Can filter by year/month or specific session_id.
+    """
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin can recalculate commissions")
+    
+    # Build query for commissions to recalculate
+    query = {}
+    if request.session_id:
+        query["session_id"] = request.session_id
+    
+    comms = await db.marketing_commissions.find(query, {"_id": 0}).to_list(1000)
+    
+    updated_records = []
+    skipped_records = []
+    
+    for comm in comms:
+        session_id = comm.get("session_id")
+        
+        # Check session exists
+        session = await db.sessions.find_one({"id": session_id}, {"_id": 0, "name": 1, "start_date": 1})
+        if not session:
+            skipped_records.append({"id": comm.get("id"), "reason": "Session not found"})
+            continue
+        
+        # Filter by year/month if specified
+        if request.year or request.month:
+            start_date = session.get("start_date", "")
+            if start_date:
+                try:
+                    date_parts = start_date.split("-")
+                    session_year = int(date_parts[0])
+                    session_month = int(date_parts[1])
+                    
+                    if request.year and session_year != request.year:
+                        continue
+                    if request.month and session_month != request.month:
+                        continue
+                except:
+                    pass
+        
+        # Calculate correct commission based on ALL invoices
+        invoices = await db.invoices.find({"session_id": session_id}, {"_id": 0, "total_amount": 1, "tax_amount": 1}).to_list(100)
+        invoice_total = sum(inv.get("total_amount", 0) for inv in invoices)
+        tax_amount = sum(inv.get("tax_amount", 0) for inv in invoices)
+        gross_revenue = invoice_total - tax_amount
+        
+        trainer_fees = await db.trainer_fees.find({"session_id": session_id}, {"_id": 0, "fee_amount": 1}).to_list(100)
+        trainer_fees_total = sum(f.get("fee_amount", 0) for f in trainer_fees)
+        
+        coord_fees = await db.coordinator_fees.find({"session_id": session_id}, {"_id": 0, "total_fee": 1}).to_list(100)
+        coordinator_fee_total = sum(cf.get("total_fee", 0) for cf in coord_fees)
+        
+        expenses = await db.session_expenses.find({"session_id": session_id}, {"_id": 0, "actual_amount": 1, "estimated_amount": 1}).to_list(100)
+        cash_expenses_actual = sum(e.get("actual_amount", 0) for e in expenses)
+        cash_expenses_estimated = sum(e.get("estimated_amount", 0) for e in expenses)
+        cash_expenses = cash_expenses_actual if cash_expenses_actual > 0 else cash_expenses_estimated
+        
+        total_expenses_before_marketing = trainer_fees_total + coordinator_fee_total + cash_expenses
+        profit_before_marketing = gross_revenue - total_expenses_before_marketing
+        
+        if comm.get("commission_type") == "percentage":
+            new_amount = profit_before_marketing * (comm.get("commission_rate", 0) / 100)
+        else:
+            new_amount = comm.get("fixed_amount") or 0.0
+        
+        old_amount = comm.get("calculated_amount", 0)
+        
+        # Update the record
+        await db.marketing_commissions.update_one(
+            {"id": comm.get("id")},
+            {"$set": {
+                "calculated_amount": new_amount,
+                "updated_at": get_malaysia_time().isoformat(),
+                "recalculated_by": current_user.id,
+                "recalculated_at": get_malaysia_time().isoformat()
+            }}
+        )
+        
+        # Log the change
+        await log_finance_action(
+            "marketing_commission",
+            comm.get("id"),
+            "recalculated",
+            current_user.id,
+            {"calculated_amount": old_amount},
+            {"calculated_amount": new_amount},
+            f"Recalculated commission: {len(invoices)} invoices, gross={gross_revenue}, profit={profit_before_marketing}"
+        )
+        
+        updated_records.append({
+            "id": comm.get("id"),
+            "session_name": session.get("name"),
+            "old_amount": old_amount,
+            "new_amount": new_amount,
+            "difference": new_amount - old_amount,
+            "invoices_count": len(invoices),
+            "gross_revenue": gross_revenue,
+            "profit_before_marketing": profit_before_marketing
+        })
+    
+    return {
+        "message": f"Recalculated {len(updated_records)} commission records",
+        "updated": updated_records,
+        "skipped": skipped_records
+    }
 
 
 # ============ EXPENSE CATEGORIES ============
