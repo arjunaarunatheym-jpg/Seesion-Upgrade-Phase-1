@@ -33,7 +33,7 @@ I've set up an internal nginx proxy that routes `/db-admin/` to Mongo Express!
 **To Make It Accessible:**
 You'll need to contact the Emergent platform support to update the Kubernetes ingress configuration to route traffic to port 8083 instead of port 3000. Once that's done, you'll be able to access Mongo Express at:
 
-**`https://marketing-flow-test.preview.emergentagent.com/db-admin/`**
+**`https://finance-correction.preview.emergentagent.com/db-admin/`**
 
 Just login with:
 - Username: `admin`
