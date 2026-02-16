@@ -524,8 +524,12 @@ async def get_pending_trainer_fees(current_user: User = Depends(get_current_user
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1}).to_list(1000)
-    session_map = {s["id"]: {"name": s["name"], "start_date": s.get("start_date")} for s in sessions}
+    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1, "company_id": 1}).to_list(1000)
+    session_map = {s["id"]: {"name": s["name"], "start_date": s.get("start_date"), "company_id": s.get("company_id")} for s in sessions}
+    
+    # Get companies for lookup
+    companies = await db.companies.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
+    company_map = {c["id"]: c["name"] for c in companies}
     
     fees = await db.trainer_fees.find({}, {"_id": 0}).to_list(1000)
     
@@ -535,10 +539,12 @@ async def get_pending_trainer_fees(current_user: User = Depends(get_current_user
             await db.trainer_fees.delete_one({"id": fee.get("id")})
             continue
             
+        session_info = session_map.get(fee.get("session_id"), {})
         trainer = await db.users.find_one({"id": fee.get("trainer_id")}, {"_id": 0, "full_name": 1})
         fee["trainer_name"] = trainer.get("full_name") if trainer else "Unknown"
-        fee["session_name"] = session_map.get(fee.get("session_id"), {}).get("name", "Unknown Session")
-        fee["session_start_date"] = session_map.get(fee.get("session_id"), {}).get("start_date")
+        fee["session_name"] = session_info.get("name", "Unknown Session")
+        fee["session_start_date"] = session_info.get("start_date")
+        fee["company_name"] = company_map.get(session_info.get("company_id"), "Unknown Company")
         result.append(fee)
     
     return result
@@ -550,8 +556,12 @@ async def get_pending_coordinator_fees(current_user: User = Depends(get_current_
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1}).to_list(1000)
-    session_map = {s["id"]: {"name": s["name"], "start_date": s.get("start_date")} for s in sessions}
+    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1, "company_id": 1}).to_list(1000)
+    session_map = {s["id"]: {"name": s["name"], "start_date": s.get("start_date"), "company_id": s.get("company_id")} for s in sessions}
+    
+    # Get companies for lookup
+    companies = await db.companies.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
+    company_map = {c["id"]: c["name"] for c in companies}
     
     fees = await db.coordinator_fees.find({}, {"_id": 0}).to_list(1000)
     
@@ -560,11 +570,13 @@ async def get_pending_coordinator_fees(current_user: User = Depends(get_current_
         if fee.get("session_id") not in session_map:
             await db.coordinator_fees.delete_one({"id": fee.get("id")})
             continue
-            
+        
+        session_info = session_map.get(fee.get("session_id"), {})
         coordinator = await db.users.find_one({"id": fee.get("coordinator_id")}, {"_id": 0, "full_name": 1})
         fee["coordinator_name"] = coordinator.get("full_name") if coordinator else "Unknown"
-        fee["session_name"] = session_map.get(fee.get("session_id"), {}).get("name", "Unknown Session")
-        fee["session_start_date"] = session_map.get(fee.get("session_id"), {}).get("start_date")
+        fee["session_name"] = session_info.get("name", "Unknown Session")
+        fee["session_start_date"] = session_info.get("start_date")
+        fee["company_name"] = company_map.get(session_info.get("company_id"), "Unknown Company")
         result.append(fee)
     
     return result
