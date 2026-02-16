@@ -355,6 +355,64 @@ async def mark_coordinator_fee_paid(fee_id: str, current_user: User = Depends(ge
     return {"message": "Coordinator fee marked as paid"}
 
 
+# ============ PAYABLES MARK-PAID ENDPOINTS (Used by PayablesTab) ============
+@router.post("/payables/trainer/{fee_id}/mark-paid")
+async def mark_trainer_payable_paid(fee_id: str, current_user: User = Depends(get_current_user)):
+    """Mark trainer fee as paid (payables endpoint)"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Finance can mark payments")
+    
+    record = await db.trainer_fees.find_one({"id": fee_id}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="Fee record not found")
+    
+    await db.trainer_fees.update_one(
+        {"id": fee_id}, 
+        {"$set": {"status": "paid", "paid_date": get_malaysia_time().strftime("%Y-%m-%d"), "paid_by": current_user.id, "updated_at": get_malaysia_time().isoformat()}}
+    )
+    await log_finance_action("trainer_fee", fee_id, "status_changed", current_user.id, {"status": record.get("status")}, {"status": "paid"})
+    
+    return {"message": "Trainer fee marked as paid"}
+
+
+@router.post("/payables/coordinator/{fee_id}/mark-paid")
+async def mark_coordinator_payable_paid(fee_id: str, current_user: User = Depends(get_current_user)):
+    """Mark coordinator fee as paid (payables endpoint)"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Finance can mark payments")
+    
+    record = await db.coordinator_fees.find_one({"id": fee_id}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="Fee record not found")
+    
+    await db.coordinator_fees.update_one(
+        {"id": fee_id}, 
+        {"$set": {"status": "paid", "paid_date": get_malaysia_time().strftime("%Y-%m-%d"), "paid_by": current_user.id, "updated_at": get_malaysia_time().isoformat()}}
+    )
+    await log_finance_action("coordinator_fee", fee_id, "status_changed", current_user.id, {"status": record.get("status")}, {"status": "paid"})
+    
+    return {"message": "Coordinator fee marked as paid"}
+
+
+@router.post("/payables/marketing/{record_id}/mark-paid")
+async def mark_marketing_payable_paid(record_id: str, current_user: User = Depends(get_current_user)):
+    """Mark marketing commission as paid (payables endpoint)"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Finance can mark payments")
+    
+    record = await db.marketing_commissions.find_one({"id": record_id}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="Commission record not found")
+    
+    await db.marketing_commissions.update_one(
+        {"id": record_id}, 
+        {"$set": {"status": "paid", "paid_date": get_malaysia_time().strftime("%Y-%m-%d"), "paid_by": current_user.id, "updated_at": get_malaysia_time().isoformat()}}
+    )
+    await log_finance_action("marketing_commission", record_id, "status_changed", current_user.id, {"status": record.get("status")}, {"status": "paid"})
+    
+    return {"message": "Marketing commission marked as paid"}
+
+
 # ============ PAYABLES PERIOD MANAGEMENT ============
 @router.get("/payables/periods")
 async def get_payables_periods(current_user: User = Depends(get_current_user)):
