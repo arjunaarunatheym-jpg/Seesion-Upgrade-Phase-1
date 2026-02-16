@@ -91,6 +91,14 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 ### In Progress
 - None
 
+### Recently Fixed (Feb 2026)
+- ✅ Marketing Commission Calculation Bug Fix (Feb 16, 2026)
+  - Fixed: Historical commission amounts were incorrect (e.g., RM 69 instead of RM 1,149)
+  - Root cause: Code used `find_one` for invoices, only considering first invoice per session
+  - Fix: Changed to `find()` to sum ALL invoices for each session
+  - Added `/api/finance/recalculate-commissions` admin endpoint for historical data correction
+  - Recalculated Vighnesh's January 2026 commission: RM 69 → RM 1,149
+
 ### Recently Fixed (Dec 2025)
 - ✅ Quotation Amount Bug Fix (Dec 16, 2025)
   - Fixed: Quotations were saving with RM 0.00 regardless of entered amount
