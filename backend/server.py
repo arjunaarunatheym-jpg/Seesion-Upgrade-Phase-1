@@ -17507,14 +17507,36 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     if not templates:
         templates = {"cover_letter": "", "terms_conditions_pages": "", "primary_color": "#1a365d"}
     
-    # Get description items text
+    # Get selected items with their details (new system)
+    inclusion_items = []
+    exclusion_items = []
+    selected_items = quotation.get("selected_items", [])
+    if selected_items:
+        item_ids = [s.get("item_id") for s in selected_items if s.get("item_id")]
+        if item_ids:
+            items_cursor = await db.quotation_description_items.find(
+                {"id": {"$in": item_ids}},
+                {"_id": 0}
+            ).to_list(100)
+            items_map = {item["id"]: item for item in items_cursor}
+            for sel in selected_items:
+                item = items_map.get(sel.get("item_id"))
+                if item:
+                    qty = sel.get("quantity", 1)
+                    item_data = {"name": item.get("name", ""), "quantity": qty, "has_quantity": item.get("has_quantity", False)}
+                    if item.get("category") == "inclusion":
+                        inclusion_items.append(item_data)
+                    else:
+                        exclusion_items.append(item_data)
+    
+    # Legacy: Get description items text (for old quotations)
     description_items_text = []
-    if quotation.get("description_items"):
+    if quotation.get("description_items") and not selected_items:
         items = await db.quotation_description_items.find(
             {"id": {"$in": quotation.get("description_items")}},
             {"_id": 0}
         ).to_list(100)
-        description_items_text = [item.get("description", "") for item in items]
+        description_items_text = [item.get("name", "") or item.get("description", "") for item in items]
     
     # Get marketer/approver info
     marketer = await db.users.find_one({"id": quotation.get("created_by")}, {"_id": 0, "full_name": 1})
