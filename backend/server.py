@@ -17342,22 +17342,20 @@ class QuotationPDF(FPDF):
         return segments
     
     def header(self):
-        """Invoice-style header with logo - matching invoice PDF exactly"""
+        """Header matching invoice PDF exactly"""
         cs = self.company_settings
         
-        # Get dynamic layout settings - handle None values safely
-        logo_x = 10
-        logo_y = 10
-        logo_w = 25  # ~100px equivalent in mm
+        # Starting position
+        start_y = 10
+        self.set_y(start_y)
         
-        self.set_y(logo_y)
-        
-        # Logo on the left
+        # Logo on the left - same size as invoice (100px ≈ 26mm)
         logo_url = cs.get('logo_url')
-        logo_loaded = False
+        logo_width = 26
+        logo_end_x = 10  # Default if no logo
+        
         if logo_url:
             logo_path = None
-            # Handle different URL formats
             if logo_url.startswith('/api/static/'):
                 logo_path = ROOT_DIR / logo_url.replace('/api/static/', 'static/')
             elif logo_url.startswith('/static/'):
@@ -17367,56 +17365,64 @@ class QuotationPDF(FPDF):
             
             if logo_path and logo_path.exists():
                 try:
-                    self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w)
-                    logo_loaded = True
-                except Exception as e:
+                    self.image(str(logo_path), x=10, y=start_y, w=logo_width)
+                    logo_end_x = 10 + logo_width + 5  # 5mm gap after logo
+                except:
                     pass
         
-        # Company details on the right of logo (same style as invoice)
-        text_x = logo_x + logo_w + 5 if logo_loaded else logo_x
-        self.set_xy(text_x, logo_y)
+        # Company details - right of logo (matching invoice: 18px name, 11px info)
+        text_x = logo_end_x
+        self.set_xy(text_x, start_y)
         
-        # Company name - bold, primary color
+        # Company name - 18px ≈ 14pt, bold, primary color
         self.set_font_safe('B', 14)
         self.set_text_color(*self.primary_color)
-        self.cell_safe(0, 6, cs.get('company_name', 'MALAYSIAN DEFENSIVE DRIVING AND RIDING CENTRE SDN BHD'), ln=True)
+        company_name = cs.get('company_name', 'MALAYSIAN DEFENSIVE DRIVING AND RIDING CENTRE SDN BHD')
+        self.cell(0, 6, sanitize_text_for_pdf(company_name), ln=True)
         
-        # Company info line 1: Registration number + Address
+        # Company info line 1: (Reg No) • Address
         self.set_x(text_x)
-        self.set_font_safe('', 9)
-        self.set_text_color(68, 68, 68)
+        self.set_font_safe('', 9)  # 11px ≈ 9pt
+        self.set_text_color(68, 68, 68)  # #444
         
-        info_line1 = []
+        line1_parts = []
         if cs.get('company_reg_no'):
-            info_line1.append(f"({cs.get('company_reg_no')})")
+            line1_parts.append(f"({cs.get('company_reg_no')})")
         if cs.get('address_line1'):
-            info_line1.append(cs.get('address_line1'))
-        if info_line1:
-            self.cell_safe(0, 4, ' • '.join(info_line1), ln=True)
+            line1_parts.append(cs.get('address_line1'))
+        if cs.get('address_line2'):
+            line1_parts.append(cs.get('address_line2'))
         
-        # Company info line 2: City, State + Contact
+        if line1_parts:
+            self.cell(0, 4, sanitize_text_for_pdf(' • '.join(line1_parts)), ln=True)
+        
+        # Company info line 2: City Postcode, State • Tel: xxx • email
         self.set_x(text_x)
-        info_line2 = []
-        location = ', '.join(filter(None, [cs.get('city'), cs.get('postcode'), cs.get('state')]))
+        line2_parts = []
+        
+        location = []
+        if cs.get('city'):
+            location.append(cs.get('city'))
+        if cs.get('postcode'):
+            location.append(cs.get('postcode'))
+        if cs.get('state'):
+            location.append(cs.get('state'))
         if location:
-            info_line2.append(location)
+            line2_parts.append(' '.join(location[:2]) + (f", {location[2]}" if len(location) > 2 else ""))
+        
         if cs.get('phone'):
-            info_line2.append(f"Tel: {cs.get('phone')}")
+            line2_parts.append(f"Tel: {cs.get('phone')}")
         if cs.get('email'):
-            info_line2.append(cs.get('email'))
-        if info_line2:
-            self.cell_safe(0, 4, ' • '.join(info_line2), ln=True)
+            line2_parts.append(cs.get('email'))
         
-        # TIN number if available
-        if cs.get('tin_number'):
-            self.set_x(text_x)
-            self.cell_safe(0, 4, f"TIN Number: {cs.get('tin_number')}", ln=True)
+        if line2_parts:
+            self.cell(0, 4, sanitize_text_for_pdf(' • '.join(line2_parts)), ln=True)
         
-        # Draw separator line below header (same as invoice)
-        self.ln(3)
+        # 3px solid border line at bottom (same as invoice)
+        self.ln(4)
         line_y = self.get_y()
         self.set_draw_color(*self.primary_color)
-        self.set_line_width(0.8)
+        self.set_line_width(1)  # ~3px
         self.line(10, line_y, 200, line_y)
         self.ln(8)
     
