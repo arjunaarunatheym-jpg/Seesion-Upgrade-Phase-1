@@ -123,18 +123,12 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
   - Removed all duplicate/broken draft quotations (Vinda Malaysia, Taj Curry House, etc.)
 
 ### Upcoming (P1)
-- Google Drive Feedback Integration (feedback URL per session, certificate release mechanism TBD)
-- Remove picture upload from reporting (reduce storage)
-- Custom Pre/Post Test Results format (blocked on user sample)
-
-### Recently Completed
-- ✅ Invoice Delete Feature (Feb 5, 2026)
-  - Delete button in Admin Data Management → Invoices tab
-  - Confirmation dialog with invoice details and warning
-  - Syncs with session (removes invoice_id reference)
-  - Adds draft invoice numbers to reuse pool
-  - Full audit trail logged
-  - Deletes related credit notes
+- "Won Lead → Draft Session" UI dialog completion
+- Collapsible UI tables (Payables, Users, Invoices)
+- Payables Excel export verification
+- PDF bugs: `valid_until` date, "System Administrator" name (investigate stale data)
+- Google Drive Feedback Integration
+- WYSIWYG PDF Template Editor
 
 ### Backlog (P2)
 - Backend cleanup (remove redundant server.py code)
