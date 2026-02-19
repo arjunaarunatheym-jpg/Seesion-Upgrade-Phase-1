@@ -17208,9 +17208,10 @@ class QuotationPDF(FPDF):
             
             # Calculate available width for text wrapping
             page_width = 210  # A4 width in mm
-            margin = 10
-            max_x = page_width - margin
-            start_x = self.get_x()
+            left_margin = 10
+            right_margin = 10
+            max_x = page_width - right_margin
+            start_x = self.get_x() if self.get_x() > left_margin else left_margin
             
             for seg in segments:
                 # Apply formatting
@@ -17230,23 +17231,56 @@ class QuotationPDF(FPDF):
                 self.set_text_color(*color)
                 
                 seg_text = sanitize_text_for_pdf(seg['text'])
-                seg_width = self.get_string_width(seg_text)
                 
-                # Check if we need to wrap to next line
-                current_x = self.get_x()
-                if current_x + seg_width > max_x and current_x > start_x + 10:
-                    self.ln(line_height)
-                    self.set_x(start_x)
+                # Word-wrap long segments
+                words = seg_text.split(' ')
+                current_line_words = []
                 
-                # Apply highlight
-                if seg.get('highlight'):
-                    x, y = self.get_x(), self.get_y()
-                    self.set_fill_color(255, 255, 0)  # Yellow
-                    self.rect(x, y, seg_width + 1, line_height, 'F')
-                    self.set_xy(x, y)
+                for word in words:
+                    test_line = ' '.join(current_line_words + [word]) if current_line_words else word
+                    test_width = self.get_string_width(test_line)
+                    current_x = self.get_x()
+                    
+                    # Check if this word fits on current line
+                    if current_x + test_width > max_x:
+                        # Print current line if we have words
+                        if current_line_words:
+                            line_text = ' '.join(current_line_words)
+                            line_width = self.get_string_width(line_text)
+                            
+                            # Apply highlight for this line portion
+                            if seg.get('highlight'):
+                                x, y = self.get_x(), self.get_y()
+                                self.set_fill_color(255, 255, 0)
+                                self.rect(x, y, line_width + 1, line_height, 'F')
+                                self.set_xy(x, y)
+                            
+                            self.cell(line_width, line_height, line_text, ln=False)
+                        
+                        # Move to next line
+                        self.ln(line_height)
+                        self.set_x(left_margin)
+                        current_line_words = [word]
+                    else:
+                        current_line_words.append(word)
                 
-                # Render the text segment with its actual width (not 0)
-                self.cell(seg_width, line_height, seg_text, ln=False)
+                # Print remaining words
+                if current_line_words:
+                    line_text = ' '.join(current_line_words)
+                    line_width = self.get_string_width(line_text)
+                    
+                    # Apply highlight
+                    if seg.get('highlight'):
+                        x, y = self.get_x(), self.get_y()
+                        self.set_fill_color(255, 255, 0)
+                        self.rect(x, y, line_width + 1, line_height, 'F')
+                        self.set_xy(x, y)
+                    
+                    self.cell(line_width, line_height, line_text, ln=False)
+                    
+                    # Add space after segment if not at line end
+                    if self.get_x() < max_x - 5:
+                        self.cell(self.get_string_width(' '), line_height, '', ln=False)
             
             self.ln(line_height)
             self.set_text_color(0, 0, 0)  # Reset to black
