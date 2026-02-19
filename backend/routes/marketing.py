@@ -374,6 +374,15 @@ async def update_quotation(quotation_id: str, quotation_data: dict, current_user
     update_fields = {k: v for k, v in quotation_data.items() if k not in ["id", "created_by", "created_at", "quotation_number"]}
     update_fields["updated_at"] = get_malaysia_time().isoformat()
     
+    # Recalculate valid_until if validity_days is updated
+    if "validity_days" in update_fields:
+        created_at_str = existing.get("created_at", get_malaysia_time().isoformat())
+        try:
+            created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+        except:
+            created_at = get_malaysia_time()
+        update_fields["valid_until"] = (created_at + timedelta(days=update_fields["validity_days"])).strftime("%Y-%m-%d")
+    
     await db.quotations.update_one({"id": quotation_id}, {"$set": update_fields})
     return {"message": "Quotation updated"}
 
