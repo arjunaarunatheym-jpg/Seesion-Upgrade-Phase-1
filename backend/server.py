@@ -17189,9 +17189,22 @@ class QuotationPDF(FPDF):
             
             if is_centered:
                 # Calculate total width for centering
-                total_width = sum(self.get_string_width(sanitize_text_for_pdf(seg['text'])) for seg in segments)
+                total_width = 0
+                for seg in segments:
+                    style = ''
+                    if seg.get('bold'): style += 'B'
+                    if seg.get('italic'): style += 'I'
+                    size = seg.get('size', default_size)
+                    self.set_font_safe(style, size)
+                    total_width += self.get_string_width(sanitize_text_for_pdf(seg['text']))
                 start_x = (210 - total_width) / 2
                 self.set_x(start_x)
+            
+            # Calculate available width for text wrapping
+            page_width = 210  # A4 width in mm
+            margin = 10
+            max_x = page_width - margin
+            start_x = self.get_x()
             
             for seg in segments:
                 # Apply formatting
@@ -17210,16 +17223,24 @@ class QuotationPDF(FPDF):
                 color = seg.get('color', (0, 0, 0))
                 self.set_text_color(*color)
                 
+                seg_text = sanitize_text_for_pdf(seg['text'])
+                seg_width = self.get_string_width(seg_text)
+                
+                # Check if we need to wrap to next line
+                current_x = self.get_x()
+                if current_x + seg_width > max_x and current_x > start_x + 10:
+                    self.ln(line_height)
+                    self.set_x(start_x)
+                
                 # Apply highlight
                 if seg.get('highlight'):
-                    # Save position
                     x, y = self.get_x(), self.get_y()
-                    txt_width = self.get_string_width(sanitize_text_for_pdf(seg['text']))
                     self.set_fill_color(255, 255, 0)  # Yellow
-                    self.rect(x, y, txt_width + 1, line_height, 'F')
+                    self.rect(x, y, seg_width + 1, line_height, 'F')
                     self.set_xy(x, y)
                 
-                self.cell_safe(0, line_height, seg['text'], ln=False)
+                # Render the text segment with its actual width (not 0)
+                self.cell(seg_width, line_height, seg_text, ln=False)
             
             self.ln(line_height)
             self.set_text_color(0, 0, 0)  # Reset to black
