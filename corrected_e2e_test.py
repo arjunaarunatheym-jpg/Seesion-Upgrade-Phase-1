@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 import random
 
 # Configuration
-BASE_URL = "https://collapsible-tables.preview.emergentagent.com/api"
+BASE_URL = "https://lead-to-session.preview.emergentagent.com/api"
 
 # Test Credentials from request
 ADMIN_EMAIL = "arjuna@mddrc.com.my"

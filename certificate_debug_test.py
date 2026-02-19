@@ -25,7 +25,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://collapsible-tables.preview.emergentagent.com/api"
+BASE_URL = "https://lead-to-session.preview.emergentagent.com/api"
 USER_EMAIL = "maaman@gmail.com"
 USER_PASSWORD = "mddrc1"
 
