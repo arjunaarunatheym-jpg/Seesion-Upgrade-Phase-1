@@ -46,9 +46,9 @@ const QuotationsTab = ({
 
   const pendingQuotations = quotations.filter(q => q.status === 'pending_approval');
   
-  // Separate inclusions and exclusions
-  const inclusions = descriptionItems.filter(i => i.category === 'inclusion');
-  const exclusions = descriptionItems.filter(i => i.category === 'exclusion');
+  // Separate inclusions and exclusions - handle both singular and plural
+  const inclusions = descriptionItems.filter(i => i.category === 'inclusion' || i.category === 'inclusions');
+  const exclusions = descriptionItems.filter(i => i.category === 'exclusion' || i.category === 'exclusions');
 
   const getQuotationStatusBadge = (status) => {
     const statusConfig = {
