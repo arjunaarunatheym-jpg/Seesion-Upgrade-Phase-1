@@ -17158,6 +17158,7 @@ class QuotationPDF(FPDF):
         - <center>text</center> = Centered text
         - <br> or \n = Line break
         - <hr> = Horizontal line
+        - <pb> or <pagebreak> = Page break (new page)
         """
         import re
         
@@ -17170,6 +17171,11 @@ class QuotationPDF(FPDF):
         for line in lines:
             if not line.strip():
                 self.ln(line_height)
+                continue
+            
+            # Check for page break
+            if '<pb>' in line or '<pagebreak>' in line or '<pb/>' in line:
+                self.add_page()
                 continue
             
             # Check for horizontal rule
