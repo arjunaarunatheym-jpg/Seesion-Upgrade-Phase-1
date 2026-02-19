@@ -654,6 +654,20 @@ async def record_client_response(quotation_id: str, response_data: dict, current
         await db.sessions.insert_one(session_data)
         result["session_id"] = session_id
         result["message"] = "Quotation accepted and draft session created"
+        
+        # Send email notification for accepted quotation
+        try:
+            await notify_quotation_accepted(quotation, company_name, current_user.full_name)
+        except:
+            pass
+    else:
+        # Quotation declined
+        try:
+            client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
+            client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
+            await notify_quotation_declined(quotation, client_name, current_user.full_name, response_data.get("notes", ""))
+        except:
+            pass
     
     return result
 
