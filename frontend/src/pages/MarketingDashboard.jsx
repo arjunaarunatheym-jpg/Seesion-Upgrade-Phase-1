@@ -396,27 +396,40 @@ const MarketingDashboard = ({ user, onLogout }) => {
   const handleDownloadPdf = async (quotationId) => {
     setDownloadingPdf(true);
     try {
-      // Get quotation data
+      const response = await axiosInstance.get(`/marketing/quotations/${quotationId}/download-pdf`, {
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      
+      // Get filename from quotation
       const quotation = quotations.find(q => q.id === quotationId);
-      if (!quotation) {
-        toast.error('Quotation not found');
-        return;
+      const filename = quotation?.quotation_number?.replace(/\//g, '_') || 'quotation';
+      
+      // For mobile compatibility, open in new tab instead of programmatic download
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        // Open PDF in new tab - user can then save/share from there
+        window.open(url, '_blank');
+        toast.success('PDF opened in new tab');
+      } else {
+        // Desktop: use download link
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Quotation_${filename}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success('PDF downloaded successfully');
       }
       
-      // Get templates
-      const templatesRes = await axiosInstance.get('/marketing/pdf-templates');
-      const templates = templatesRes.data || {};
-      
-      // Get logo URL
-      const logoUrl = companySettings?.logo_url 
-        ? `${window.location.origin}${companySettings.logo_url}`
-        : null;
-      
-      // Use HTML-based print (same as invoice)
-      await printQuotation(quotation, companySettings, logoUrl, templates);
-      toast.success('Quotation opened for printing');
+      // Cleanup after a delay to allow mobile preview
+      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to generate PDF');
+      console.error('PDF download error:', error);
+      toast.error(error.response?.data?.detail || 'Failed to download PDF');
     } finally {
       setDownloadingPdf(false);
     }
