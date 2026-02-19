@@ -747,9 +747,10 @@ class QuotationDescriptionItem(BaseModel):
     """Reusable description items that admin creates for marketers to select"""
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str  # Short name for selection
-    description: str  # Full description text to appear in quotation
-    category: str = "general"  # Category for grouping (e.g., "inclusions", "equipment", "services")
+    name: str  # Short name for selection (e.g., "JPJ Trainers", "Venue Rental")
+    description: str = ""  # Optional longer description
+    category: str = "inclusion"  # "inclusion" or "exclusion"
+    has_quantity: bool = False  # Whether marketer can specify quantity
     is_active: bool = True
     sort_order: int = 0
     created_at: datetime = Field(default_factory=get_malaysia_time)
