@@ -521,13 +521,14 @@ async def get_period_status(year: int, month: int, current_user: User = Depends(
 
 @router.get("/payables/export-excel")
 async def export_payables_excel(year: int, month: int, current_user: User = Depends(get_current_user)):
-    """Export payables data for a given month/year to Excel"""
+    """Export payables data for a given month/year as Excel file - returns StreamingResponse"""
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+        from fastapi.responses import StreamingResponse
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl not installed")
     
@@ -601,7 +602,7 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
     
     # Check if we have any data
     if not filtered_trainer and not filtered_coordinator and not filtered_marketing:
-        return {"data": None, "filename": None, "period_name": f"{datetime(year, month, 1).strftime('%B %Y')}"}
+        raise HTTPException(status_code=404, detail="No payables data for this period")
     
     # Create workbook
     wb = Workbook()
@@ -694,21 +695,18 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
         ws.column_dimensions['E'].width = 15
         ws.column_dimensions['F'].width = 12
     
-    # Save to bytes
+    # Save to bytes and return as streaming response
     output = BytesIO()
     wb.save(output)
     output.seek(0)
     
-    # Encode as base64
-    data_b64 = base64.b64encode(output.read()).decode('utf-8')
-    
     filename = f"payables_{year}_{str(month).zfill(2)}.xlsx"
     
-    return {
-        "data": data_b64,
-        "filename": filename,
-        "period_name": month_name
-    }
+    return StreamingResponse(
+        output,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+    )
 
 
 @router.get("/payables/download-excel")
