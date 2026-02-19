@@ -15,7 +15,11 @@ from models import User
 from utils.email_notifications import (
     notify_new_lead,
     notify_lead_stage_change,
-    notify_quotation_for_approval
+    notify_quotation_for_approval,
+    notify_discount_request,
+    notify_quotation_sent,
+    notify_lead_won,
+    notify_lead_lost
 )
 
 from pydantic import BaseModel, Field, ConfigDict
