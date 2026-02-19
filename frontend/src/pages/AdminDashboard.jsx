@@ -304,6 +304,13 @@ const AdminDashboard = ({ user, onLogout }) => {
   useEffect(() => {
     loadData();
     loadChecklistTemplates();
+    
+    // Auto-refresh data every 30 seconds
+    const refreshInterval = setInterval(() => {
+      loadData();
+    }, 30000);
+    
+    return () => clearInterval(refreshInterval);
   }, []);
 
   // Check participant existence with debounce
