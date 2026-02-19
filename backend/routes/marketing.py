@@ -640,17 +640,17 @@ async def get_all_description_items(current_user: User = Depends(get_current_use
 
 @router.post("/description-items")
 async def create_description_item(item_data: dict, current_user: User = Depends(get_current_user)):
-    """Create a description item"""
-    if not check_marketing_access(current_user):
-        raise HTTPException(status_code=403, detail="Marketing access required")
+    """Create a description item (Admin only for inclusions/exclusions)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin can create description items")
     
     item = {
         "id": str(uuid.uuid4()),
         "name": item_data.get("name"),
-        "description": item_data.get("description"),
-        "category": item_data.get("category", "inclusions"),
-        "unit": item_data.get("unit", "pax"),
-        "default_rate": item_data.get("default_rate", 0),
+        "description": item_data.get("description", ""),
+        "category": item_data.get("category", "inclusion"),  # "inclusion" or "exclusion"
+        "has_quantity": item_data.get("has_quantity", False),  # Whether to show quantity input
+        "is_active": True,
         "sort_order": item_data.get("sort_order", 0),
         "created_by": current_user.id,
         "created_at": get_malaysia_time().isoformat()
