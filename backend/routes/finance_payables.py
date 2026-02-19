@@ -715,21 +715,17 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
 async def download_payables_excel(
     year: int, 
     month: int, 
-    token: Optional[str] = None,
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    token: Optional[str] = None
 ):
     """Download payables data for a given month/year as Excel file directly.
     Accepts token as query param for direct URL downloads (window.open)"""
     
-    # Get user from token (query param) or header
-    from core import get_user_from_token
+    if not token:
+        raise HTTPException(status_code=401, detail="Token required. Use ?token=YOUR_JWT_TOKEN")
     
-    if token:
-        # Token provided as query parameter (for window.open downloads)
-        current_user = await get_user_from_token(token)
-    else:
-        # Token from Authorization header
-        current_user = await get_user_from_token(credentials.credentials)
+    # Get user from token query parameter
+    from core import get_user_from_token
+    current_user = await get_user_from_token(token)
     
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
