@@ -184,45 +184,34 @@ const PayablesTab = ({
         return;
       }
       
-      toast.info('Preparing download...');
+      toast.info('Starting download...');
       
-      // Use fetch with blob response to trigger proper download
-      const response = await fetch(`${backendUrl}/api/finance/payables/download-excel?year=${payablesYear}&month=${payablesMonth}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`
+      // Create a hidden form to submit the download request
+      // This bypasses CORS and triggers native browser download
+      const downloadUrl = `${backendUrl}/api/finance/payables/download-excel?year=${payablesYear}&month=${payablesMonth}&token=${encodeURIComponent(token)}`;
+      
+      // Open in a new tab to trigger download
+      const newWindow = window.open(downloadUrl, '_blank');
+      
+      // If popup was blocked, try alternate method
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+        // Fallback: use hidden iframe
+        let iframe = document.getElementById('download-iframe');
+        if (!iframe) {
+          iframe = document.createElement('iframe');
+          iframe.id = 'download-iframe';
+          iframe.style.display = 'none';
+          document.body.appendChild(iframe);
         }
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Download failed');
+        iframe.src = downloadUrl;
+        toast.success('Download started - check your downloads folder');
+      } else {
+        toast.success('Download started in new tab');
+        // Close the window after a short delay (for download)
+        setTimeout(() => {
+          try { newWindow.close(); } catch(e) {}
+        }, 2000);
       }
-      
-      // Get the blob from response
-      const blob = await response.blob();
-      
-      // Extract filename from Content-Disposition header or use default
-      const contentDisposition = response.headers.get('Content-Disposition');
-      let filename = `payables_${payablesYear}_${String(payablesMonth).padStart(2, '0')}.xlsx`;
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-        if (filenameMatch) {
-          filename = filenameMatch[1].replace(/"/g, '');
-        }
-      }
-      
-      // Create blob URL and trigger download
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-      
-      toast.success(`Downloaded: ${filename}`);
     } catch (error) {
       console.error('Export error:', error);
       toast.error(error.message || "Failed to export payables");
