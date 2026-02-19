@@ -281,65 +281,174 @@ const QuotationsTab = ({
         </CardContent>
       </Card>
 
-      {/* Description Items Management */}
+      {/* Description Items Management - Inclusions & Exclusions */}
       <Card className="mt-6">
         <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div>
-              <CardTitle className="text-base sm:text-lg">Quotation Description Items</CardTitle>
-              <CardDescription className="text-xs sm:text-sm">Manage reusable description items for quotations</CardDescription>
-            </div>
-            <Button 
-              onClick={handleAddDescriptionItem}
-              size="sm"
-              className="text-xs sm:text-sm"
-            >
-              <Plus className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Add Item
-            </Button>
+          <div>
+            <CardTitle className="text-base sm:text-lg">Quotation Inclusions & Exclusions</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Manage items that marketers can select when creating quotations</CardDescription>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2">
-            {descriptionItems.length === 0 ? (
-              <p className="text-center text-gray-500 py-4 text-sm">No description items yet. Add items that marketers can select when creating quotations.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-gray-50">
-                      <th className="text-left p-2 text-xs sm:text-sm">Name</th>
-                      <th className="text-left p-2 text-xs sm:text-sm">Description</th>
-                      <th className="text-left p-2 text-xs sm:text-sm">Category</th>
-                      <th className="text-center p-2 text-xs sm:text-sm">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {descriptionItems.map(item => (
-                      <tr key={item.id} className="border-b hover:bg-gray-50">
-                        <td className="p-2 font-medium text-xs sm:text-sm">{item.name}</td>
-                        <td className="p-2 text-xs sm:text-sm max-w-[200px] truncate">{item.description}</td>
-                        <td className="p-2 text-xs sm:text-sm">
-                          <Badge variant="outline">{item.category}</Badge>
-                        </td>
-                        <td className="p-2 text-center">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleDeleteDescriptionItem(item)}
-                            className="text-red-600 h-7 w-7 p-0"
-                          >
-                            <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* Two-column layout for Inclusions and Exclusions */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Inclusions Column */}
+            <div className="border rounded-lg p-4 bg-green-50/50">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2">
+                  <Package className="w-5 h-5 text-green-600" />
+                  <h3 className="font-semibold text-green-800">Inclusions</h3>
+                </div>
+                <Button 
+                  onClick={() => openAddItemDialog('inclusion')}
+                  size="sm"
+                  variant="outline"
+                  className="text-xs border-green-600 text-green-600 hover:bg-green-100"
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Add
+                </Button>
               </div>
-            )}
+              {inclusions.length === 0 ? (
+                <p className="text-center text-gray-500 py-4 text-sm">No inclusions yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {inclusions.map(item => (
+                    <div key={item.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                      <div>
+                        <span className="font-medium text-sm">{item.name}</span>
+                        {item.has_quantity && (
+                          <Badge variant="secondary" className="ml-2 text-xs">Qty</Badge>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => openEditItemDialog(item)}
+                          className="h-7 w-7 p-0"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleDeleteDescriptionItem(item)}
+                          className="text-red-600 h-7 w-7 p-0"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Exclusions Column */}
+            <div className="border rounded-lg p-4 bg-red-50/50">
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2">
+                  <PackageX className="w-5 h-5 text-red-600" />
+                  <h3 className="font-semibold text-red-800">Exclusions</h3>
+                </div>
+                <Button 
+                  onClick={() => openAddItemDialog('exclusion')}
+                  size="sm"
+                  variant="outline"
+                  className="text-xs border-red-600 text-red-600 hover:bg-red-100"
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Add
+                </Button>
+              </div>
+              {exclusions.length === 0 ? (
+                <p className="text-center text-gray-500 py-4 text-sm">No exclusions yet</p>
+              ) : (
+                <div className="space-y-2">
+                  {exclusions.map(item => (
+                    <div key={item.id} className="flex items-center justify-between p-2 bg-white rounded border">
+                      <div>
+                        <span className="font-medium text-sm">{item.name}</span>
+                        {item.has_quantity && (
+                          <Badge variant="secondary" className="ml-2 text-xs">Qty</Badge>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => openEditItemDialog(item)}
+                          className="h-7 w-7 p-0"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleDeleteDescriptionItem(item)}
+                          className="text-red-600 h-7 w-7 p-0"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Item Add/Edit Dialog */}
+      <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingItem ? 'Edit Item' : `Add ${itemForm.category === 'inclusion' ? 'Inclusion' : 'Exclusion'}`}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="item-name">Item Name *</Label>
+              <Input
+                id="item-name"
+                value={itemForm.name}
+                onChange={(e) => setItemForm({...itemForm, name: e.target.value})}
+                placeholder="e.g., JPJ Trainers, Venue Rental"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="item-category">Category</Label>
+              <Select 
+                value={itemForm.category} 
+                onValueChange={(val) => setItemForm({...itemForm, category: val})}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inclusion">Inclusion</SelectItem>
+                  <SelectItem value="exclusion">Exclusion</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="has-quantity"
+                checked={itemForm.has_quantity}
+                onCheckedChange={(checked) => setItemForm({...itemForm, has_quantity: checked})}
+              />
+              <Label htmlFor="has-quantity" className="text-sm">
+                Allow quantity input (marketer can specify how many)
+              </Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setItemDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveItem}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* PDF Templates Management */}
       <Card className="mt-6">
