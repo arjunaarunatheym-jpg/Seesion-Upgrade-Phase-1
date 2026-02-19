@@ -772,7 +772,8 @@ class Quotation(BaseModel):
     total_amount: float
     validity_days: int = 30
     valid_until: str
-    description_items: List[str] = []  # List of selected description item IDs
+    description_items: List[str] = []  # List of selected description item IDs (legacy)
+    selected_items: List[dict] = []  # New: [{item_id: str, quantity: int}]
     custom_description: Optional[str] = None  # Additional custom description
     remarks: Optional[str] = None
     terms_conditions: Optional[str] = None
