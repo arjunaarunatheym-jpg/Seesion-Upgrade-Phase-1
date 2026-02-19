@@ -2160,6 +2160,101 @@ const AdminDashboard = ({ user, onLogout }) => {
                 )}
               </div>
 
+              {/* Trainer Assignments */}
+              <div className="border-t pt-4">
+                <h3 className="font-semibold mb-3">Trainer Assignments</h3>
+                <p className="text-xs text-gray-500 mb-3">Assign trainers for costing and session management</p>
+                
+                {/* Current Trainer Assignments */}
+                {(editingSession.trainer_assignments || []).length > 0 && (
+                  <div className="mb-3 space-y-2">
+                    {(editingSession.trainer_assignments || []).map((assignment, index) => {
+                      const trainer = users.find(u => u.id === assignment.trainer_id);
+                      return (
+                        <div key={index} className="flex items-center justify-between bg-blue-50 p-2 rounded">
+                          <div>
+                            <span className="font-medium">{trainer?.full_name || 'Unknown Trainer'}</span>
+                            <span className="text-xs text-gray-500 ml-2">
+                              ({assignment.role === 'lead' ? 'Lead Trainer' : 'Trainer'})
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 h-7"
+                            onClick={() => {
+                              const updated = (editingSession.trainer_assignments || []).filter((_, i) => i !== index);
+                              setEditingSession({ ...editingSession, trainer_assignments: updated });
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                {/* Add New Trainer */}
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <Label>Select Trainer</Label>
+                    <Select
+                      value={newTrainerAssignment.trainer_id}
+                      onValueChange={(value) => setNewTrainerAssignment({ ...newTrainerAssignment, trainer_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose trainer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {users.filter(u => u.role === 'trainer').map(trainer => (
+                          <SelectItem key={trainer.id} value={trainer.id}>
+                            {trainer.full_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-32">
+                    <Label>Role</Label>
+                    <Select
+                      value={newTrainerAssignment.role}
+                      onValueChange={(value) => setNewTrainerAssignment({ ...newTrainerAssignment, role: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="lead">Lead</SelectItem>
+                        <SelectItem value="regular">Regular</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (!newTrainerAssignment.trainer_id) {
+                        toast.error("Please select a trainer");
+                        return;
+                      }
+                      const current = editingSession.trainer_assignments || [];
+                      if (current.some(t => t.trainer_id === newTrainerAssignment.trainer_id)) {
+                        toast.error("Trainer already assigned");
+                        return;
+                      }
+                      setEditingSession({
+                        ...editingSession,
+                        trainer_assignments: [...current, { ...newTrainerAssignment }]
+                      });
+                      setNewTrainerAssignment({ trainer_id: "", role: "regular" });
+                      toast.success("Trainer added");
+                    }}
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+
               <div className="border-t pt-4">
                 <h3 className="font-semibold mb-3">Add More Participants</h3>
                 <div className="grid grid-cols-2 gap-3">
