@@ -17625,15 +17625,26 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.set_xy(85, y_info)
     pdf.cell_safe(60, 5, f"Date: {created_date.strftime('%d %B %Y')}")
     
+    # Parse valid_until date
     valid_until = quotation.get("valid_until", "")
-    if isinstance(valid_until, str):
-        try:
-            valid_until_dt = datetime.fromisoformat(valid_until.replace('Z', '+00:00'))
-            valid_until = valid_until_dt.strftime("%d %B %Y")
-        except:
-            pass
+    valid_until_str = ""
+    if valid_until:
+        if isinstance(valid_until, str):
+            try:
+                # Try ISO format first
+                if 'T' in valid_until:
+                    valid_until_dt = datetime.fromisoformat(valid_until.replace('Z', '+00:00'))
+                else:
+                    # Simple date format YYYY-MM-DD
+                    valid_until_dt = datetime.strptime(valid_until, "%Y-%m-%d")
+                valid_until_str = valid_until_dt.strftime("%d %B %Y")
+            except:
+                valid_until_str = valid_until  # Use as-is if parsing fails
+        elif hasattr(valid_until, 'strftime'):
+            valid_until_str = valid_until.strftime("%d %B %Y")
+    
     pdf.set_xy(15, y_info + 7)
-    pdf.cell_safe(60, 5, f"Valid Until: {valid_until}")
+    pdf.cell_safe(60, 5, f"Valid Until: {valid_until_str}")
     pdf.set_xy(85, y_info + 7)
     pdf.cell_safe(60, 5, f"Status: {quotation.get('status', '').title()}")
     
