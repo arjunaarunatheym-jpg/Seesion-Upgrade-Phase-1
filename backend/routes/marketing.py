@@ -1064,9 +1064,24 @@ async def update_lead(lead_id: str, lead_data: LeadUpdate, current_user: User = 
     if new_stage and new_stage != old_stage:
         update_data["stage_changed_at"] = get_malaysia_time().isoformat()
         # Notify admin for key stage changes
-        if new_stage in ["contacted", "quotation_sent", "won"]:
+        if new_stage in ["contacted", "quotation_sent"]:
             try:
                 await notify_lead_stage_change(lead, new_stage, current_user.full_name)
+            except:
+                pass
+        elif new_stage == "won":
+            try:
+                # Get quotation for deal value
+                quotation = None
+                if lead.get("quotation_id"):
+                    quotation = await db.quotations.find_one({"id": lead.get("quotation_id")}, {"_id": 0})
+                await notify_lead_won(lead, quotation, current_user.full_name)
+            except:
+                pass
+        elif new_stage == "lost":
+            try:
+                lost_reason = update_data.get("lost_reason", "") or lead_data.notes if hasattr(lead_data, 'notes') else ""
+                await notify_lead_lost(lead, current_user.full_name, lost_reason)
             except:
                 pass
     
