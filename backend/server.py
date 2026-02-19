@@ -16994,7 +16994,8 @@ async def create_description_item(data: dict, current_user: User = Depends(get_c
     item = QuotationDescriptionItem(
         name=data.get("name", ""),
         description=data.get("description", ""),
-        category=data.get("category", "general"),
+        category=data.get("category", "inclusion"),
+        has_quantity=data.get("has_quantity", False),
         sort_order=data.get("sort_order", 0),
         is_active=data.get("is_active", True)
     )
