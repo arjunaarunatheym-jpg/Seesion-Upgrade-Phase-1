@@ -1032,12 +1032,12 @@ const MarketingDashboard = ({ user, onLogout }) => {
                   </div>
                 )}
                 
-                {/* Exclusions */}
-                {descriptionItems.filter(i => i.category === 'exclusion').length > 0 && (
+                {/* Exclusions - handle both singular and plural category names */}
+                {descriptionItems.filter(i => i.category === 'exclusion' || i.category === 'exclusions').length > 0 && (
                   <div>
                     <p className="text-sm font-medium text-red-700 mb-2">✗ Exclusions</p>
                     <div className="space-y-2 max-h-32 overflow-y-auto">
-                      {descriptionItems.filter(i => i.category === 'exclusion').map(item => {
+                      {descriptionItems.filter(i => i.category === 'exclusion' || i.category === 'exclusions').map(item => {
                         const selectedItem = quotationForm.selected_items.find(s => s.item_id === item.id);
                         const isSelected = !!selectedItem;
                         return (
