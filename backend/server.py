@@ -17801,7 +17801,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.ln(5)
     pdf.set_fill_color(255, 243, 205)
     pdf.set_font_safe('B', 9)
-    pdf.cell_safe(0, 7, f"This quotation is valid until {valid_until}", fill=True, align='C', ln=True)
+    pdf.cell_safe(0, 7, f"This quotation is valid until {valid_until_str}", fill=True, align='C', ln=True)
     
     # Remarks if any
     if quotation.get("remarks"):
