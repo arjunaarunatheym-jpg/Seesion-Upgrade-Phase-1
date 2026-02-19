@@ -17345,8 +17345,9 @@ class QuotationPDF(FPDF):
         """Header matching invoice PDF exactly - logo left, company info right, border below"""
         cs = self.company_settings
         
-        # Starting position
-        start_y = 10
+        # Get logo Y position from settings (default 5 for higher placement)
+        logo_y = int(cs.get('logo_y') or 5)
+        start_y = logo_y
         self.set_y(start_y)
         
         # Logo on the left - 100px in invoice ≈ 26mm in PDF
