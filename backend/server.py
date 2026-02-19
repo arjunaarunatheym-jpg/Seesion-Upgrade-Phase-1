@@ -811,7 +811,8 @@ class QuotationCreate(BaseModel):
     group_price: float = 0
     sst_percent: float = 0
     validity_days: int = 30
-    description_items: List[str] = []  # Selected description item IDs
+    description_items: List[str] = []  # Selected description item IDs (legacy)
+    selected_items: List[dict] = []  # New: [{item_id: str, quantity: int}]
     custom_description: Optional[str] = None
     remarks: Optional[str] = None
     terms_conditions: Optional[str] = None
@@ -824,6 +825,7 @@ class QuotationUpdate(BaseModel):
     sst_percent: Optional[float] = None
     validity_days: Optional[int] = None
     description_items: Optional[List[str]] = None
+    selected_items: Optional[List[dict]] = None  # New: [{item_id: str, quantity: int}]
     custom_description: Optional[str] = None
     remarks: Optional[str] = None
     terms_conditions: Optional[str] = None
