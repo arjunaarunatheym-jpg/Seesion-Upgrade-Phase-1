@@ -309,6 +309,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
       sst_percent: quotation.sst_percent || 0,
       validity_days: quotation.validity_days || 30,
       description_items: quotation.description_items || [],
+      selected_items: quotation.selected_items || [],
       custom_description: quotation.custom_description || '',
       remarks: quotation.remarks || '',
       terms_conditions: quotation.terms_conditions || ''
