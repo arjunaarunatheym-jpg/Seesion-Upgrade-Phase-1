@@ -345,26 +345,46 @@ const QuotationsTab = ({
       {/* All Marketing Clients */}
       <Card className="mt-6">
         <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <div>
-              <CardTitle className="text-base sm:text-lg">All Marketing Clients</CardTitle>
-              <CardDescription className="text-xs sm:text-sm">View all clients across all marketers</CardDescription>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <CardTitle className="text-base sm:text-lg">All Marketing Clients</CardTitle>
+                <CardDescription className="text-xs sm:text-sm">View all clients across all marketers ({allClients.length} total)</CardDescription>
+              </div>
+              <Button 
+                onClick={() => {
+                  window.location.href = `${process.env.REACT_APP_BACKEND_URL}/api/marketing/clients/export`;
+                }}
+                size="sm"
+                variant="outline"
+                className="text-xs sm:text-sm"
+              >
+                <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Export CSV
+              </Button>
             </div>
-            <Button 
-              onClick={() => {
-                window.location.href = `${process.env.REACT_APP_BACKEND_URL}/api/marketing/clients/export`;
-              }}
-              size="sm"
-              variant="outline"
-              className="text-xs sm:text-sm"
-            >
-              <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Export CSV
-            </Button>
+            {/* Alphabetical Filter */}
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-sm text-gray-600">Filter by name:</span>
+              <Select value={clientGroup} onValueChange={setClientGroup}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Group" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All (A-Z)</SelectItem>
+                  {clientGroups.map(g => (
+                    <SelectItem key={g.value} value={g.value}>{g.value}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-sm text-gray-500">
+                {filteredClients.length} client{filteredClients.length !== 1 ? 's' : ''}
+              </span>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
-          {allClients.length === 0 ? (
-            <p className="text-center text-gray-500 py-4 text-sm">No clients registered yet.</p>
+          {filteredClients.length === 0 ? (
+            <p className="text-center text-gray-500 py-4 text-sm">No clients found in this group.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs sm:text-sm">
@@ -378,7 +398,7 @@ const QuotationsTab = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {allClients.map(client => (
+                  {filteredClients.map(client => (
                     <tr key={client.id} className="border-b hover:bg-gray-50">
                       <td className="p-2 font-medium max-w-[120px] truncate">{client.company_name}</td>
                       <td className="p-2 max-w-[100px] truncate">{client.contact_person}</td>
