@@ -241,6 +241,94 @@ const CreditNotesTab = ({
         )}
       </CardContent>
     </Card>
+
+    {/* Create Credit Note Dialog */}
+    <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create Credit Note</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div>
+            <Label>Select Invoice *</Label>
+            <Select value={newCN.invoice_id} onValueChange={handleInvoiceSelect}>
+              <SelectTrigger data-testid="cn-invoice-select">
+                <SelectValue placeholder="Select an invoice" />
+              </SelectTrigger>
+              <SelectContent>
+                {invoices.map(inv => (
+                  <SelectItem key={inv.id} value={inv.id}>
+                    {inv.invoice_number} - {inv.company_name} (RM {inv.total_amount?.toLocaleString()})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedInvoice && (
+            <div className="p-3 bg-gray-50 rounded text-sm">
+              <p><strong>Invoice:</strong> {selectedInvoice.invoice_number}</p>
+              <p><strong>Company:</strong> {selectedInvoice.company_name}</p>
+              <p><strong>Amount:</strong> RM {selectedInvoice.total_amount?.toLocaleString()}</p>
+            </div>
+          )}
+
+          <div>
+            <Label>Reason</Label>
+            <Select value={newCN.reason} onValueChange={(v) => setNewCN({...newCN, reason: v})}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="HRDCorp Levy Deduction">HRDCorp Levy Deduction</SelectItem>
+                <SelectItem value="Discount">Discount</SelectItem>
+                <SelectItem value="Adjustment">Adjustment</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label>Description (optional)</Label>
+            <Textarea 
+              value={newCN.description}
+              onChange={(e) => setNewCN({...newCN, description: e.target.value})}
+              placeholder="e.g., 4% levy deduction"
+              rows={2}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Percentage (%)</Label>
+              <Input 
+                type="number"
+                value={newCN.percentage}
+                onChange={(e) => setNewCN({...newCN, percentage: parseFloat(e.target.value) || 0})}
+                min="0"
+                max="100"
+                step="0.5"
+              />
+            </div>
+            <div>
+              <Label>Amount (RM)</Label>
+              <Input 
+                type="number"
+                value={newCN.amount}
+                onChange={(e) => setNewCN({...newCN, amount: parseFloat(e.target.value) || 0})}
+                min="0"
+                step="0.01"
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancel</Button>
+          <Button onClick={handleCreateCN} data-testid="submit-credit-note-btn">Create Credit Note</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 };
 
