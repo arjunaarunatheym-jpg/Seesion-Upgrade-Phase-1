@@ -18156,7 +18156,7 @@ async def setup_admin_account():
         # Admin credentials from environment variables
         admin_email = os.environ.get('ADMIN_EMAIL', 'admin@example.com')
         admin_password = os.environ.get('ADMIN_PASSWORD', 'changeme123')
-        admin_name = "System Administrator"
+        admin_name = "Arjuna Arunatheym"
         admin_id_number = "ADMIN001"
         
         # Check if admin exists
