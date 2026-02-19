@@ -1143,6 +1143,94 @@ const SessionsTab = ({
                 </Select>
               </div>
 
+              {/* Trainer Assignments */}
+              <div className="space-y-3 border-t pt-4">
+                <h4 className="font-semibold">Trainer Assignments</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Select Trainer</Label>
+                    <Select
+                      value={newTrainerAssignment.trainer_id}
+                      onValueChange={(value) => setNewTrainerAssignment({ ...newTrainerAssignment, trainer_id: value })}
+                    >
+                      <SelectTrigger data-testid="edit-session-trainer-select">
+                        <SelectValue placeholder="Select trainer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {trainers.map((trainer) => (
+                          <SelectItem key={trainer.id} value={trainer.id}>
+                            {trainer.full_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Role for This Session</Label>
+                    <Select
+                      value={newTrainerAssignment.role}
+                      onValueChange={(value) => setNewTrainerAssignment({ ...newTrainerAssignment, role: value })}
+                    >
+                      <SelectTrigger data-testid="edit-session-trainer-role-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="regular">Regular Trainer</SelectItem>
+                        <SelectItem value="chief">Chief Trainer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  data-testid="edit-session-add-trainer-btn"
+                  onClick={() => {
+                    if (!newTrainerAssignment.trainer_id) {
+                      toast.error("Please select a trainer");
+                      return;
+                    }
+                    if (editingSession.trainer_assignments?.some(t => t.trainer_id === newTrainerAssignment.trainer_id)) {
+                      toast.error("This trainer is already assigned");
+                      return;
+                    }
+                    setEditingSession({
+                      ...editingSession,
+                      trainer_assignments: [...(editingSession.trainer_assignments || []), { ...newTrainerAssignment }]
+                    });
+                    setNewTrainerAssignment(initialNewTrainerAssignment);
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Assign Trainer
+                </Button>
+                {editingSession.trainer_assignments && editingSession.trainer_assignments.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-sm text-gray-700">Assigned Trainers</Label>
+                    {editingSession.trainer_assignments.map((assignment, idx) => (
+                      <div key={idx} className="flex justify-between items-center p-2 bg-blue-50 rounded" data-testid={`edit-assigned-trainer-${idx}`}>
+                        <span className="text-sm">
+                          {getTrainerName(assignment.trainer_id)} - <strong>{assignment.role === "chief" ? "Chief Trainer" : "Regular Trainer"}</strong>
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          data-testid={`edit-remove-trainer-${idx}`}
+                          onClick={() => {
+                            const updated = editingSession.trainer_assignments.filter((_, i) => i !== idx);
+                            setEditingSession({ ...editingSession, trainer_assignments: updated });
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Marketing Commission */}
               <div className="space-y-3 border-t pt-4">
                 <h4 className="font-semibold">Marketing Commission</h4>
