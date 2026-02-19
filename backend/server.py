@@ -17366,7 +17366,8 @@ class QuotationPDF(FPDF):
             
             if logo_path and logo_path.exists():
                 try:
-                    self.image(str(logo_path), x=10, y=start_y, w=logo_width)
+                    # Place logo aligned with company name (same Y as text start)
+                    self.image(str(logo_path), x=10, y=start_y - 2, w=logo_width)
                     logo_end_x = 10 + logo_width + 5
                 except:
                     pass
