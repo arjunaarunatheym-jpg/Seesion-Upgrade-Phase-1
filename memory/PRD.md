@@ -92,6 +92,18 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - None
 
 ### Recently Fixed (Feb 2026)
+- ✅ Inclusions & Exclusions System (Feb 19, 2026)
+  - Admin can create/manage "Inclusion" and "Exclusion" items via Quotations tab
+  - Items have: name, category (inclusion/exclusion), has_quantity flag
+  - Marketing users can select items with optional quantities when creating quotations
+  - Two-column UI: Green (Inclusions) and Red (Exclusions) in Admin
+  - Checkbox selection with quantity input in Marketing quotation form
+  - PDF generation updated to show Inclusions and Exclusions sections
+
+- ✅ PDF Logo Positioning Fix (Feb 19, 2026)
+  - Fixed logo alignment in quotation PDF header
+  - Logo now aligns with company name text (raised by 2mm)
+
 - ✅ Marketing Commission Calculation Bug Fix (Feb 16, 2026)
   - Fixed: Historical commission amounts were incorrect (e.g., RM 69 instead of RM 1,149)
   - Root cause: Code used `find_one` for invoices, only considering first invoice per session
