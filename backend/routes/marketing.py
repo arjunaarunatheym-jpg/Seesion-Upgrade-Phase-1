@@ -313,6 +313,10 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
     })
     quotation_number = f"{month_prefix}{str(count + 1).zfill(5)}"
     
+    # Calculate valid_until date
+    validity_days = quotation_data.get("validity_days", 30)
+    valid_until = (now + timedelta(days=validity_days)).strftime("%Y-%m-%d")
+    
     quotation = {
         "id": str(uuid.uuid4()),
         "quotation_number": quotation_number,
@@ -331,9 +335,14 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
         "sst_percentage": quotation_data.get("sst_percentage", 0),
         "sst_amount": quotation_data.get("sst_amount", 0),
         "total_amount": quotation_data.get("total_amount", 0),
-        "validity_days": quotation_data.get("validity_days", 30),
+        "validity_days": validity_days,
+        "valid_until": valid_until,
+        "selected_items": quotation_data.get("selected_items", []),  # Inclusions/exclusions
+        "description_items": quotation_data.get("description_items", []),  # Legacy
+        "custom_description": quotation_data.get("custom_description"),
         "terms_conditions": quotation_data.get("terms_conditions"),
         "notes": quotation_data.get("notes"),
+        "remarks": quotation_data.get("remarks"),
         "status": "draft",
         "created_by": current_user.id,
         "created_at": get_malaysia_time().isoformat()
