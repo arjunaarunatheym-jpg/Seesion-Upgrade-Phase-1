@@ -16659,6 +16659,7 @@ async def create_quotation(quotation_data: QuotationCreate, current_user: User =
         validity_days=quotation_data.validity_days,
         valid_until=valid_until,
         description_items=quotation_data.description_items,
+        selected_items=quotation_data.selected_items,
         custom_description=quotation_data.custom_description,
         remarks=quotation_data.remarks,
         terms_conditions=quotation_data.terms_conditions,
