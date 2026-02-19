@@ -176,7 +176,7 @@ const PayablesTab = ({
       const response = await axiosInstance.get(`/finance/payables/export-excel?year=${payablesYear}&month=${payablesMonth}`);
       const data = response.data;
       
-      if (!data.data || Object.keys(data.data).length === 0) {
+      if (!data.data || data.data.length === 0) {
         toast.error('No payables data to export for this period');
         return;
       }
@@ -190,17 +190,32 @@ const PayablesTab = ({
       const byteArray = new Uint8Array(byteNumbers);
       const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
+      // Create download link and trigger download
+      const filename = data.filename || `payables_${payablesYear}_${payablesMonth}.xlsx`;
       const url = window.URL.createObjectURL(blob);
+      
+      // Use a more reliable download method
       const link = document.createElement('a');
+      link.style.display = 'none';
       link.href = url;
-      link.setAttribute('download', data.filename || `payables_${payablesYear}_${payablesMonth}.xlsx`);
+      link.download = filename;
+      
+      // Append to body, click, and cleanup
       document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      
+      // Use setTimeout to ensure the link is in DOM before clicking
+      setTimeout(() => {
+        link.click();
+        // Cleanup after a delay to ensure download starts
+        setTimeout(() => {
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+        }, 100);
+      }, 0);
       
       toast.success(`Exported payables for ${data.period_name}`);
     } catch (error) {
+      console.error('Export error:', error);
       toast.error(error.response?.data?.detail || "Failed to export payables");
     }
   };
