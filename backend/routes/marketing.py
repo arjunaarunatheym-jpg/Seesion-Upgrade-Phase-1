@@ -19,7 +19,10 @@ from utils.email_notifications import (
     notify_discount_request,
     notify_quotation_sent,
     notify_lead_won,
-    notify_lead_lost
+    notify_lead_lost,
+    notify_quotation_accepted,
+    notify_quotation_declined,
+    notify_quotation_rejected
 )
 
 from pydantic import BaseModel, Field, ConfigDict
