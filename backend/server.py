@@ -17372,14 +17372,20 @@ class QuotationPDF(FPDF):
             
             if logo_path and logo_path.exists():
                 try:
-                    # Use only width, let height auto-scale (h=0 in fpdf2)
+                    # Ensure all values are valid numbers
+                    x_pos = float(logo_x) if logo_x else 10.0
+                    y_pos = float(logo_y) if logo_y else 8.0
+                    w_val = float(logo_w) if logo_w else 35.0
+                    
                     if logo_h and logo_h > 0:
-                        self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w, h=logo_h)
+                        self.image(str(logo_path), x=x_pos, y=y_pos, w=w_val, h=float(logo_h))
                     else:
-                        self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w)
-                    logo_x_end = logo_x + logo_w + 5
+                        self.image(str(logo_path), x=x_pos, y=y_pos, w=w_val)
+                    logo_x_end = x_pos + w_val + 5
                 except Exception as e:
                     print(f"Logo load error: {e}")
+                    import traceback
+                    traceback.print_exc()
         
         # Company details - use header_x if set, otherwise after logo
         text_x = max(header_x, logo_x_end)
