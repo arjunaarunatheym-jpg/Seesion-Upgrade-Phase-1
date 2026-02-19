@@ -9719,17 +9719,20 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
-    if invoice.get("status") not in ["issued", "paid"]:
+    if invoice.get("status") not in ["issued", "paid", "partial"]:
         raise HTTPException(status_code=400, detail="Can only record payments for issued invoices")
     
     payment = {
         "id": str(uuid.uuid4()),
         "invoice_id": payment_data.invoice_id,
+        "invoice_number": invoice.get("invoice_number"),
+        "company_name": invoice.get("company_name"),
         "amount": payment_data.amount,
         "payment_date": payment_data.payment_date,
         "payment_method": payment_data.payment_method,
         "reference_number": payment_data.reference_number,
         "notes": payment_data.notes,
+        "deduction_amount": payment_data.deduction_amount or 0,
         "recorded_by": current_user.id,
         "created_at": get_malaysia_time().isoformat()
     }
@@ -9739,6 +9742,64 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     # Remove MongoDB _id if present (not JSON serializable)
     payment.pop("_id", None)
     
+    # Create credit note if requested
+    credit_note_created = None
+    if payment_data.create_credit_note and (payment_data.deduction_percentage or payment_data.deduction_amount):
+        try:
+            # Calculate deduction amount
+            if payment_data.deduction_amount and payment_data.deduction_amount > 0:
+                deduction_amount = payment_data.deduction_amount
+                deduction_percentage = (deduction_amount / invoice.get("total_amount", 1)) * 100
+            elif payment_data.deduction_percentage and payment_data.deduction_percentage > 0:
+                deduction_percentage = payment_data.deduction_percentage
+                deduction_amount = (invoice.get("total_amount", 0) * deduction_percentage) / 100
+            else:
+                deduction_amount = 0
+                deduction_percentage = 0
+            
+            if deduction_amount > 0:
+                # Generate credit note number
+                now = get_malaysia_time()
+                year = now.year
+                month = now.month
+                last_cn = await db.credit_notes.find_one(
+                    {"cn_number": {"$regex": f"^CN/MDDRC/{year}/{month:02d}/"}},
+                    sort=[("cn_number", -1)]
+                )
+                if last_cn:
+                    last_num = int(last_cn["cn_number"].split("/")[-1])
+                    cn_number = f"CN/MDDRC/{year}/{month:02d}/{str(last_num + 1).zfill(4)}"
+                else:
+                    cn_number = f"CN/MDDRC/{year}/{month:02d}/0001"
+                
+                credit_note = {
+                    "id": str(uuid.uuid4()),
+                    "cn_number": cn_number,
+                    "invoice_id": payment_data.invoice_id,
+                    "invoice_number": invoice.get("invoice_number"),
+                    "session_id": invoice.get("session_id"),
+                    "session_name": invoice.get("session_name") or invoice.get("programme_name"),
+                    "company_id": invoice.get("company_id"),
+                    "company_name": invoice.get("company_name"),
+                    "reason": payment_data.deduction_reason or "HRDCorp Levy Deduction",
+                    "description": f"{deduction_percentage:.1f}% deduction",
+                    "base_amount": invoice.get("total_amount", 0),
+                    "percentage": deduction_percentage,
+                    "amount": round(deduction_amount, 2),
+                    "status": "draft",
+                    "created_by": current_user.id,
+                    "created_at": get_malaysia_time().isoformat(),
+                    "cn_date": payment_data.payment_date
+                }
+                
+                await db.credit_notes.insert_one(credit_note)
+                credit_note.pop("_id", None)
+                credit_note_created = credit_note
+                
+                await log_finance_action("credit_note", credit_note["id"], "created", current_user.id, after_value=credit_note)
+        except Exception as e:
+            print(f"Error creating credit note: {e}")
+    
     # Check if fully paid
     all_payments = await db.payments.find({"invoice_id": payment_data.invoice_id}, {"_id": 0}).to_list(100)
     total_paid = sum(p.get("amount", 0) for p in all_payments)
@@ -9746,10 +9807,16 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     if total_paid >= invoice.get("total_amount", 0):
         await db.invoices.update_one({"id": payment_data.invoice_id}, {"$set": {"status": "paid", "updated_at": get_malaysia_time().isoformat()}})
         await db.sessions.update_one({"invoice_id": payment_data.invoice_id}, {"$set": {"invoice_status": "paid"}})
+    elif total_paid > 0:
+        await db.invoices.update_one({"id": payment_data.invoice_id}, {"$set": {"status": "partial", "updated_at": get_malaysia_time().isoformat()}})
     
     await log_finance_action("payment", payment["id"], "created", current_user.id, after_value=payment)
     
-    return payment
+    result = {"payment": payment}
+    if credit_note_created:
+        result["credit_note"] = credit_note_created
+    
+    return result
 
 # Company Settings APIs
 @api_router.get("/finance/company-settings")
