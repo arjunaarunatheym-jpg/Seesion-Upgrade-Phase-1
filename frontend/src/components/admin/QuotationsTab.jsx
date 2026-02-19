@@ -220,16 +220,41 @@ const QuotationsTab = ({
       {/* Quotation Management */}
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center flex-wrap gap-3">
-            <div>
-              <CardTitle>Quotation Management</CardTitle>
-              <CardDescription>Review and approve marketing quotations</CardDescription>
-            </div>
-            <div className="flex gap-2 items-center">
+          <div className="flex flex-col gap-3">
+            <div className="flex justify-between items-center flex-wrap gap-3">
+              <div>
+                <CardTitle>Quotation Management</CardTitle>
+                <CardDescription>Review and approve marketing quotations</CardDescription>
+              </div>
               <Badge className="bg-yellow-500 text-white">{pendingQuotations.length} Pending</Badge>
+            </div>
+            {/* Filter Row */}
+            <div className="flex flex-wrap gap-2 items-center">
+              <Select value={quotationYear} onValueChange={setQuotationYear}>
+                <SelectTrigger className="w-28">
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Years</SelectItem>
+                  {availableYears.map(year => (
+                    <SelectItem key={year} value={year.toString()}>{year}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={quotationMonth} onValueChange={setQuotationMonth}>
+                <SelectTrigger className="w-36">
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Months</SelectItem>
+                  {months.map(m => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Select value={quotationFilter} onValueChange={setQuotationFilter}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Filter" />
+                  <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
@@ -241,6 +266,9 @@ const QuotationsTab = ({
                   <SelectItem value="declined">Declined</SelectItem>
                 </SelectContent>
               </Select>
+              <span className="text-sm text-gray-500 ml-2">
+                {filteredQuotations.length} quotation{filteredQuotations.length !== 1 ? 's' : ''}
+              </span>
             </div>
           </div>
         </CardHeader>
