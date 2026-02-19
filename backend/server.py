@@ -17651,23 +17651,36 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.set_xy(85, y_info)
     pdf.cell_safe(60, 5, f"Date: {created_date.strftime('%d %B %Y')}")
     
-    # Parse valid_until date
-    valid_until = quotation.get("valid_until", "")
+    # Parse valid_until date - calculate from created_at if missing
+    valid_until = quotation.get("valid_until")
     valid_until_str = ""
+    validity_days = quotation.get("validity_days", 30)
+    
     if valid_until:
         if isinstance(valid_until, str):
             try:
-                # Try ISO format first
                 if 'T' in valid_until:
                     valid_until_dt = datetime.fromisoformat(valid_until.replace('Z', '+00:00'))
                 else:
-                    # Simple date format YYYY-MM-DD
                     valid_until_dt = datetime.strptime(valid_until, "%Y-%m-%d")
                 valid_until_str = valid_until_dt.strftime("%d %B %Y")
             except:
-                valid_until_str = valid_until  # Use as-is if parsing fails
+                valid_until_str = valid_until
         elif hasattr(valid_until, 'strftime'):
             valid_until_str = valid_until.strftime("%d %B %Y")
+    else:
+        # Calculate valid_until from created_at + validity_days
+        created_at = quotation.get("created_at", "")
+        if isinstance(created_at, str):
+            try:
+                created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                valid_until_dt = created_dt + timedelta(days=validity_days)
+                valid_until_str = valid_until_dt.strftime("%d %B %Y")
+            except:
+                pass
+        elif hasattr(created_at, 'strftime'):
+            valid_until_dt = created_at + timedelta(days=validity_days)
+            valid_until_str = valid_until_dt.strftime("%d %B %Y")
     
     pdf.set_xy(15, y_info + 7)
     pdf.cell_safe(60, 5, f"Valid Until: {valid_until_str}")
