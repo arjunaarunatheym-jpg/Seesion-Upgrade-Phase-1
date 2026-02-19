@@ -92,6 +92,16 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - None
 
 ### Recently Fixed (Feb 2026)
+- ✅ Admin Quotations Tab UI Improvements (Feb 19, 2026)
+  - Quotations: Filter by Year + Month dropdowns (default: current year)
+  - Clients: Alphabetical grouping (A-D, E-H, I-L, M-P, Q-T, U-Z)
+  - Shows count of filtered results
+
+- ✅ Won Quotation → Draft Session (Feb 19, 2026)
+  - Auto-creates draft session when quotation is marked "Accepted"
+  - Session appears in Admin Sessions tab with status "draft"
+  - Fixed 3 existing won leads that were missing sessions
+
 - ✅ Inclusions & Exclusions System (Feb 19, 2026)
   - Admin can create/manage "Inclusion" and "Exclusion" items via Quotations tab
   - Items have: name, category (inclusion/exclusion), has_quantity flag
