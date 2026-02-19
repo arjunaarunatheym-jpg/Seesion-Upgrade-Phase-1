@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Eye, CheckCircle, XCircle, Download, Plus, Trash2, Edit } from "lucide-react";
+import { Eye, CheckCircle, XCircle, Download, Plus, Trash2, Edit, Package, PackageX } from "lucide-react";
 
 const QuotationsTab = ({
   quotations,
@@ -24,6 +28,15 @@ const QuotationsTab = ({
 }) => {
   // Filter state
   const [quotationFilter, setQuotationFilter] = useState("all");
+  
+  // Description Item Dialog
+  const [itemDialogOpen, setItemDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [itemForm, setItemForm] = useState({
+    name: "",
+    category: "inclusion",
+    has_quantity: false
+  });
 
   // Filter quotations
   const filteredQuotations = useMemo(() => {
@@ -32,6 +45,10 @@ const QuotationsTab = ({
   }, [quotations, quotationFilter]);
 
   const pendingQuotations = quotations.filter(q => q.status === 'pending_approval');
+  
+  // Separate inclusions and exclusions
+  const inclusions = descriptionItems.filter(i => i.category === 'inclusion');
+  const exclusions = descriptionItems.filter(i => i.category === 'exclusion');
 
   const getQuotationStatusBadge = (status) => {
     const statusConfig = {
@@ -56,24 +73,44 @@ const QuotationsTab = ({
     }
   };
 
-  const handleAddDescriptionItem = async () => {
-    const name = prompt("Enter item name:");
-    if (!name) return;
-    const description = prompt("Enter item description:");
-    if (!description) return;
-    const category = prompt("Enter category (e.g., inclusions, equipment, services):", "inclusions");
+  const openAddItemDialog = (category) => {
+    setEditingItem(null);
+    setItemForm({
+      name: "",
+      category: category,
+      has_quantity: false
+    });
+    setItemDialogOpen(true);
+  };
+
+  const openEditItemDialog = (item) => {
+    setEditingItem(item);
+    setItemForm({
+      name: item.name,
+      category: item.category || "inclusion",
+      has_quantity: item.has_quantity || false
+    });
+    setItemDialogOpen(true);
+  };
+
+  const handleSaveItem = async () => {
+    if (!itemForm.name.trim()) {
+      toast.error("Please enter item name");
+      return;
+    }
     
     try {
-      await axiosInstance.post('/marketing/description-items', {
-        name,
-        description,
-        category: category || "inclusions",
-        sort_order: 0
-      });
-      toast.success("Description item created");
+      if (editingItem) {
+        await axiosInstance.put(`/marketing/description-items/${editingItem.id}`, itemForm);
+        toast.success("Item updated");
+      } else {
+        await axiosInstance.post('/marketing/description-items', itemForm);
+        toast.success("Item created");
+      }
+      setItemDialogOpen(false);
       onRefresh();
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to create item");
+      toast.error(error.response?.data?.detail || "Failed to save item");
     }
   };
 
