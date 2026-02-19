@@ -974,32 +974,116 @@ const MarketingDashboard = ({ user, onLogout }) => {
               })()}
             </div>
 
-            {/* Description Items (if any exist) */}
+            {/* Inclusions & Exclusions Selection */}
             {descriptionItems.length > 0 && (
-              <div className="border rounded-lg p-3">
-                <Label className="font-semibold">Include in Quotation</Label>
-                <div className="mt-2 space-y-2 max-h-40 overflow-y-auto">
-                  {descriptionItems.map(item => (
-                    <label key={item.id} className="flex items-start gap-2 cursor-pointer p-2 hover:bg-gray-50 rounded">
-                      <input
-                        type="checkbox"
-                        checked={quotationForm.description_items.includes(item.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setQuotationForm({...quotationForm, description_items: [...quotationForm.description_items, item.id]});
-                          } else {
-                            setQuotationForm({...quotationForm, description_items: quotationForm.description_items.filter(id => id !== item.id)});
-                          }
-                        }}
-                        className="w-4 h-4 mt-1"
-                      />
-                      <div>
-                        <span className="font-medium">{item.name}</span>
-                        <p className="text-xs text-gray-500">{item.description}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+              <div className="border rounded-lg p-3 space-y-4">
+                <Label className="font-semibold">Inclusions & Exclusions</Label>
+                
+                {/* Inclusions */}
+                {descriptionItems.filter(i => i.category === 'inclusion').length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-green-700 mb-2">✓ Inclusions</p>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {descriptionItems.filter(i => i.category === 'inclusion').map(item => {
+                        const selectedItem = quotationForm.selected_items.find(s => s.item_id === item.id);
+                        const isSelected = !!selectedItem;
+                        return (
+                          <div key={item.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setQuotationForm({
+                                    ...quotationForm, 
+                                    selected_items: [...quotationForm.selected_items, { item_id: item.id, quantity: 1 }]
+                                  });
+                                } else {
+                                  setQuotationForm({
+                                    ...quotationForm, 
+                                    selected_items: quotationForm.selected_items.filter(s => s.item_id !== item.id)
+                                  });
+                                }
+                              }}
+                              className="w-4 h-4"
+                            />
+                            <span className="flex-1 text-sm">{item.name}</span>
+                            {item.has_quantity && isSelected && (
+                              <input
+                                type="number"
+                                min="1"
+                                value={selectedItem?.quantity || 1}
+                                onChange={(e) => {
+                                  const qty = parseInt(e.target.value) || 1;
+                                  setQuotationForm({
+                                    ...quotationForm,
+                                    selected_items: quotationForm.selected_items.map(s => 
+                                      s.item_id === item.id ? { ...s, quantity: qty } : s
+                                    )
+                                  });
+                                }}
+                                className="w-16 text-sm border rounded px-2 py-1"
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Exclusions */}
+                {descriptionItems.filter(i => i.category === 'exclusion').length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-red-700 mb-2">✗ Exclusions</p>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {descriptionItems.filter(i => i.category === 'exclusion').map(item => {
+                        const selectedItem = quotationForm.selected_items.find(s => s.item_id === item.id);
+                        const isSelected = !!selectedItem;
+                        return (
+                          <div key={item.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setQuotationForm({
+                                    ...quotationForm, 
+                                    selected_items: [...quotationForm.selected_items, { item_id: item.id, quantity: 1 }]
+                                  });
+                                } else {
+                                  setQuotationForm({
+                                    ...quotationForm, 
+                                    selected_items: quotationForm.selected_items.filter(s => s.item_id !== item.id)
+                                  });
+                                }
+                              }}
+                              className="w-4 h-4"
+                            />
+                            <span className="flex-1 text-sm">{item.name}</span>
+                            {item.has_quantity && isSelected && (
+                              <input
+                                type="number"
+                                min="1"
+                                value={selectedItem?.quantity || 1}
+                                onChange={(e) => {
+                                  const qty = parseInt(e.target.value) || 1;
+                                  setQuotationForm({
+                                    ...quotationForm,
+                                    selected_items: quotationForm.selected_items.map(s => 
+                                      s.item_id === item.id ? { ...s, quantity: qty } : s
+                                    )
+                                  });
+                                }}
+                                className="w-16 text-sm border rounded px-2 py-1"
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
