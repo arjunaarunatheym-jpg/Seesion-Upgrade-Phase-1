@@ -616,15 +616,13 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
 
 @router.get("/description-items")
 async def get_description_items(current_user: User = Depends(get_current_user)):
-    """Get description items for current user"""
+    """Get all active description items (for marketers to select when creating quotations)"""
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     
-    query = {}
-    if current_user.role not in ["admin", "super_admin"]:
-        query["created_by"] = current_user.id
-    
-    items = await db.description_items.find(query, {"_id": 0}).to_list(500)
+    # All marketers can see all active description items
+    items = await db.description_items.find({"$or": [{"is_active": True}, {"is_active": {"$exists": False}}]}, {"_id": 0}).to_list(500)
+    items.sort(key=lambda x: (x.get("category", ""), x.get("sort_order", 0)))
     return items
 
 
