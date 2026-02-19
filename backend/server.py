@@ -17372,20 +17372,25 @@ class QuotationPDF(FPDF):
             
             if logo_path and logo_path.exists():
                 try:
-                    # Ensure all values are valid numbers
+                    # Ensure all values are valid numbers and within page bounds
                     x_pos = float(logo_x) if logo_x else 10.0
                     y_pos = float(logo_y) if logo_y else 8.0
                     w_val = float(logo_w) if logo_w else 35.0
                     
-                    # Debug: print current page state
-                    print(f"DEBUG: Loading logo at x={x_pos}, y={y_pos}, w={w_val}, page_w={self.w}, page_h={self.h}", flush=True)
+                    # Safeguard: logo width shouldn't exceed half the page width
+                    max_logo_width = 80  # Max 80mm for logo
+                    if w_val > max_logo_width:
+                        w_val = max_logo_width
+                    
+                    # Ensure logo fits on page
+                    if x_pos + w_val > 190:  # Leave some margin
+                        w_val = 190 - x_pos
                     
                     if logo_h and logo_h > 0:
                         self.image(str(logo_path), x=x_pos, y=y_pos, w=w_val, h=float(logo_h))
                     else:
                         self.image(str(logo_path), x=x_pos, y=y_pos, w=w_val)
                     logo_x_end = x_pos + w_val + 5
-                    print(f"DEBUG: Logo loaded successfully", flush=True)
                 except Exception as e:
                     import traceback, sys
                     print(f"Logo load error: {e}", file=sys.stderr, flush=True)
