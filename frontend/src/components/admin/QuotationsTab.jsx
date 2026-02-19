@@ -154,7 +154,7 @@ const QuotationsTab = ({
 
   const handleApproveQuotation = async (quotationId) => {
     try {
-      await axiosInstance.put(`/marketing/quotations/${quotationId}/approve`);
+      await axiosInstance.post(`/marketing/quotations/${quotationId}/approve`);
       toast.success("Quotation approved successfully");
       onRefresh();
     } catch (error) {
