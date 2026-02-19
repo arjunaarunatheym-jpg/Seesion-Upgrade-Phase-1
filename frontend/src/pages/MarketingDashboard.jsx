@@ -979,12 +979,12 @@ const MarketingDashboard = ({ user, onLogout }) => {
               <div className="border rounded-lg p-3 space-y-4">
                 <Label className="font-semibold">Inclusions & Exclusions</Label>
                 
-                {/* Inclusions */}
-                {descriptionItems.filter(i => i.category === 'inclusion').length > 0 && (
+                {/* Inclusions - handle both singular and plural category names */}
+                {descriptionItems.filter(i => i.category === 'inclusion' || i.category === 'inclusions').length > 0 && (
                   <div>
                     <p className="text-sm font-medium text-green-700 mb-2">✓ Inclusions</p>
                     <div className="space-y-2 max-h-32 overflow-y-auto">
-                      {descriptionItems.filter(i => i.category === 'inclusion').map(item => {
+                      {descriptionItems.filter(i => i.category === 'inclusion' || i.category === 'inclusions').map(item => {
                         const selectedItem = quotationForm.selected_items.find(s => s.item_id === item.id);
                         const isSelected = !!selectedItem;
                         return (
