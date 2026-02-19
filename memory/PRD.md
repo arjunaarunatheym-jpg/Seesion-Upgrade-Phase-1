@@ -46,6 +46,10 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 
 ## Current Status (Feb 2026)
 
+### Recently Fixed (Feb 19, 2026)
+- ✅ **Edit Session Dialog - Trainer Assignments**: Added missing trainer assignment UI to Edit Session dialog for draft sessions
+- ✅ **Payables Excel Export**: Fixed download not triggering - file now downloads correctly as `payables_YYYY_MM.xlsx`
+
 ### Completed
 - ✅ Full frontend refactoring (all dashboard components modularized)
 - ✅ Multi-invoice per session feature
