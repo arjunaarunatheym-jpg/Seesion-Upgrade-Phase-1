@@ -16965,18 +16965,10 @@ async def update_client_response(quotation_id: str, data: dict, current_user: Us
 # ==================== QUOTATION DESCRIPTION ITEMS (Admin) ====================
 
 @api_router.get("/marketing/description-items")
-async def get_description_items(current_user: User = Depends(get_current_user)):
-    """Get all description items (for marketers to select)"""
-    if not check_marketing_access(current_user):
-        raise HTTPException(status_code=403, detail="Marketing access required")
-    
-    # Get items that are active or don't have is_active field
-    query = {"$or": [{"is_active": True}, {"is_active": {"$exists": False}}]}
-    logging.warning(f"Description items query: {query}")
-    items = await db.quotation_description_items.find(query, {"_id": 0}).to_list(100)
-    logging.warning(f"Found {len(items)} items in quotation_description_items collection")
-    items.sort(key=lambda x: (x.get("category", ""), x.get("sort_order", 0)))
-    return items
+async def get_description_items_legacy(current_user: User = Depends(get_current_user)):
+    """LEGACY: Redirects to main endpoint in routes/marketing.py"""
+    # This endpoint is shadowed by routes/marketing.py - keeping for reference
+    pass
 
 
 @api_router.get("/marketing/description-items/all")
