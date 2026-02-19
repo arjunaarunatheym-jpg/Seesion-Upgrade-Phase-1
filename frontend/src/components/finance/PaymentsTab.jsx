@@ -61,7 +61,7 @@ const PaymentsTab = ({
     }
 
     try {
-      await axiosInstance.post('/finance/payments', {
+      const response = await axiosInstance.post('/finance/payments', {
         invoice_id: paymentForm.invoice_id,
         amount: parseFloat(paymentForm.amount),
         payment_date: paymentForm.payment_date,
@@ -69,11 +69,15 @@ const PaymentsTab = ({
         reference_number: paymentForm.reference_number,
         notes: paymentForm.notes,
         create_credit_note: paymentForm.create_cn,
-        cn_percentage: paymentForm.create_cn ? parseFloat(paymentForm.cn_percentage) : null,
-        cn_reason: paymentForm.create_cn ? paymentForm.cn_reason : null
+        deduction_percentage: paymentForm.create_cn ? parseFloat(paymentForm.cn_percentage) : null,
+        deduction_reason: paymentForm.create_cn ? paymentForm.cn_reason : null
       });
       
-      toast.success("Payment recorded successfully");
+      if (response.data.credit_note) {
+        toast.success(`Payment recorded & Credit Note ${response.data.credit_note.cn_number} created!`);
+      } else {
+        toast.success("Payment recorded successfully");
+      }
       setPaymentForm(initialPaymentForm);
       onRefresh();
     } catch (error) {
