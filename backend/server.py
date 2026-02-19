@@ -17345,11 +17345,12 @@ class QuotationPDF(FPDF):
         """Invoice-style header with logo - uniform across all pages"""
         cs = self.company_settings
         
-        # Get dynamic layout settings - handle None values
+        # Get dynamic layout settings - handle None values safely
         logo_x = int(cs.get('logo_x') or 10)
         logo_y = int(cs.get('logo_y') or 8)
         logo_w = int(cs.get('logo_width') or 35)
-        logo_h = int(cs.get('logo_height') or 0) or None  # None = auto-scale
+        logo_h_val = cs.get('logo_height')
+        logo_h = int(logo_h_val) if logo_h_val and int(logo_h_val) > 0 else 0  # 0 = auto-scale in fpdf
         header_x = int(cs.get('header_x') or 50)
         header_y = int(cs.get('header_y') or 8)
         
@@ -17371,7 +17372,8 @@ class QuotationPDF(FPDF):
             
             if logo_path and logo_path.exists():
                 try:
-                    self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w, h=logo_h)
+                    # h=0 means auto-scale maintaining aspect ratio
+                    self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w, h=logo_h if logo_h > 0 else 0)
                     logo_x_end = logo_x + logo_w + 5
                 except Exception as e:
                     print(f"Logo load error: {e}")
