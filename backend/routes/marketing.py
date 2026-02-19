@@ -527,7 +527,7 @@ async def mark_quotation_sent(quotation_id: str, current_user: User = Depends(ge
 
 @router.post("/quotations/{quotation_id}/client-response")
 async def record_client_response(quotation_id: str, response_data: dict, current_user: User = Depends(get_current_user)):
-    """Record client response (accepted/declined)"""
+    """Record client response (accepted/declined). If accepted, auto-creates a draft session."""
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     
@@ -539,19 +539,82 @@ async def record_client_response(quotation_id: str, response_data: dict, current
     if response not in ["accepted", "declined"]:
         raise HTTPException(status_code=400, detail="Response must be 'accepted' or 'declined'")
     
+    now = get_malaysia_time()
+    
     await db.quotations.update_one(
         {"id": quotation_id},
         {"$set": {
             "status": response,
-            "client_response_at": get_malaysia_time().isoformat(),
-            "client_response_notes": response_data.get("notes")
+            "client_response_at": now.isoformat(),
+            "client_response_notes": response_data.get("notes"),
+            "training_date": response_data.get("training_date"),
+            "venue": response_data.get("venue")
         }}
     )
     
     # Sync lead stage
     await sync_lead_stage_from_quotation(quotation_id, response)
     
-    return {"message": f"Quotation marked as {response}"}
+    result = {"message": f"Quotation marked as {response}"}
+    
+    # If accepted, create a draft session
+    if response == "accepted":
+        # Get client info
+        client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
+        
+        # Create or find company
+        company_id = None
+        company_name = client.get("company_name", "Unknown Company") if client else "Unknown Company"
+        if client:
+            existing_company = await db.companies.find_one(
+                {"name": {"$regex": f"^{client['company_name']}$", "$options": "i"}},
+                {"_id": 0}
+            )
+            if existing_company:
+                company_id = existing_company.get("id")
+            else:
+                company_id = str(uuid.uuid4())
+                await db.companies.insert_one({
+                    "id": company_id,
+                    "name": client["company_name"],
+                    "address": client.get("company_address", ""),
+                    "contact_person": client.get("contact_person", ""),
+                    "contact_email": client.get("contact_email", ""),
+                    "contact_phone": client.get("contact_phone", ""),
+                    "created_at": now.isoformat()
+                })
+        
+        # Get training date from response or quotation
+        training_date = response_data.get("training_date") or quotation.get("training_date") or now.strftime("%Y-%m-%d")
+        end_date = response_data.get("end_date") or training_date
+        venue = response_data.get("venue") or quotation.get("venue") or ""
+        
+        # Create draft session
+        session_id = str(uuid.uuid4())
+        session_data = {
+            "id": session_id,
+            "name": f"{company_name} - {quotation.get('programme_name', 'Training')}",
+            "program_id": quotation.get("programme_id", ""),
+            "company_id": company_id or "",
+            "location": venue,
+            "start_date": training_date,
+            "end_date": end_date,
+            "expected_participants": quotation.get("num_participants", 0),
+            "status": "draft",
+            "completion_status": "ongoing",
+            "supervisor_ids": [],
+            "participant_ids": [],
+            "trainer_assignments": [],
+            "quotation_id": quotation_id,
+            "marketing_user_id": quotation.get("created_by"),
+            "created_at": now.isoformat()
+        }
+        
+        await db.sessions.insert_one(session_data)
+        result["session_id"] = session_id
+        result["message"] = "Quotation accepted and draft session created"
+    
+    return result
 
 
 
