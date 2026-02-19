@@ -2,18 +2,94 @@
  * CreditNotesTab Component - Extracted from FinanceDashboard
  * Manages credit notes (HRDCorp deductions, etc.)
  */
+import { useState, useEffect } from "react";
 import { axiosInstance } from "../../App";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { FileX, RefreshCw, Check, FileText, Printer, Download } from "lucide-react";
+import { FileX, RefreshCw, Check, FileText, Printer, Download, Plus } from "lucide-react";
 
 const CreditNotesTab = ({
   creditNotes,
   companySettings,
   onRefresh,
 }) => {
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [invoices, setInvoices] = useState([]);
+  const [newCN, setNewCN] = useState({
+    invoice_id: "",
+    reason: "HRDCorp Levy Deduction",
+    description: "",
+    percentage: 4,
+    amount: 0
+  });
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+
+  // Fetch invoices for dropdown
+  useEffect(() => {
+    if (showCreateDialog) {
+      axiosInstance.get("/finance/admin/invoices")
+        .then(res => {
+          // Only show issued/paid invoices
+          const validInvoices = res.data.filter(inv => 
+            inv.status === 'issued' || inv.status === 'paid' || inv.status === 'partial'
+          );
+          setInvoices(validInvoices);
+        })
+        .catch(err => console.error("Failed to fetch invoices:", err));
+    }
+  }, [showCreateDialog]);
+
+  // Calculate amount when invoice or percentage changes
+  useEffect(() => {
+    if (selectedInvoice && newCN.percentage > 0) {
+      const calcAmount = (selectedInvoice.total_amount * newCN.percentage) / 100;
+      setNewCN(prev => ({ ...prev, amount: Math.round(calcAmount * 100) / 100 }));
+    }
+  }, [selectedInvoice, newCN.percentage]);
+
+  const handleInvoiceSelect = (invoiceId) => {
+    const invoice = invoices.find(inv => inv.id === invoiceId);
+    setSelectedInvoice(invoice);
+    setNewCN(prev => ({ ...prev, invoice_id: invoiceId }));
+  };
+
+  const handleCreateCN = async () => {
+    if (!newCN.invoice_id) {
+      toast.error("Please select an invoice");
+      return;
+    }
+    if (newCN.amount <= 0) {
+      toast.error("Amount must be greater than 0");
+      return;
+    }
+
+    try {
+      const payload = {
+        invoice_id: newCN.invoice_id,
+        reason: newCN.reason,
+        description: newCN.description || `${newCN.percentage}% deduction`,
+        percentage: newCN.percentage,
+        amount: newCN.amount
+      };
+      
+      await axiosInstance.post("/finance/credit-notes", payload);
+      toast.success("Credit note created");
+      setShowCreateDialog(false);
+      setNewCN({ invoice_id: "", reason: "HRDCorp Levy Deduction", description: "", percentage: 4, amount: 0 });
+      setSelectedInvoice(null);
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to create credit note");
+    }
+  };
+
   // API Handlers
   const handleApproveCN = async (cnId) => {
     try {
@@ -46,6 +122,7 @@ const CreditNotesTab = ({
   };
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex justify-between items-center">
@@ -56,10 +133,16 @@ const CreditNotesTab = ({
             </CardTitle>
             <CardDescription>Track deductions like HRDCorp levy - Status: Draft → Approved → Issued</CardDescription>
           </div>
-          <Button variant="outline" onClick={onRefresh}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="default" onClick={() => setShowCreateDialog(true)} data-testid="create-credit-note-btn">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Credit Note
+            </Button>
+            <Button variant="outline" onClick={onRefresh}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -67,7 +150,7 @@ const CreditNotesTab = ({
           <div className="text-center py-8 text-gray-500">
             <FileX className="w-12 h-12 mx-auto mb-2 text-gray-300" />
             <p>No credit notes yet</p>
-            <p className="text-sm">Credit notes are created when recording payments with deductions</p>
+            <p className="text-sm">Credit notes are created when recording payments with deductions, or manually using the button above</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
