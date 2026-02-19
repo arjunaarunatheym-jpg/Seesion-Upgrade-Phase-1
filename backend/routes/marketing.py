@@ -430,6 +430,16 @@ async def submit_quotation(quotation_id: str, current_user: User = Depends(get_c
         {"id": quotation_id},
         {"$set": {"status": "pending_approval", "submitted_at": get_malaysia_time().isoformat()}}
     )
+    
+    # Notify admin for approval
+    try:
+        # Get client name
+        client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
+        client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
+        await notify_quotation_for_approval(quotation, client_name, current_user.full_name)
+    except:
+        pass
+    
     return {"message": "Quotation submitted for approval"}
 
 
