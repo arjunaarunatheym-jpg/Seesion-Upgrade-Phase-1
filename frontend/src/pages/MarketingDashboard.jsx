@@ -422,12 +422,6 @@ const MarketingDashboard = ({ user, onLogout }) => {
       setDownloadingPdf(false);
     }
   };
-      console.error('PDF download error:', error);
-      toast.error(error.response?.data?.detail || 'Failed to download PDF');
-    } finally {
-      setDownloadingPdf(false);
-    }
-  };
 
   const viewQuotationDetails = async (quotationId) => {
     try {
