@@ -17372,8 +17372,11 @@ class QuotationPDF(FPDF):
             
             if logo_path and logo_path.exists():
                 try:
-                    # h=0 means auto-scale maintaining aspect ratio
-                    self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w, h=logo_h if logo_h > 0 else 0)
+                    # Use only width, let height auto-scale (h=0 in fpdf2)
+                    if logo_h and logo_h > 0:
+                        self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w, h=logo_h)
+                    else:
+                        self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w)
                     logo_x_end = logo_x + logo_w + 5
                 except Exception as e:
                     print(f"Logo load error: {e}")
