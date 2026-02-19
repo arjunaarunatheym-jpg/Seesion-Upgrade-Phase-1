@@ -711,6 +711,202 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
     }
 
 
+@router.get("/payables/download-excel")
+async def download_payables_excel(year: int, month: int, current_user: User = Depends(get_current_user)):
+    """Download payables data for a given month/year as Excel file directly"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+        from fastapi.responses import StreamingResponse
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+    
+    # Get sessions and companies for lookups
+    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1, "company_id": 1}).to_list(1000)
+    session_map = {s["id"]: s for s in sessions}
+    
+    companies = await db.companies.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
+    company_map = {c["id"]: c["name"] for c in companies}
+    
+    # Helper to filter by month/year
+    def matches_period(start_date):
+        if not start_date:
+            return False
+        try:
+            if isinstance(start_date, str):
+                d = datetime.fromisoformat(start_date.replace('Z', '+00:00')) if 'T' in start_date else datetime.strptime(start_date, '%Y-%m-%d')
+            else:
+                d = start_date
+            return d.year == year and d.month == month
+        except:
+            return False
+    
+    # Get all payables data
+    trainer_fees = await db.trainer_fees.find({}, {"_id": 0}).to_list(1000)
+    coordinator_fees = await db.coordinator_fees.find({}, {"_id": 0}).to_list(1000)
+    marketing_comms = await db.marketing_commissions.find({}, {"_id": 0}).to_list(1000)
+    
+    # Filter by period
+    filtered_trainer = []
+    for fee in trainer_fees:
+        session = session_map.get(fee.get("session_id"), {})
+        if matches_period(session.get("start_date")):
+            trainer = await db.users.find_one({"id": fee.get("trainer_id")}, {"_id": 0, "full_name": 1})
+            filtered_trainer.append({
+                "name": trainer.get("full_name") if trainer else "Unknown",
+                "company": company_map.get(session.get("company_id"), "Unknown"),
+                "session": session.get("name", "Unknown"),
+                "amount": fee.get("fee_amount", 0),
+                "status": fee.get("status", "pending"),
+                "role": fee.get("role", "Trainer")
+            })
+    
+    filtered_coordinator = []
+    for fee in coordinator_fees:
+        session = session_map.get(fee.get("session_id"), {})
+        if matches_period(session.get("start_date")):
+            coord = await db.users.find_one({"id": fee.get("coordinator_id")}, {"_id": 0, "full_name": 1})
+            filtered_coordinator.append({
+                "name": coord.get("full_name") if coord else "Unknown",
+                "company": company_map.get(session.get("company_id"), "Unknown"),
+                "session": session.get("name", "Unknown"),
+                "amount": fee.get("total_fee", 0),
+                "status": fee.get("status", "pending"),
+                "days": fee.get("num_days", 1)
+            })
+    
+    filtered_marketing = []
+    for comm in marketing_comms:
+        session = session_map.get(comm.get("session_id"), {})
+        if matches_period(session.get("start_date")):
+            user = await db.users.find_one({"id": comm.get("marketing_user_id")}, {"_id": 0, "full_name": 1})
+            filtered_marketing.append({
+                "name": user.get("full_name") if user else "Unknown",
+                "company": company_map.get(session.get("company_id"), comm.get("company_name", "Unknown")),
+                "session": session.get("name", "Unknown"),
+                "amount": comm.get("calculated_amount", 0),
+                "status": comm.get("status", "pending"),
+                "rate": f"{comm.get('commission_rate', 0)}%"
+            })
+    
+    # Check if we have any data
+    if not filtered_trainer and not filtered_coordinator and not filtered_marketing:
+        raise HTTPException(status_code=404, detail="No payables data for this period")
+    
+    # Create workbook
+    wb = Workbook()
+    
+    # Style definitions
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    month_name = datetime(year, month, 1).strftime('%B %Y')
+    
+    # Trainer Fees Sheet
+    ws_trainer = wb.active
+    ws_trainer.title = "Trainer Fees"
+    ws_trainer.append(["Trainer Fees - " + month_name])
+    ws_trainer.merge_cells('A1:F1')
+    ws_trainer['A1'].font = Font(bold=True, size=14)
+    ws_trainer.append([])
+    ws_trainer.append(["Name", "Company", "Session", "Role", "Amount (RM)", "Status"])
+    for col in range(1, 7):
+        ws_trainer.cell(row=3, column=col).font = header_font
+        ws_trainer.cell(row=3, column=col).fill = header_fill
+        ws_trainer.cell(row=3, column=col).border = border
+    
+    for fee in filtered_trainer:
+        ws_trainer.append([fee["name"], fee["company"], fee["session"], fee["role"], fee["amount"], fee["status"]])
+    
+    if filtered_trainer:
+        total_row = ws_trainer.max_row + 1
+        ws_trainer.cell(row=total_row, column=4, value="TOTAL:")
+        ws_trainer.cell(row=total_row, column=4).font = Font(bold=True)
+        ws_trainer.cell(row=total_row, column=5, value=sum(f["amount"] for f in filtered_trainer))
+        ws_trainer.cell(row=total_row, column=5).font = Font(bold=True)
+    
+    # Coordinator Fees Sheet
+    ws_coord = wb.create_sheet("Coordinator Fees")
+    ws_coord.append(["Coordinator Fees - " + month_name])
+    ws_coord.merge_cells('A1:F1')
+    ws_coord['A1'].font = Font(bold=True, size=14)
+    ws_coord.append([])
+    ws_coord.append(["Name", "Company", "Session", "Days", "Amount (RM)", "Status"])
+    for col in range(1, 7):
+        ws_coord.cell(row=3, column=col).font = header_font
+        ws_coord.cell(row=3, column=col).fill = header_fill
+        ws_coord.cell(row=3, column=col).border = border
+    
+    for fee in filtered_coordinator:
+        ws_coord.append([fee["name"], fee["company"], fee["session"], fee["days"], fee["amount"], fee["status"]])
+    
+    if filtered_coordinator:
+        total_row = ws_coord.max_row + 1
+        ws_coord.cell(row=total_row, column=4, value="TOTAL:")
+        ws_coord.cell(row=total_row, column=4).font = Font(bold=True)
+        ws_coord.cell(row=total_row, column=5, value=sum(f["amount"] for f in filtered_coordinator))
+        ws_coord.cell(row=total_row, column=5).font = Font(bold=True)
+    
+    # Marketing Commission Sheet
+    ws_marketing = wb.create_sheet("Marketing Commission")
+    ws_marketing.append(["Marketing Commission - " + month_name])
+    ws_marketing.merge_cells('A1:F1')
+    ws_marketing['A1'].font = Font(bold=True, size=14)
+    ws_marketing.append([])
+    ws_marketing.append(["Name", "Company", "Session", "Rate", "Amount (RM)", "Status"])
+    for col in range(1, 7):
+        ws_marketing.cell(row=3, column=col).font = header_font
+        ws_marketing.cell(row=3, column=col).fill = header_fill
+        ws_marketing.cell(row=3, column=col).border = border
+    
+    for comm in filtered_marketing:
+        ws_marketing.append([comm["name"], comm["company"], comm["session"], comm["rate"], comm["amount"], comm["status"]])
+    
+    if filtered_marketing:
+        total_row = ws_marketing.max_row + 1
+        ws_marketing.cell(row=total_row, column=4, value="TOTAL:")
+        ws_marketing.cell(row=total_row, column=4).font = Font(bold=True)
+        ws_marketing.cell(row=total_row, column=5, value=sum(f["amount"] for f in filtered_marketing))
+        ws_marketing.cell(row=total_row, column=5).font = Font(bold=True)
+    
+    # Adjust column widths
+    for ws in [ws_trainer, ws_coord, ws_marketing]:
+        ws.column_dimensions['A'].width = 25
+        ws.column_dimensions['B'].width = 30
+        ws.column_dimensions['C'].width = 40
+        ws.column_dimensions['D'].width = 15
+        ws.column_dimensions['E'].width = 15
+        ws.column_dimensions['F'].width = 12
+    
+    # Save to bytes
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"payables_{year}_{str(month).zfill(2)}.xlsx"
+    
+    # Return as streaming response with proper headers for download
+    headers = {
+        'Content-Disposition': f'attachment; filename="{filename}"',
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }
+    
+    return StreamingResponse(
+        output,
+        headers=headers,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
 # ============ PAYABLES LIST ENDPOINTS ============
 @router.get("/payables/trainer-fees")
 async def get_pending_trainer_fees(current_user: User = Depends(get_current_user)):
