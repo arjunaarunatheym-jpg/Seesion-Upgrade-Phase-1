@@ -541,6 +541,14 @@ async def mark_quotation_sent(quotation_id: str, current_user: User = Depends(ge
     # Sync lead stage
     await sync_lead_stage_from_quotation(quotation_id, "sent")
     
+    # Send email notification
+    try:
+        client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
+        client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
+        await notify_quotation_sent(quotation, client_name, current_user.full_name)
+    except:
+        pass
+    
     return {"message": "Quotation marked as sent"}
 
 
