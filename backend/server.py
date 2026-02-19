@@ -17342,17 +17342,17 @@ class QuotationPDF(FPDF):
         return segments
     
     def header(self):
-        """Header matching invoice PDF exactly"""
+        """Header matching invoice PDF exactly - logo left, company info right, border below"""
         cs = self.company_settings
         
         # Starting position
         start_y = 10
         self.set_y(start_y)
         
-        # Logo on the left - same size as invoice (100px ≈ 26mm)
+        # Logo on the left - 100px in invoice ≈ 26mm in PDF
         logo_url = cs.get('logo_url')
         logo_width = 26
-        logo_end_x = 10  # Default if no logo
+        logo_end_x = 10
         
         if logo_url:
             logo_path = None
@@ -17366,65 +17366,66 @@ class QuotationPDF(FPDF):
             if logo_path and logo_path.exists():
                 try:
                     self.image(str(logo_path), x=10, y=start_y, w=logo_width)
-                    logo_end_x = 10 + logo_width + 5  # 5mm gap after logo
+                    logo_end_x = 10 + logo_width + 5
                 except:
                     pass
         
-        # Company details - right of logo (matching invoice: 18px name, 11px info)
+        # Company details to the right of logo
         text_x = logo_end_x
         self.set_xy(text_x, start_y)
         
-        # Company name - 18px ≈ 14pt, bold, primary color
+        # Company name - 18px bold in invoice ≈ 14pt
         self.set_font_safe('B', 14)
         self.set_text_color(*self.primary_color)
         company_name = cs.get('company_name', 'MALAYSIAN DEFENSIVE DRIVING AND RIDING CENTRE SDN BHD')
         self.cell(0, 6, sanitize_text_for_pdf(company_name), ln=True)
         
-        # Company info line 1: (Reg No) • Address
+        # Company info - 11px in invoice ≈ 8pt, color #444
         self.set_x(text_x)
-        self.set_font_safe('', 9)  # 11px ≈ 9pt
-        self.set_text_color(68, 68, 68)  # #444
+        self.set_font_safe('', 8)
+        self.set_text_color(68, 68, 68)
         
+        # Line 1: (Reg No) • Address Line 1, Address Line 2
         line1_parts = []
         if cs.get('company_reg_no'):
             line1_parts.append(f"({cs.get('company_reg_no')})")
+        addr_parts = []
         if cs.get('address_line1'):
-            line1_parts.append(cs.get('address_line1'))
+            addr_parts.append(cs.get('address_line1'))
         if cs.get('address_line2'):
-            line1_parts.append(cs.get('address_line2'))
-        
+            addr_parts.append(cs.get('address_line2'))
+        if addr_parts:
+            line1_parts.append(', '.join(addr_parts))
         if line1_parts:
             self.cell(0, 4, sanitize_text_for_pdf(' • '.join(line1_parts)), ln=True)
         
-        # Company info line 2: City Postcode, State • Tel: xxx • email
+        # Line 2: City Postcode, State • Tel: xxx • email
         self.set_x(text_x)
         line2_parts = []
-        
-        location = []
+        location_parts = []
         if cs.get('city'):
-            location.append(cs.get('city'))
+            location_parts.append(cs.get('city'))
         if cs.get('postcode'):
-            location.append(cs.get('postcode'))
+            location_parts.append(cs.get('postcode'))
+        location_str = ' '.join(location_parts)
         if cs.get('state'):
-            location.append(cs.get('state'))
-        if location:
-            line2_parts.append(' '.join(location[:2]) + (f", {location[2]}" if len(location) > 2 else ""))
-        
+            location_str += f", {cs.get('state')}"
+        if location_str:
+            line2_parts.append(location_str)
         if cs.get('phone'):
             line2_parts.append(f"Tel: {cs.get('phone')}")
         if cs.get('email'):
             line2_parts.append(cs.get('email'))
-        
         if line2_parts:
             self.cell(0, 4, sanitize_text_for_pdf(' • '.join(line2_parts)), ln=True)
         
-        # 3px solid border line at bottom (same as invoice)
-        self.ln(4)
+        # Border line at bottom of header - 3px solid in invoice ≈ 1mm
+        self.ln(3)
         line_y = self.get_y()
         self.set_draw_color(*self.primary_color)
-        self.set_line_width(1)  # ~3px
+        self.set_line_width(1)
         self.line(10, line_y, 200, line_y)
-        self.ln(8)
+        self.ln(6)
     
     def footer(self):
         """Invoice-style footer with bank details and tagline"""
