@@ -173,8 +173,8 @@ const PayablesTab = ({
 
   const handleExportPayablesExcel = async () => {
     try {
-      // Get the backend URL from environment
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || process.env.REACT_APP_BACKEND_URL || '';
+      // Get the backend URL from environment (React uses REACT_APP_ prefix)
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
       
       // Get auth token from localStorage
       const token = localStorage.getItem('token');
