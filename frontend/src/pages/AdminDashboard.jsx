@@ -2710,6 +2710,63 @@ const AdminDashboard = ({ user, onLogout }) => {
                   <p className="text-sm">{selectedQuotation.remarks}</p>
                 </div>
               )}
+              
+              {/* Inclusions & Exclusions */}
+              {selectedQuotation.selected_items && selectedQuotation.selected_items.length > 0 && (
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Inclusions */}
+                  {(() => {
+                    const incl = selectedQuotation.selected_items.filter(s => {
+                      const item = descriptionItems.find(d => d.id === s.item_id);
+                      return item && (item.category === 'inclusion' || item.category === 'inclusions');
+                    });
+                    if (incl.length === 0) return null;
+                    return (
+                      <div className="bg-green-50 p-3 rounded-lg">
+                        <h4 className="font-semibold text-green-800 mb-2">Inclusions</h4>
+                        <ul className="text-sm space-y-1">
+                          {incl.map((s, idx) => {
+                            const item = descriptionItems.find(d => d.id === s.item_id);
+                            return (
+                              <li key={idx} className="flex items-center gap-2">
+                                <span className="text-green-600">✓</span>
+                                {item?.name || 'Unknown'}
+                                {item?.has_quantity && s.quantity > 1 && <span className="text-gray-500">x {s.quantity}</span>}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    );
+                  })()}
+                  
+                  {/* Exclusions */}
+                  {(() => {
+                    const excl = selectedQuotation.selected_items.filter(s => {
+                      const item = descriptionItems.find(d => d.id === s.item_id);
+                      return item && (item.category === 'exclusion' || item.category === 'exclusions');
+                    });
+                    if (excl.length === 0) return null;
+                    return (
+                      <div className="bg-red-50 p-3 rounded-lg">
+                        <h4 className="font-semibold text-red-800 mb-2">Exclusions</h4>
+                        <ul className="text-sm space-y-1">
+                          {excl.map((s, idx) => {
+                            const item = descriptionItems.find(d => d.id === s.item_id);
+                            return (
+                              <li key={idx} className="flex items-center gap-2">
+                                <span className="text-red-600">✗</span>
+                                {item?.name || 'Unknown'}
+                                {item?.has_quantity && s.quantity > 1 && <span className="text-gray-500">x {s.quantity}</span>}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           )}
           <div className="flex justify-end gap-2 mt-4">
