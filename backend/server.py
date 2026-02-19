@@ -1178,6 +1178,11 @@ class PaymentCreate(BaseModel):
     payment_method: str
     reference_number: Optional[str] = None
     notes: Optional[str] = None
+    # Credit note fields
+    create_credit_note: Optional[bool] = False
+    deduction_percentage: Optional[float] = None
+    deduction_amount: Optional[float] = None
+    deduction_reason: Optional[str] = "HRDCorp Levy Deduction"
 
 # Company Settings for Invoice/Receipt customization
 class CompanySettings(BaseModel):
