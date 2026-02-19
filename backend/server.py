@@ -17789,15 +17789,40 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.cell_safe(col_amount, actual_height, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R')
     pdf.set_y(y_after_desc)
     
-    # Description items (inclusions) - each as separate row with full width
+    # Inclusions section - new format with quantities
+    if inclusion_items:
+        pdf.set_font_safe('B', 9)
+        pdf.set_fill_color(232, 245, 233)  # Light green
+        pdf.cell_safe(col_desc + col_qty + col_rate + col_amount, 6, "INCLUSIONS", border='LRB', fill=True, align='L', ln=True)
+        pdf.set_font_safe('', 8)
+        for item in inclusion_items:
+            item_text = item["name"]
+            if item.get("has_quantity") and item.get("quantity", 1) > 1:
+                item_text = f"{item['name']} x {item['quantity']}"
+            pdf.set_fill_color(250, 250, 250)
+            pdf.cell_safe(col_desc + col_qty + col_rate + col_amount, 5, f"  • {item_text}", border='LRB', fill=True, ln=True)
+    
+    # Exclusions section - new format
+    if exclusion_items:
+        pdf.set_font_safe('B', 9)
+        pdf.set_fill_color(255, 235, 238)  # Light red
+        pdf.cell_safe(col_desc + col_qty + col_rate + col_amount, 6, "EXCLUSIONS", border='LRB', fill=True, align='L', ln=True)
+        pdf.set_font_safe('', 8)
+        for item in exclusion_items:
+            item_text = item["name"]
+            if item.get("has_quantity") and item.get("quantity", 1) > 1:
+                item_text = f"{item['name']} x {item['quantity']}"
+            pdf.set_fill_color(250, 250, 250)
+            pdf.cell_safe(col_desc + col_qty + col_rate + col_amount, 5, f"  • {item_text}", border='LRB', fill=True, ln=True)
+    
+    # Legacy description items (old format) and custom description
     if description_items_text or quotation.get("custom_description"):
         all_desc = description_items_text + ([quotation.get("custom_description")] if quotation.get("custom_description") else [])
         for desc in all_desc:
             if desc:
                 pdf.set_font_safe('I', 8)
                 pdf.set_fill_color(250, 250, 250)
-                # Use full width for description items
-                pdf.multi_cell_safe(col_desc + col_qty + col_rate + col_amount, 5, f"  Includes: {desc}", border='LRB', fill=True)
+                pdf.multi_cell_safe(col_desc + col_qty + col_rate + col_amount, 5, f"  Note: {desc}", border='LRB', fill=True)
     
     pdf.set_font_safe('', 9)
     pdf.ln(2)
