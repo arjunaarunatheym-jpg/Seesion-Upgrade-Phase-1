@@ -712,8 +712,9 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
 
 
 @router.get("/payables/download-excel")
-async def download_payables_excel(year: int, month: int, current_user: User = Depends(get_current_user)):
-    """Download payables data for a given month/year as Excel file directly"""
+async def download_payables_excel(year: int, month: int, token: Optional[str] = None, current_user: User = Depends(get_current_user)):
+    """Download payables data for a given month/year as Excel file directly.
+    Accepts token as query param for direct URL downloads (window.open)"""
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
