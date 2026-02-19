@@ -12,6 +12,11 @@ import csv
 
 from core import db, get_current_user, get_malaysia_time
 from models import User
+from utils.email_notifications import (
+    notify_new_lead,
+    notify_lead_stage_change,
+    notify_quotation_for_approval
+)
 
 from pydantic import BaseModel, Field, ConfigDict
 
