@@ -22,6 +22,7 @@ import { ClientsTab } from '../components/marketing/ClientsTab';
 import { QuotationsTab } from '../components/marketing/QuotationsTab';
 import { LeadPipelineTab } from '../components/marketing/LeadPipelineTab';
 import { PipelineStatsCard } from '../components/marketing/PipelineStatsCard';
+import { printQuotation } from '../utils/printQuotation';
 
 const MarketingDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
