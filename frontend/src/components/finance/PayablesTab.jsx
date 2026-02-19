@@ -173,6 +173,8 @@ const PayablesTab = ({
 
   const handleExportPayablesExcel = async () => {
     try {
+      toast.info('Preparing Excel file...');
+      
       const response = await axiosInstance.get(`/finance/payables/export-excel?year=${payablesYear}&month=${payablesMonth}`);
       const data = response.data;
       
@@ -181,39 +183,39 @@ const PayablesTab = ({
         return;
       }
       
-      // Convert base64 to blob and download
+      // Convert base64 to blob
       const byteCharacters = atob(data.data);
       const byteNumbers = new Array(byteCharacters.length);
       for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
       }
       const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const blob = new Blob([byteArray], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
       
-      // Create download link and trigger download
       const filename = data.filename || `payables_${payablesYear}_${payablesMonth}.xlsx`;
-      const url = window.URL.createObjectURL(blob);
       
-      // Use a more reliable download method
-      const link = document.createElement('a');
-      link.style.display = 'none';
-      link.href = url;
-      link.download = filename;
+      // Create object URL and download
+      const blobUrl = window.URL.createObjectURL(blob);
       
-      // Append to body, click, and cleanup
-      document.body.appendChild(link);
+      // Create invisible anchor and trigger download
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = filename;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
       
-      // Use setTimeout to ensure the link is in DOM before clicking
+      // Trigger click
+      anchor.click();
+      
+      // Cleanup with delay to ensure download starts
       setTimeout(() => {
-        link.click();
-        // Cleanup after a delay to ensure download starts
-        setTimeout(() => {
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
-        }, 100);
-      }, 0);
+        document.body.removeChild(anchor);
+        window.URL.revokeObjectURL(blobUrl);
+      }, 250);
       
-      toast.success(`Exported payables for ${data.period_name}`);
+      toast.success(`Downloaded: ${filename}`);
     } catch (error) {
       console.error('Export error:', error);
       toast.error(error.response?.data?.detail || "Failed to export payables");
