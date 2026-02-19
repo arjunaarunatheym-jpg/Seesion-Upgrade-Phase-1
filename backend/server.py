@@ -17342,28 +17342,23 @@ class QuotationPDF(FPDF):
         return segments
     
     def header(self):
-        """Invoice-style header with logo - uniform across all pages"""
+        """Invoice-style header with logo - matching invoice PDF exactly"""
         cs = self.company_settings
         
         # Get dynamic layout settings - handle None values safely
-        logo_x = int(cs.get('logo_x') or 10)
-        logo_y = int(cs.get('logo_y') or 8)
-        logo_w = int(cs.get('logo_width') or 35)
-        logo_h_val = cs.get('logo_height')
-        logo_h = int(logo_h_val) if logo_h_val and int(logo_h_val) > 0 else 0  # 0 = auto-scale in fpdf
-        header_x = int(cs.get('header_x') or 50)
-        header_y = int(cs.get('header_y') or 8)
+        logo_x = 10
+        logo_y = 10
+        logo_w = 25  # ~100px equivalent in mm
         
         self.set_y(logo_y)
         
         # Logo on the left
         logo_url = cs.get('logo_url')
-        logo_x_end = logo_x
+        logo_loaded = False
         if logo_url:
             logo_path = None
             # Handle different URL formats
             if logo_url.startswith('/api/static/'):
-                # Convert /api/static/... to /app/backend/static/...
                 logo_path = ROOT_DIR / logo_url.replace('/api/static/', 'static/')
             elif logo_url.startswith('/static/'):
                 logo_path = ROOT_DIR / logo_url.lstrip('/')
@@ -17372,71 +17367,58 @@ class QuotationPDF(FPDF):
             
             if logo_path and logo_path.exists():
                 try:
-                    # Ensure all values are valid numbers and within page bounds
-                    x_pos = float(logo_x) if logo_x else 10.0
-                    y_pos = float(logo_y) if logo_y else 8.0
-                    w_val = float(logo_w) if logo_w else 35.0
-                    
-                    # Safeguard: logo width shouldn't exceed half the page width
-                    max_logo_width = 80  # Max 80mm for logo
-                    if w_val > max_logo_width:
-                        w_val = max_logo_width
-                    
-                    # Ensure logo fits on page
-                    if x_pos + w_val > 190:  # Leave some margin
-                        w_val = 190 - x_pos
-                    
-                    if logo_h and logo_h > 0:
-                        self.image(str(logo_path), x=x_pos, y=y_pos, w=w_val, h=float(logo_h))
-                    else:
-                        self.image(str(logo_path), x=x_pos, y=y_pos, w=w_val)
-                    logo_x_end = x_pos + w_val + 5
+                    self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w)
+                    logo_loaded = True
                 except Exception as e:
-                    import traceback, sys
-                    print(f"Logo load error: {e}", file=sys.stderr, flush=True)
-                    traceback.print_exc(file=sys.stderr)
+                    pass
         
-        # Company details - use header_x if set, otherwise after logo
-        text_x = max(header_x, logo_x_end)
-        self.set_xy(text_x, header_y)
+        # Company details on the right of logo (same style as invoice)
+        text_x = logo_x + logo_w + 5 if logo_loaded else logo_x
+        self.set_xy(text_x, logo_y)
+        
+        # Company name - bold, primary color
         self.set_font_safe('B', 14)
         self.set_text_color(*self.primary_color)
-        self.cell_safe(0, 5, cs.get('company_name', 'MALAYSIAN DEFENSIVE DRIVING AND RIDING CENTRE SDN BHD'), ln=True)
+        self.cell_safe(0, 6, cs.get('company_name', 'MALAYSIAN DEFENSIVE DRIVING AND RIDING CENTRE SDN BHD'), ln=True)
         
+        # Company info line 1: Registration number + Address
         self.set_x(text_x)
         self.set_font_safe('', 9)
         self.set_text_color(68, 68, 68)
         
-        # Company info on one line like invoice
-        info_parts = []
+        info_line1 = []
         if cs.get('company_reg_no'):
-            info_parts.append(f"({cs.get('company_reg_no')})")
+            info_line1.append(f"({cs.get('company_reg_no')})")
         if cs.get('address_line1'):
-            info_parts.append(cs.get('address_line1'))
-        if cs.get('address_line2'):
-            info_parts.append(cs.get('address_line2'))
-        if info_parts:
-            self.cell_safe(0, 4, ' • '.join(info_parts), ln=True)
+            info_line1.append(cs.get('address_line1'))
+        if info_line1:
+            self.cell_safe(0, 4, ' • '.join(info_line1), ln=True)
         
-        # City, postcode, state, contact
+        # Company info line 2: City, State + Contact
         self.set_x(text_x)
-        contact_parts = []
+        info_line2 = []
         location = ', '.join(filter(None, [cs.get('city'), cs.get('postcode'), cs.get('state')]))
         if location:
-            contact_parts.append(location)
+            info_line2.append(location)
         if cs.get('phone'):
-            contact_parts.append(f"Tel: {cs.get('phone')}")
+            info_line2.append(f"Tel: {cs.get('phone')}")
         if cs.get('email'):
-            contact_parts.append(cs.get('email'))
-        if contact_parts:
-            self.cell_safe(0, 4, ' • '.join(contact_parts), ln=True)
+            info_line2.append(cs.get('email'))
+        if info_line2:
+            self.cell_safe(0, 4, ' • '.join(info_line2), ln=True)
         
-        # Blue separator line (like invoice)
-        self.ln(2)
+        # TIN number if available
+        if cs.get('tin_number'):
+            self.set_x(text_x)
+            self.cell_safe(0, 4, f"TIN Number: {cs.get('tin_number')}", ln=True)
+        
+        # Draw separator line below header (same as invoice)
+        self.ln(3)
+        line_y = self.get_y()
         self.set_draw_color(*self.primary_color)
-        self.set_line_width(1)
-        self.line(10, self.get_y(), 200, self.get_y())
-        self.ln(5)
+        self.set_line_width(0.8)
+        self.line(10, line_y, 200, line_y)
+        self.ln(8)
     
     def footer(self):
         """Invoice-style footer with bank details and tagline"""
