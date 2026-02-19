@@ -993,6 +993,14 @@ async def create_lead(lead_data: LeadCreate, current_user: User = Depends(get_cu
     doc["stage_changed_at"] = doc["stage_changed_at"].isoformat()
     
     await db.leads.insert_one(doc)
+    
+    # Send email notification to admin
+    try:
+        await notify_new_lead(doc, current_user.full_name)
+    except Exception as e:
+        # Don't fail lead creation if email fails
+        pass
+    
     return lead
 
 
