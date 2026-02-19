@@ -1021,9 +1021,17 @@ async def update_lead(lead_id: str, lead_data: LeadUpdate, current_user: User = 
     update_data = {k: v for k, v in lead_data.model_dump().items() if v is not None}
     update_data["updated_at"] = get_malaysia_time().isoformat()
     
-    # Track stage changes
-    if "stage" in update_data and update_data["stage"] != lead.get("stage"):
+    # Track stage changes and notify admin for key stages
+    new_stage = update_data.get("stage")
+    old_stage = lead.get("stage")
+    if new_stage and new_stage != old_stage:
         update_data["stage_changed_at"] = get_malaysia_time().isoformat()
+        # Notify admin for key stage changes
+        if new_stage in ["contacted", "quotation_sent", "won"]:
+            try:
+                await notify_lead_stage_change(lead, new_stage, current_user.full_name)
+            except:
+                pass
     
     await db.leads.update_one({"id": lead_id}, {"$set": update_data})
     
