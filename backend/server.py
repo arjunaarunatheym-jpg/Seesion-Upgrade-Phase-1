@@ -16972,9 +16972,9 @@ async def get_description_items(current_user: User = Depends(get_current_user)):
     
     # Get items that are active or don't have is_active field
     query = {"$or": [{"is_active": True}, {"is_active": {"$exists": False}}]}
-    print(f"🔍 Description items query: {query}")
+    logging.warning(f"Description items query: {query}")
     items = await db.quotation_description_items.find(query, {"_id": 0}).to_list(100)
-    print(f"🔍 Found {len(items)} items in quotation_description_items")
+    logging.warning(f"Found {len(items)} items in quotation_description_items collection")
     items.sort(key=lambda x: (x.get("category", ""), x.get("sort_order", 0)))
     return items
 
