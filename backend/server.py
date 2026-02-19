@@ -17383,9 +17383,9 @@ class QuotationPDF(FPDF):
                         self.image(str(logo_path), x=x_pos, y=y_pos, w=w_val)
                     logo_x_end = x_pos + w_val + 5
                 except Exception as e:
-                    print(f"Logo load error: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    import traceback, sys
+                    print(f"Logo load error: {e}", file=sys.stderr)
+                    traceback.print_exc(file=sys.stderr)
         
         # Company details - use header_x if set, otherwise after logo
         text_x = max(header_x, logo_x_end)
