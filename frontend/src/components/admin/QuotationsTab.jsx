@@ -26,8 +26,17 @@ const QuotationsTab = ({
   onShowPdfTemplates,
   onUpdatePdfColor,
 }) => {
-  // Filter state
+  // Get current year and month for defaults
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+  
+  // Filter state for Quotations
   const [quotationFilter, setQuotationFilter] = useState("all");
+  const [quotationYear, setQuotationYear] = useState(currentYear.toString());
+  const [quotationMonth, setQuotationMonth] = useState("all");
+  
+  // Filter state for Clients
+  const [clientGroup, setClientGroup] = useState("all");
   
   // Description Item Dialog
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
@@ -38,17 +47,97 @@ const QuotationsTab = ({
     has_quantity: false
   });
 
-  // Filter quotations
+  // Get available years from quotations
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    quotations.forEach(q => {
+      if (q.created_at) {
+        const year = new Date(q.created_at).getFullYear();
+        years.add(year);
+      }
+    });
+    years.add(currentYear); // Always include current year
+    return Array.from(years).sort((a, b) => b - a);
+  }, [quotations, currentYear]);
+
+  // Month names for dropdown
+  const months = [
+    { value: "1", label: "January" },
+    { value: "2", label: "February" },
+    { value: "3", label: "March" },
+    { value: "4", label: "April" },
+    { value: "5", label: "May" },
+    { value: "6", label: "June" },
+    { value: "7", label: "July" },
+    { value: "8", label: "August" },
+    { value: "9", label: "September" },
+    { value: "10", label: "October" },
+    { value: "11", label: "November" },
+    { value: "12", label: "December" },
+  ];
+
+  // Filter quotations by status, year, and month
   const filteredQuotations = useMemo(() => {
-    if (quotationFilter === "all") return quotations;
-    return quotations.filter(q => q.status === quotationFilter);
-  }, [quotations, quotationFilter]);
+    let filtered = quotations;
+    
+    // Filter by status
+    if (quotationFilter !== "all") {
+      filtered = filtered.filter(q => q.status === quotationFilter);
+    }
+    
+    // Filter by year
+    if (quotationYear !== "all") {
+      filtered = filtered.filter(q => {
+        if (!q.created_at) return false;
+        return new Date(q.created_at).getFullYear().toString() === quotationYear;
+      });
+    }
+    
+    // Filter by month
+    if (quotationMonth !== "all") {
+      filtered = filtered.filter(q => {
+        if (!q.created_at) return false;
+        return (new Date(q.created_at).getMonth() + 1).toString() === quotationMonth;
+      });
+    }
+    
+    return filtered;
+  }, [quotations, quotationFilter, quotationYear, quotationMonth]);
 
   const pendingQuotations = quotations.filter(q => q.status === 'pending_approval');
   
   // Separate inclusions and exclusions - handle both singular and plural
   const inclusions = descriptionItems.filter(i => i.category === 'inclusion' || i.category === 'inclusions');
   const exclusions = descriptionItems.filter(i => i.category === 'exclusion' || i.category === 'exclusions');
+
+  // Alphabetical groups for clients
+  const clientGroups = [
+    { value: "A-D", letters: ["A", "B", "C", "D"] },
+    { value: "E-H", letters: ["E", "F", "G", "H"] },
+    { value: "I-L", letters: ["I", "J", "K", "L"] },
+    { value: "M-P", letters: ["M", "N", "O", "P"] },
+    { value: "Q-T", letters: ["Q", "R", "S", "T"] },
+    { value: "U-Z", letters: ["U", "V", "W", "X", "Y", "Z"] },
+  ];
+
+  // Filter and sort clients
+  const filteredClients = useMemo(() => {
+    let filtered = [...allClients].sort((a, b) => 
+      (a.company_name || "").localeCompare(b.company_name || "")
+    );
+    
+    if (clientGroup !== "all") {
+      const group = clientGroups.find(g => g.value === clientGroup);
+      if (group) {
+        filtered = filtered.filter(c => {
+          const firstLetter = (c.company_name || "")[0]?.toUpperCase();
+          return group.letters.includes(firstLetter);
+        });
+      }
+    }
+    
+    return filtered;
+  }, [allClients, clientGroup]);
 
   const getQuotationStatusBadge = (status) => {
     const statusConfig = {
