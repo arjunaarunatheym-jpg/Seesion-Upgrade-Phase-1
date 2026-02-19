@@ -173,48 +173,45 @@ const PayablesTab = ({
 
   const handleExportPayablesExcel = async () => {
     try {
-      // Get the backend URL from environment (React uses REACT_APP_ prefix)
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+      toast.info('Downloading Excel...');
       
-      // Get auth token from localStorage
-      const token = localStorage.getItem('token');
+      // Use axiosInstance with blob response - same as certificate download
+      const response = await axiosInstance.get(
+        `/finance/payables/export-excel?year=${payablesYear}&month=${payablesMonth}`,
+        { responseType: 'blob' }
+      );
       
-      if (!token) {
-        toast.error('Please login to download');
+      // Check if response is an error (JSON)
+      const contentType = response.headers['content-type'];
+      if (contentType && contentType.includes('application/json')) {
+        const text = await response.data.text();
+        const errorData = JSON.parse(text);
+        toast.error(errorData.detail || "No data to export");
         return;
       }
       
-      toast.info('Starting download...');
-      
-      // Create a hidden form to submit the download request
-      // This bypasses CORS and triggers native browser download
-      const downloadUrl = `${backendUrl}/api/finance/payables/download-excel?year=${payablesYear}&month=${payablesMonth}&token=${encodeURIComponent(token)}`;
-      
-      // Open in a new tab to trigger download
-      const newWindow = window.open(downloadUrl, '_blank');
-      
-      // If popup was blocked, try alternate method
-      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-        // Fallback: use hidden iframe
-        let iframe = document.getElementById('download-iframe');
-        if (!iframe) {
-          iframe = document.createElement('iframe');
-          iframe.id = 'download-iframe';
-          iframe.style.display = 'none';
-          document.body.appendChild(iframe);
-        }
-        iframe.src = downloadUrl;
-        toast.success('Download started - check your downloads folder');
-      } else {
-        toast.success('Download started in new tab');
-        // Close the window after a short delay (for download)
-        setTimeout(() => {
-          try { newWindow.close(); } catch(e) {}
-        }, 2000);
+      if (!response.data || response.data.size === 0) {
+        toast.error("No payables data for this period");
+        return;
       }
+      
+      // Create blob and download
+      const blob = new Blob([response.data], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `payables_${payablesYear}_${String(payablesMonth).padStart(2, '0')}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success("Excel downloaded!");
     } catch (error) {
       console.error('Export error:', error);
-      toast.error(error.message || "Failed to export payables");
+      toast.error("Failed to export. Please try again.");
     }
   };
 
