@@ -9780,7 +9780,10 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
                     "session_id": invoice.get("session_id"),
                     "session_name": invoice.get("session_name") or invoice.get("programme_name"),
                     "company_id": invoice.get("company_id"),
-                    "company_name": invoice.get("company_name"),
+                    # Use bill_to_name if available (for HRDCorp invoices), otherwise company_name
+                    "company_name": invoice.get("bill_to_name") or invoice.get("company_name"),
+                    "bill_to_name": invoice.get("bill_to_name"),
+                    "bill_to_address": invoice.get("bill_to_address"),
                     "reason": payment_data.deduction_reason or "HRDCorp Levy Deduction",
                     "description": f"{deduction_percentage:.1f}% deduction",
                     "base_amount": invoice.get("total_amount", 0),
