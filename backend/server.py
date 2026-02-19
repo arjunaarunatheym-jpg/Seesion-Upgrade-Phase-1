@@ -17506,11 +17506,12 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     # Get selected items with their details (new system)
     inclusion_items = []
     exclusion_items = []
-    selected_items = quotation.get("selected_items", [])
+    selected_items = quotation.get("selected_items") or []
     if selected_items:
         item_ids = [s.get("item_id") for s in selected_items if s.get("item_id")]
         if item_ids:
-            items_cursor = await db.quotation_description_items.find(
+            # Query from description_items collection (the active collection)
+            items_cursor = await db.description_items.find(
                 {"id": {"$in": item_ids}},
                 {"_id": 0}
             ).to_list(100)
@@ -17520,15 +17521,16 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
                 if item:
                     qty = sel.get("quantity", 1)
                     item_data = {"name": item.get("name", ""), "quantity": qty, "has_quantity": item.get("has_quantity", False)}
-                    if item.get("category") == "inclusion":
+                    category = item.get("category", "")
+                    if category in ["inclusion", "inclusions"]:
                         inclusion_items.append(item_data)
-                    else:
+                    elif category in ["exclusion", "exclusions"]:
                         exclusion_items.append(item_data)
     
     # Legacy: Get description items text (for old quotations)
     description_items_text = []
     if quotation.get("description_items") and not selected_items:
-        items = await db.quotation_description_items.find(
+        items = await db.description_items.find(
             {"id": {"$in": quotation.get("description_items")}},
             {"_id": 0}
         ).to_list(100)
