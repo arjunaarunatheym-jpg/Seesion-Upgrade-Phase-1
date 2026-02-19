@@ -173,52 +173,59 @@ const PayablesTab = ({
 
   const handleExportPayablesExcel = async () => {
     try {
-      toast.info('Preparing Excel file...');
+      // Get the backend URL from environment
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || process.env.REACT_APP_BACKEND_URL || '';
       
-      const response = await axiosInstance.get(`/finance/payables/export-excel?year=${payablesYear}&month=${payablesMonth}`);
-      const data = response.data;
+      // Get auth token from localStorage
+      const token = localStorage.getItem('token');
       
-      if (!data.data || data.data.length === 0) {
-        toast.error('No payables data to export for this period');
+      if (!token) {
+        toast.error('Please login to download');
         return;
       }
       
-      // Convert base64 to blob
-      const byteCharacters = atob(data.data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      toast.info('Preparing download...');
+      
+      // Use fetch with blob response to trigger proper download
+      const response = await fetch(`${backendUrl}/api/finance/payables/download-excel?year=${payablesYear}&month=${payablesMonth}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       
-      const filename = data.filename || `payables_${payablesYear}_${payablesMonth}.xlsx`;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Download failed');
+      }
       
-      // Create object URL and download
+      // Get the blob from response
+      const blob = await response.blob();
+      
+      // Extract filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `payables_${payablesYear}_${String(payablesMonth).padStart(2, '0')}.xlsx`;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1].replace(/"/g, '');
+        }
+      }
+      
+      // Create blob URL and trigger download
       const blobUrl = window.URL.createObjectURL(blob);
-      
-      // Create invisible anchor and trigger download
-      const anchor = document.createElement('a');
-      anchor.href = blobUrl;
-      anchor.download = filename;
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      
-      // Trigger click
-      anchor.click();
-      
-      // Cleanup with delay to ensure download starts
-      setTimeout(() => {
-        document.body.removeChild(anchor);
-        window.URL.revokeObjectURL(blobUrl);
-      }, 250);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
       
       toast.success(`Downloaded: ${filename}`);
     } catch (error) {
       console.error('Export error:', error);
-      toast.error(error.response?.data?.detail || "Failed to export payables");
+      toast.error(error.message || "Failed to export payables");
     }
   };
 
