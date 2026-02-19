@@ -17377,14 +17377,18 @@ class QuotationPDF(FPDF):
                     y_pos = float(logo_y) if logo_y else 8.0
                     w_val = float(logo_w) if logo_w else 35.0
                     
+                    # Debug: print current page state
+                    print(f"DEBUG: Loading logo at x={x_pos}, y={y_pos}, w={w_val}, page_w={self.w}, page_h={self.h}", flush=True)
+                    
                     if logo_h and logo_h > 0:
                         self.image(str(logo_path), x=x_pos, y=y_pos, w=w_val, h=float(logo_h))
                     else:
                         self.image(str(logo_path), x=x_pos, y=y_pos, w=w_val)
                     logo_x_end = x_pos + w_val + 5
+                    print(f"DEBUG: Logo loaded successfully", flush=True)
                 except Exception as e:
                     import traceback, sys
-                    print(f"Logo load error: {e}", file=sys.stderr)
+                    print(f"Logo load error: {e}", file=sys.stderr, flush=True)
                     traceback.print_exc(file=sys.stderr)
         
         # Company details - use header_x if set, otherwise after logo
