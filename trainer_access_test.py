@@ -13,7 +13,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://finance-correction.preview.emergentagent.com/api"
+BASE_URL = "https://collapsible-tables.preview.emergentagent.com/api"
 
 # Existing trainer credentials (corrected passwords)
 TRAINER_CREDENTIALS = [
