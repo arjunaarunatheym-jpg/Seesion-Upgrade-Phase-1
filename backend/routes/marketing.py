@@ -480,10 +480,21 @@ async def reject_quotation(quotation_id: str, reason: dict = None, current_user:
     if not quotation:
         raise HTTPException(status_code=404, detail="Quotation not found")
     
+    rejection_reason = reason.get("reason") if reason else None
+    
     await db.quotations.update_one(
         {"id": quotation_id},
-        {"$set": {"status": "draft", "rejection_reason": reason.get("reason") if reason else None}}
+        {"$set": {"status": "draft", "rejection_reason": rejection_reason}}
     )
+    
+    # Send email notification
+    try:
+        client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
+        client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
+        await notify_quotation_rejected(quotation, client_name, current_user.full_name, rejection_reason or "")
+    except:
+        pass
+    
     return {"message": "Quotation rejected, returned to draft"}
 
 
