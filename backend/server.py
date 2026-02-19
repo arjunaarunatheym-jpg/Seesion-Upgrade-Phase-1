@@ -17305,13 +17305,13 @@ class QuotationPDF(FPDF):
         """Invoice-style header with logo - uniform across all pages"""
         cs = self.company_settings
         
-        # Get dynamic layout settings
-        logo_x = int(cs.get('logo_x', 10))
-        logo_y = int(cs.get('logo_y', 8))
-        logo_w = int(cs.get('logo_width', 35))
-        logo_h = int(cs.get('logo_height', 0)) or None  # None = auto-scale
-        header_x = int(cs.get('header_x', 50))
-        header_y = int(cs.get('header_y', 8))
+        # Get dynamic layout settings - handle None values
+        logo_x = int(cs.get('logo_x') or 10)
+        logo_y = int(cs.get('logo_y') or 8)
+        logo_w = int(cs.get('logo_width') or 35)
+        logo_h = int(cs.get('logo_height') or 0) or None  # None = auto-scale
+        header_x = int(cs.get('header_x') or 50)
+        header_y = int(cs.get('header_y') or 8)
         
         self.set_y(logo_y)
         
@@ -17320,14 +17320,21 @@ class QuotationPDF(FPDF):
         logo_x_end = logo_x
         if logo_url:
             logo_path = None
-            if logo_url.startswith('/'):
+            # Handle different URL formats
+            if logo_url.startswith('/api/static/'):
+                # Convert /api/static/... to /app/backend/static/...
+                logo_path = ROOT_DIR / logo_url.replace('/api/static/', 'static/')
+            elif logo_url.startswith('/static/'):
                 logo_path = ROOT_DIR / logo_url.lstrip('/')
+            elif logo_url.startswith('/'):
+                logo_path = ROOT_DIR / logo_url.lstrip('/')
+            
             if logo_path and logo_path.exists():
                 try:
                     self.image(str(logo_path), x=logo_x, y=logo_y, w=logo_w, h=logo_h)
                     logo_x_end = logo_x + logo_w + 5
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Logo load error: {e}")
         
         # Company details - use header_x if set, otherwise after logo
         text_x = max(header_x, logo_x_end)
