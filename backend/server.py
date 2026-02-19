@@ -16970,7 +16970,11 @@ async def get_description_items(current_user: User = Depends(get_current_user)):
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     
-    items = await db.quotation_description_items.find({"is_active": True}, {"_id": 0}).to_list(100)
+    # Get items that are active or don't have is_active field
+    items = await db.quotation_description_items.find(
+        {"$or": [{"is_active": True}, {"is_active": {"$exists": False}}]}, 
+        {"_id": 0}
+    ).to_list(100)
     items.sort(key=lambda x: (x.get("category", ""), x.get("sort_order", 0)))
     return items
 
