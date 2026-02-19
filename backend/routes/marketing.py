@@ -699,6 +699,21 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
     
     await db.quotations.update_one({"id": quotation_id}, {"$set": update_data})
     
+    # Send email notification for discount approval
+    try:
+        client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
+        client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
+        updated_quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
+        await notify_discount_request(
+            updated_quotation, 
+            client_name, 
+            current_user.full_name, 
+            discount_amount,
+            discount_data.get("reason", "")
+        )
+    except:
+        pass
+    
     updated_quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
     return {
         "message": f"Discount applied - Pending admin approval (Revision {new_revision})",
