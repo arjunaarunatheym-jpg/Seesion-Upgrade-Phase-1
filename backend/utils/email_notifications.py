@@ -343,3 +343,113 @@ async def notify_lead_lost(lead_data: dict, marketer_name: str, lost_reason: str
     
     html = get_email_template("Lead Lost", content)
     await send_admin_notification(f"[MDDRC] Lost: {lead_data.get('company_name', 'Unknown')}", html)
+
+
+async def notify_quotation_accepted(quotation_data: dict, client_name: str, marketer_name: str):
+    """Notify admin when a quotation is accepted by client (deal won)"""
+    content = f'''
+    <p style="color: #16a34a; font-size: 18px; font-weight: bold;">🎉 Quotation Accepted - Deal Won!</p>
+    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+        <tr style="background-color: #dcfce7;">
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Quotation No.</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{quotation_data.get("quotation_number", "N/A")}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Client</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{client_name}</td>
+        </tr>
+        <tr style="background-color: #dcfce7;">
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Programme</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{quotation_data.get("programme_name", "N/A")}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Participants</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{quotation_data.get("num_participants", 0)} pax</td>
+        </tr>
+        <tr style="background-color: #dcfce7;">
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Deal Value</td>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; color: #16a34a; font-size: 16px;">RM {quotation_data.get("total_amount", 0):,.2f}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Marked By</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{marketer_name}</td>
+        </tr>
+    </table>
+    <p style="color: #16a34a; font-weight: bold;">A draft session has been auto-created. Please review in Sessions tab.</p>
+    '''
+    
+    html = get_email_template("Quotation Accepted! 🎉", content)
+    await send_admin_notification(f"[MDDRC] 🎉 ACCEPTED: {quotation_data.get('quotation_number', 'Quotation')} - {client_name} - RM {quotation_data.get('total_amount', 0):,.2f}", html)
+
+
+async def notify_quotation_declined(quotation_data: dict, client_name: str, marketer_name: str, notes: str = ""):
+    """Notify admin when a quotation is declined by client"""
+    content = f'''
+    <p style="color: #dc2626; font-size: 18px; font-weight: bold;">Quotation Declined by Client</p>
+    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+        <tr style="background-color: #fef2f2;">
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Quotation No.</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{quotation_data.get("quotation_number", "N/A")}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Client</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{client_name}</td>
+        </tr>
+        <tr style="background-color: #fef2f2;">
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Programme</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{quotation_data.get("programme_name", "N/A")}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Amount</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">RM {quotation_data.get("total_amount", 0):,.2f}</td>
+        </tr>
+        <tr style="background-color: #fef2f2;">
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Decline Reason</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{notes or "Not specified"}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Updated By</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{marketer_name}</td>
+        </tr>
+    </table>
+    '''
+    
+    html = get_email_template("Quotation Declined", content)
+    await send_admin_notification(f"[MDDRC] Declined: {quotation_data.get('quotation_number', 'Quotation')} - {client_name}", html)
+
+
+async def notify_quotation_rejected(quotation_data: dict, client_name: str, admin_name: str, reason: str = ""):
+    """Notify when admin rejects a quotation (internal rejection, not client decline)"""
+    content = f'''
+    <p style="color: #f59e0b; font-size: 18px; font-weight: bold;">Quotation Rejected by Admin</p>
+    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+        <tr style="background-color: #fef3cd;">
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Quotation No.</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{quotation_data.get("quotation_number", "N/A")}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Client</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{client_name}</td>
+        </tr>
+        <tr style="background-color: #fef3cd;">
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Programme</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{quotation_data.get("programme_name", "N/A")}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Amount</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">RM {quotation_data.get("total_amount", 0):,.2f}</td>
+        </tr>
+        <tr style="background-color: #fef3cd;">
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold; color: #dc2626;">Rejection Reason</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{reason or "Not specified"}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">Rejected By</td>
+            <td style="padding: 10px; border: 1px solid #ddd;">{admin_name}</td>
+        </tr>
+    </table>
+    <p>The marketer will need to revise and resubmit this quotation.</p>
+    '''
+    
+    html = get_email_template("Quotation Rejected", content)
+    await send_admin_notification(f"[MDDRC] Rejected: {quotation_data.get('quotation_number', 'Quotation')} - {client_name}", html)
