@@ -10935,21 +10935,26 @@ async def get_session_costing(session_id: str, current_user: User = Depends(get_
     
     # Check if we have valid trainer fees (with trainer_ids matching session trainers)
     session_trainer_ids = [ta.get("trainer_id") for ta in session.get("trainer_assignments", [])]
-    valid_fees = [f for f in trainer_fees if f.get("trainer_id") in session_trainer_ids]
+    existing_fee_trainer_ids = [f.get("trainer_id") for f in trainer_fees]
     
-    # If no valid fees, populate from session trainer_assignments
-    if not valid_fees and session.get("trainer_assignments"):
-        trainer_fees = []  # Clear any corrupt fees
-        for ta in session.get("trainer_assignments", []):
+    # Find trainers that are in session assignments but don't have fees yet
+    new_trainer_ids = [tid for tid in session_trainer_ids if tid not in existing_fee_trainer_ids]
+    
+    # Add new trainers to trainer_fees
+    for ta in session.get("trainer_assignments", []):
+        if ta.get("trainer_id") in new_trainer_ids:
             trainer = await db.users.find_one({"id": ta.get("trainer_id")}, {"_id": 0, "full_name": 1})
             trainer_fees.append({
                 "trainer_id": ta.get("trainer_id"),
                 "trainer_name": trainer.get("full_name") if trainer else "Unknown Trainer",
-                "role": ta.get("role", "trainer"),
+                "role": ta.get("role", "regular"),
                 "fee_amount": 0,
                 "remark": "",
                 "status": "pending"
             })
+    
+    # Filter out trainers that are no longer in session assignments
+    trainer_fees = [f for f in trainer_fees if f.get("trainer_id") in session_trainer_ids]
     
     trainer_fees_total = sum(f.get("fee_amount", 0) for f in trainer_fees)
     
