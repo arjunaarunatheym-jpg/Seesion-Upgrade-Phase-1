@@ -123,24 +123,40 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
         })));
       }
       
-      // Initialize trainer fees
-      if (costingData.trainer_fees?.length > 0) {
-        setTrainerFees(costingData.trainer_fees.map(f => ({
-          trainer_id: f.trainer_id,
-          trainer_name: f.trainer_name || 'Unknown Trainer',
-          role: f.role || 'trainer',
-          fee_amount: f.fee_amount?.toString() || '',
-          remark: f.remark || ''
-        })));
-      } else if (session.trainer_assignments?.length > 0) {
-        setTrainerFees(session.trainer_assignments.map(ta => ({
-          trainer_id: ta.trainer_id,
-          trainer_name: ta.trainer_name || 'Unknown Trainer',
-          role: ta.role,
-          fee_amount: '',
-          remark: ''
-        })));
-      }
+      // Initialize trainer fees - MERGE existing fees with new trainer assignments
+      const existingFees = costingData.trainer_fees || [];
+      const sessionAssignments = session.trainer_assignments || [];
+      
+      // Create a map of existing fees by trainer_id
+      const existingFeesMap = {};
+      existingFees.forEach(f => {
+        existingFeesMap[f.trainer_id] = f;
+      });
+      
+      // Merge: keep existing fees and add new trainers from session assignments
+      const mergedFees = sessionAssignments.map(ta => {
+        const existing = existingFeesMap[ta.trainer_id];
+        if (existing) {
+          return {
+            trainer_id: ta.trainer_id,
+            trainer_name: existing.trainer_name || ta.trainer_name || 'Unknown Trainer',
+            role: ta.role || existing.role || 'regular',
+            fee_amount: existing.fee_amount?.toString() || '',
+            remark: existing.remark || ''
+          };
+        } else {
+          // New trainer - add with empty fee
+          return {
+            trainer_id: ta.trainer_id,
+            trainer_name: ta.trainer_name || 'Unknown Trainer',
+            role: ta.role || 'regular',
+            fee_amount: '',
+            remark: ''
+          };
+        }
+      });
+      
+      setTrainerFees(mergedFees);
       
       // Initialize coordinator fee
       if (costingData.coordinator_fee) {
