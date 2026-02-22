@@ -58,6 +58,12 @@ const SuperAdminPortal = () => {
   
   // Settings
   const [systemSettings, setSystemSettings] = useState(null);
+  
+  // Edit Dialogs
+  const [editUserDialog, setEditUserDialog] = useState({ open: false, user: null });
+  const [editSessionDialog, setEditSessionDialog] = useState({ open: false, session: null });
+  const [editInvoiceDialog, setEditInvoiceDialog] = useState({ open: false, invoice: null });
+  const [editJournalDialog, setEditJournalDialog] = useState({ open: false, entry: null });
 
   useEffect(() => {
     loadDashboard();
