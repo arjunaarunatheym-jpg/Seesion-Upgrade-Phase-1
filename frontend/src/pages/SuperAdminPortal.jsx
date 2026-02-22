@@ -530,12 +530,12 @@ const SuperAdminPortal = () => {
               <div className="flex items-center justify-between">
                 <CardTitle>Session Management</CardTitle>
                 <div className="flex gap-2">
-                  <Select value={sessionFilter.status} onValueChange={(v) => setSessionFilter(prev => ({ ...prev, status: v }))}>
+                  <Select value={sessionFilter.status || "all"} onValueChange={(v) => setSessionFilter(prev => ({ ...prev, status: v === "all" ? "" : v }))}>
                     <SelectTrigger className="w-40">
                       <SelectValue placeholder="All Status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Status</SelectItem>
+                      <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="ongoing">Ongoing</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
                       <SelectItem value="archived">Archived</SelectItem>
