@@ -10866,13 +10866,22 @@ async def get_pending_coordinator_fees(current_user: User = Depends(get_current_
 
 @api_router.get("/finance/payables/marketing-commissions")
 async def get_pending_marketing_commissions(current_user: User = Depends(get_current_user)):
-    """Get all marketing commissions - use values from session costing directly"""
+    """Get all marketing commissions - use values from session costing directly
+    
+    REVENUE RECOGNITION (Improvement 2 - Accrual Basis):
+    - Commission is only calculated when:
+      * session.completion_status = "completed" (or missing for backward compat)
+      * invoice.status IN ["issued", "partial", "paid"]
+    """
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Get valid session IDs
-    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1}).to_list(1000)
-    session_map = {s["id"]: {"name": s["name"], "start_date": s.get("start_date")} for s in sessions}
+    # ELIGIBLE invoice statuses for revenue recognition
+    REVENUE_INVOICE_STATUSES = ["issued", "partial", "paid"]
+    
+    # Get valid session IDs with completion status
+    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1, "completion_status": 1}).to_list(1000)
+    session_map = {s["id"]: {"name": s["name"], "start_date": s.get("start_date"), "completion_status": s.get("completion_status", "completed")} for s in sessions}
     
     comms = await db.marketing_commissions.find({}, {"_id": 0}).to_list(1000)
     
@@ -10883,31 +10892,47 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
             await db.marketing_commissions.delete_one({"id": comm.get("id")})
             continue
         
-        # Get ALL invoices for this session (not just one)
-        invoices = await db.invoices.find({"session_id": session_id}, {"_id": 0, "total_amount": 1, "tax_amount": 1}).to_list(100)
-        invoice_total = sum(inv.get("total_amount", 0) for inv in invoices)
-        tax_amount = sum(inv.get("tax_amount", 0) for inv in invoices)
-        gross_revenue = invoice_total - tax_amount
+        # REVENUE RECOGNITION: Check session completion status
+        session_info = session_map.get(session_id, {})
+        completion_status = session_info.get("completion_status", "completed")  # Backward compat
         
-        # Get expenses
-        trainer_fees = await db.trainer_fees.find({"session_id": session_id}, {"_id": 0, "fee_amount": 1}).to_list(100)
-        trainer_fees_total = sum(f.get("fee_amount", 0) for f in trainer_fees)
+        # Get ALL invoices for this session (not just one) - with status filter
+        invoices = await db.invoices.find(
+            {"session_id": session_id, "status": {"$in": REVENUE_INVOICE_STATUSES}}, 
+            {"_id": 0, "total_amount": 1, "tax_amount": 1, "status": 1}
+        ).to_list(100)
         
-        coord_fee = await db.coordinator_fees.find_one({"session_id": session_id}, {"_id": 0, "total_fee": 1})
-        coordinator_fee_total = coord_fee.get("total_fee", 0) if coord_fee else 0
-        
-        expenses = await db.session_expenses.find({"session_id": session_id}, {"_id": 0, "actual_amount": 1, "estimated_amount": 1}).to_list(100)
-        # ACTUALS ONLY (Improvement 2): Only use actual_amount for commission calculation
-        cash_expenses_actual = sum(e.get("actual_amount", 0) for e in expenses)
-        cash_expenses = cash_expenses_actual  # Never fall back to estimated
-        
-        # Calculate profit before marketing
-        total_expenses_before_marketing = trainer_fees_total + coordinator_fee_total + cash_expenses
-        profit_before_marketing = gross_revenue - total_expenses_before_marketing
-        
-        # Calculate marketing commission
-        if comm.get("commission_type") == "percentage":
-            calculated_amount = profit_before_marketing * (comm.get("commission_rate", 0) / 100)
+        # Only calculate revenue if session is completed and has eligible invoices
+        if completion_status != "completed" or not invoices:
+            # Session not completed or no eligible invoices - commission is 0
+            calculated_amount = 0.0
+            gross_revenue = 0.0
+        else:
+            invoice_total = sum(inv.get("total_amount", 0) for inv in invoices)
+            tax_amount = sum(inv.get("tax_amount", 0) for inv in invoices)
+            gross_revenue = invoice_total - tax_amount
+            
+            # Get expenses
+            trainer_fees = await db.trainer_fees.find({"session_id": session_id}, {"_id": 0, "fee_amount": 1}).to_list(100)
+            trainer_fees_total = sum(f.get("fee_amount", 0) for f in trainer_fees)
+            
+            coord_fee = await db.coordinator_fees.find_one({"session_id": session_id}, {"_id": 0, "total_fee": 1})
+            coordinator_fee_total = coord_fee.get("total_fee", 0) if coord_fee else 0
+            
+            expenses = await db.session_expenses.find({"session_id": session_id}, {"_id": 0, "actual_amount": 1}).to_list(100)
+            # ACTUALS ONLY (Improvement 2): Only use actual_amount for commission calculation
+            cash_expenses_actual = sum(e.get("actual_amount", 0) for e in expenses)
+            cash_expenses = cash_expenses_actual  # Never fall back to estimated
+            
+            # Calculate profit before marketing
+            total_expenses_before_marketing = trainer_fees_total + coordinator_fee_total + cash_expenses
+            profit_before_marketing = gross_revenue - total_expenses_before_marketing
+            
+            # Calculate marketing commission
+            if comm.get("commission_type") == "percentage":
+                calculated_amount = profit_before_marketing * (comm.get("commission_rate", 0) / 100)
+            else:
+                calculated_amount = comm.get("fixed_amount") or 0.0
         else:
             calculated_amount = comm.get("fixed_amount") or 0.0
         
