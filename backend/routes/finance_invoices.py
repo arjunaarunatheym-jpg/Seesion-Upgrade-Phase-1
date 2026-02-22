@@ -372,6 +372,24 @@ async def issue_invoice(invoice_id: str, current_user: User = Depends(get_curren
     await log_finance_action("invoice", invoice_id, "status_changed", current_user.id,
                             {"status": invoice.get("status")}, {"status": "issued"})
     
+    # ============ ACCOUNTING AUTO-POST (Phase 2) ============
+    # Create journal entry for issued invoice
+    try:
+        updated_invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+        accounting_result = await post_invoice_issued(
+            invoice=updated_invoice,
+            session=session,
+            user_id=current_user.id,
+            user_name=current_user.full_name
+        )
+        if accounting_result.get("error"):
+            # Log error but don't fail the invoice issuance
+            print(f"Accounting auto-post warning: {accounting_result.get('error')}")
+    except Exception as e:
+        # Log but don't fail - accounting is supplementary
+        print(f"Accounting auto-post error: {str(e)}")
+    # ============ END ACCOUNTING AUTO-POST ============
+    
     return {"message": "Invoice issued successfully"}
 
 
