@@ -25,6 +25,7 @@ import { CreditNotesTab } from '../components/finance/CreditNotesTab';
 import { PayablesTab } from '../components/finance/PayablesTab';
 import { AuditLogTab } from '../components/finance/AuditLogTab';
 import { SettingsTab } from '../components/finance/SettingsTab';
+import AccountingTab from '../components/finance/AccountingTab';
 
 const FinanceDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
