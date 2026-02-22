@@ -3767,6 +3767,22 @@ async def mark_session_completed(session_id: str, current_user: User = Depends(g
         }
     )
     
+    # ============ ACCOUNTING AUTO-POST (Phase 2) ============
+    # Recognize deferred revenue when session is completed
+    try:
+        accounting_results = await post_session_completed_revenue(
+            session_id=session_id,
+            user_id=current_user.id,
+            user_name=current_user.full_name
+        )
+        if accounting_results:
+            for result in accounting_results:
+                if result.get("error"):
+                    print(f"Revenue recognition warning: {result.get('error')}")
+    except Exception as e:
+        print(f"Revenue recognition error: {str(e)}")
+    # ============ END ACCOUNTING AUTO-POST ============
+    
     return {
         "message": "Session marked as completed successfully. Report is now available to supervisors.",
         "session_archived": True,
