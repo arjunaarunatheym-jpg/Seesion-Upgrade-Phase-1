@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { 
   Plus, Search, Phone, Mail, Building, Calendar, DollarSign, 
   ChevronRight, Edit, Trash2, UserPlus, AlertCircle, Clock, FileText,
-  Eye, Download, Percent, CheckCircle, XCircle, Send
+  Eye, Download, Percent, CheckCircle, XCircle, Send, Archive, RotateCcw
 } from "lucide-react";
 import { toast } from "sonner";
 import { axiosInstance } from "../../App";
