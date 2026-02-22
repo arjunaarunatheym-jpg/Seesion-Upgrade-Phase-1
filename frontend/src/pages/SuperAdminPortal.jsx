@@ -741,11 +741,16 @@ const SuperAdminPortal = () => {
                       </TableCell>
                       <TableCell>{formatDate(invoice.created_at)}</TableCell>
                       <TableCell>
-                        {invoice.status !== 'voided' && (
-                          <Button variant="ghost" size="sm" onClick={() => handleVoidInvoice(invoice.id)}>
-                            <XCircle className="w-4 h-4 text-red-500" />
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => setEditInvoiceDialog({ open: true, invoice: {...invoice} })} title="Edit Invoice">
+                            <Edit className="w-4 h-4" />
                           </Button>
-                        )}
+                          {invoice.status !== 'voided' && (
+                            <Button variant="ghost" size="sm" onClick={() => handleVoidInvoice(invoice.id)} title="Void Invoice">
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
