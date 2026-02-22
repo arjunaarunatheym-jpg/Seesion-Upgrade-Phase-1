@@ -56,6 +56,7 @@ const LeadPipelineTab = ({
   const [showDialog, setShowDialog] = useState(false);
   const [showArchivedDialog, setShowArchivedDialog] = useState(false);
   const [archivedLeads, setArchivedLeads] = useState([]);
+  const [archiveConfirmDialog, setArchiveConfirmDialog] = useState({ open: false, leadId: null, leadName: '' });
   const [editingLead, setEditingLead] = useState(null);
   const [viewMode, setViewMode] = useState("pipeline"); // pipeline or list
   const [form, setForm] = useState({
