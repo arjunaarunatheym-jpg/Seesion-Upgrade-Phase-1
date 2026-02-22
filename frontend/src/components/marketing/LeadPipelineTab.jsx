@@ -860,6 +860,35 @@ const LeadPipelineTab = ({
         </DialogContent>
       </Dialog>
 
+      {/* Archive Confirmation Dialog */}
+      <Dialog open={archiveConfirmDialog.open} onOpenChange={(open) => !open && setArchiveConfirmDialog({ open: false, leadId: null, leadName: '' })}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <Archive className="w-5 h-5" />
+              Archive Lead?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-gray-700">
+              Are you sure you want to archive <strong>{archiveConfirmDialog.leadName}</strong>?
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              This lead will be hidden from your view. Admin can restore it later if needed.
+            </p>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setArchiveConfirmDialog({ open: false, leadId: null, leadName: '' })}>
+              Cancel
+            </Button>
+            <Button onClick={confirmArchive} className="bg-orange-600 hover:bg-orange-700 text-white">
+              <Archive className="w-4 h-4 mr-1" />
+              Archive
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Archived Leads Dialog (Admin Only) */}
       <Dialog open={showArchivedDialog} onOpenChange={setShowArchivedDialog}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
