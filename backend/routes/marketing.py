@@ -26,6 +26,41 @@ from utils.email_notifications import (
 )
 
 from pydantic import BaseModel, Field, ConfigDict
+from pymongo import ReturnDocument
+
+
+# ============ ATOMIC QUOTATION NUMBER GENERATOR (Improvement 2) ============
+async def get_next_quotation_number():
+    """
+    Generate atomic, guaranteed-unique quotation number in format: QUO/MDDRC/YYYY/MM/XXXXX
+    
+    Uses MongoDB's atomic find_one_and_update to prevent race conditions.
+    Counter resets monthly (each month gets its own counter).
+    
+    Returns: str - The full quotation number (e.g., "QUO/MDDRC/2026/02/00001")
+    """
+    now = get_malaysia_time()
+    year = now.year
+    month = now.month
+    
+    # Counter key is month-specific: "QUO/MDDRC/2026/02"
+    counter_key = f"QUO/MDDRC/{year}/{str(month).zfill(2)}"
+    
+    # Atomic increment - returns the AFTER value
+    result = await db.counters.find_one_and_update(
+        {"_id": counter_key},
+        {"$inc": {"seq": 1}},
+        return_document=ReturnDocument.AFTER,
+        upsert=True
+    )
+    
+    sequence = result["seq"]
+    
+    # Format: QUO/MDDRC/YYYY/MM/XXXXX
+    quotation_number = f"{counter_key}/{str(sequence).zfill(5)}"
+    
+    return quotation_number
+# ============ END ATOMIC COUNTER ============
 
 # Marketing Models
 class MarketingClient(BaseModel):
