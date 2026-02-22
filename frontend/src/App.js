@@ -295,6 +295,16 @@ function App() {
               )
             }
           />
+          <Route
+            path="/superadmin"
+            element={
+              user && (user.role === "super_admin" || user.email === "arjuna@mddrc.com.my") ? (
+                <SuperAdminPortal />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
           </Routes>
         </BrowserRouter>
         <Toaster position="top-right" />
