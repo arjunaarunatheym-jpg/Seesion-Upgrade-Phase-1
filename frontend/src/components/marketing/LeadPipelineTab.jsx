@@ -140,13 +140,21 @@ const LeadPipelineTab = ({
   };
 
   const handleDelete = async (leadId) => {
-    if (!confirm("Archive this lead? (It will be hidden from your view but Admin can restore it)")) return;
+    // Find the lead name for the confirmation dialog
+    const lead = leads.find(l => l.id === leadId);
+    setArchiveConfirmDialog({ open: true, leadId, leadName: lead?.company_name || 'this lead' });
+  };
+
+  const confirmArchive = async () => {
+    const { leadId } = archiveConfirmDialog;
     try {
       await axiosInstance.delete(`/marketing/leads/${leadId}`);
       toast.success("Lead archived");
+      setArchiveConfirmDialog({ open: false, leadId: null, leadName: '' });
       onRefresh();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to archive lead");
+      setArchiveConfirmDialog({ open: false, leadId: null, leadName: '' });
     }
   };
 
