@@ -277,7 +277,8 @@ const LeadPipelineTab = ({
       lead.contact_person?.toLowerCase().includes(search.toLowerCase()) ||
       lead.contact_email?.toLowerCase().includes(search.toLowerCase());
     const matchesStage = stageFilter === "all" || lead.stage === stageFilter;
-    return matchesSearch && matchesStage;
+    const matchesSource = sourceFilter === "all" || lead.source === sourceFilter;
+    return matchesSearch && matchesStage && matchesSource;
   });
 
   // Group leads by stage for pipeline view
