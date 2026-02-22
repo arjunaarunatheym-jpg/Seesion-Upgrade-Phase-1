@@ -658,24 +658,29 @@ const SuperAdminPortal = () => {
                       </TableCell>
                       <TableCell>{session.invoice_number || '-'}</TableCell>
                       <TableCell>
-                        <Select 
-                          value="select_action" 
-                          onValueChange={(value) => {
-                            if (value !== "select_action") {
-                              handleFixSessionStatus(session.id, value);
-                            }
-                          }}
-                        >
-                          <SelectTrigger className="w-32">
-                            <SelectValue placeholder="Fix Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="select_action">Fix Status</SelectItem>
-                            <SelectItem value="ongoing">Set Ongoing</SelectItem>
-                            <SelectItem value="completed">Set Completed</SelectItem>
-                            <SelectItem value="archived">Set Archived</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => setEditSessionDialog({ open: true, session: {...session} })} title="Edit Session">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Select 
+                            value="select_action" 
+                            onValueChange={(value) => {
+                              if (value !== "select_action") {
+                                handleFixSessionStatus(session.id, value);
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="w-28">
+                              <SelectValue placeholder="Status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="select_action">Fix Status</SelectItem>
+                              <SelectItem value="ongoing">Set Ongoing</SelectItem>
+                              <SelectItem value="completed">Set Completed</SelectItem>
+                              <SelectItem value="archived">Set Archived</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
