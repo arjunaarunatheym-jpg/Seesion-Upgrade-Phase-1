@@ -43,6 +43,12 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - `/api/marketing/stats/pipeline` - Pipeline statistics
 - `/api/marketing/stats/by-source` - Stats grouped by lead source
 - `/api/marketing/stats/by-user` - Stats by marketing user (Admin only)
+- `/api/superadmin/dashboard` - Super Admin dashboard stats
+- `/api/superadmin/users` - User management (list, update, role change)
+- `/api/superadmin/sessions` - Session management with status fixes
+- `/api/superadmin/invoices` - Invoice management with void capability
+- `/api/superadmin/audit-log` - View all super admin actions
+- `/api/superadmin/export/{collection}` - CSV export for any collection
 
 ## Current Status (Feb 2026)
 
