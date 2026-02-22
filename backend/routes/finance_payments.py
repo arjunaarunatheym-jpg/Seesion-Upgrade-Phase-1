@@ -166,6 +166,21 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     
     await log_finance_action("payment", payment["id"], "created", current_user.id, after_value=payment)
     
+    # ============ ACCOUNTING AUTO-POST (Phase 2) ============
+    # Create journal entry for payment received
+    try:
+        accounting_result = await post_payment_received(
+            payment=payment,
+            invoice=invoice,
+            user_id=current_user.id,
+            user_name=current_user.full_name
+        )
+        if accounting_result.get("error"):
+            print(f"Accounting auto-post warning: {accounting_result.get('error')}")
+    except Exception as e:
+        print(f"Accounting auto-post error: {str(e)}")
+    # ============ END ACCOUNTING AUTO-POST ============
+    
     return payment
 
 
