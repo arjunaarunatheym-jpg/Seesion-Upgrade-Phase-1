@@ -669,6 +669,11 @@ const AccountingTab = () => {
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4 mr-1" />}
                     Generate
                   </Button>
+                  {trialBalance && (
+                    <Button variant="outline" onClick={exportTrialBalanceToExcel} disabled={loading}>
+                      <Download className="w-4 h-4 mr-1" /> Excel
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>
