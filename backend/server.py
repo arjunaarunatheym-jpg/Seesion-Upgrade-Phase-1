@@ -313,6 +313,15 @@ from routes import (
     accounting_router,
 )
 
+# Import accounting auto-posting functions (Phase 2)
+from routes.accounting import (
+    post_session_completed_revenue,
+    post_trainer_fee,
+    post_coordinator_fee,
+    post_marketing_commission,
+    post_expense_recorded,
+)
+
 # Include all modular routers
 api_router.include_router(settings_router)
 api_router.include_router(programs_router)
