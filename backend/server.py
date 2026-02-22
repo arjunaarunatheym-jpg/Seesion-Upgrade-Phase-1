@@ -311,6 +311,7 @@ from routes import (
     finance_reports_router,
     finance_payables_router,
     accounting_router,
+    superadmin_portal_router,
 )
 
 # Import accounting auto-posting functions (Phase 2)
