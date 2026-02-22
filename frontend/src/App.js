@@ -13,6 +13,7 @@ import TrainerChecklist from "./pages/TrainerChecklist";
 import CoordinatorDashboard from "./pages/CoordinatorDashboard";
 import CalendarDashboard from "./pages/CalendarDashboard";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+import SuperAdminPortal from "./pages/SuperAdminPortal";
 import FinanceDashboard from "./pages/FinanceDashboard";
 import MarketingDashboard from "./pages/MarketingDashboard";
 import TakeTest from "./pages/TakeTest";
