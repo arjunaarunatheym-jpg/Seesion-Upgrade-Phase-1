@@ -10614,11 +10614,15 @@ async def get_period_status(year: int, month: int, current_user: User = Depends(
         return {"status": "open", "exists": False}  # If no period record, assume open
     return {"status": period.get("status", "open"), "exists": True, "period": period}
 
-# ============ PAYABLES EXCEL EXPORT ============
+# ============ PAYABLES EXCEL EXPORT (DISABLED - DUPLICATE) ============
+# NOTE: This endpoint is DISABLED because there's an active duplicate in /routes/finance_payables.py
+# The routes file version returns proper Excel binary via StreamingResponse
+# This inline version returns JSON data which caused frontend issues
+# Disabled on 2026-02-22 as part of Marketing & Finance Hardening (Improvement 2)
 
-@api_router.get("/finance/payables/export-excel")
-async def export_payables_excel(year: int, month: int, current_user: User = Depends(get_current_user)):
-    """Export payables for a specific month as Excel format data"""
+# @api_router.get("/finance/payables/export-excel")
+async def export_payables_excel_DISABLED(year: int, month: int, current_user: User = Depends(get_current_user)):
+    """DISABLED - Export payables for a specific month as Excel format data"""
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
