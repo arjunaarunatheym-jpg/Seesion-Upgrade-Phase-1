@@ -586,10 +586,13 @@ const SuperAdminPortal = () => {
                       <TableCell>{formatDate(user.created_at)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => handleToggleUserActive(user.id)}>
+                          <Button variant="ghost" size="sm" onClick={() => setEditUserDialog({ open: true, user: {...user} })} title="Edit User">
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleToggleUserActive(user.id)} title={user.is_active !== false ? 'Lock User' : 'Unlock User'}>
                             {user.is_active !== false ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleResetPassword(user.id)}>
+                          <Button variant="ghost" size="sm" onClick={() => handleResetPassword(user.id)} title="Reset Password">
                             <UserCog className="w-4 h-4" />
                           </Button>
                         </div>
