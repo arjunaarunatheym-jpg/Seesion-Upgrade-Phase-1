@@ -10993,8 +10993,10 @@ async def get_session_costing(session_id: str, current_user: User = Depends(get_
     
     # Calculate profit (before marketing commission)
     gross_revenue = invoice_total - tax_amount
-    # Use actual expenses if > 0, otherwise use estimated
-    cash_expenses_used = cash_expenses_actual if cash_expenses_actual > 0 else cash_expenses_estimated
+    # ACTUALS ONLY POLICY (Improvement 2): Only use actual expenses for profit calculation
+    # Display both estimated and actual for transparency, but profit uses actuals only
+    # If no actuals entered, expenses are 0 (profit appears higher - expected behavior)
+    cash_expenses_used = cash_expenses_actual  # Never fall back to estimated
     total_expenses_before_marketing = trainer_fees_total + coordinator_fee_total + cash_expenses_used
     profit_before_marketing = gross_revenue - total_expenses_before_marketing
     
