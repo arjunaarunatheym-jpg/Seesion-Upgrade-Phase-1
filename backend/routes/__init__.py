@@ -60,6 +60,7 @@ def get_all_routers():
         finance_reports_router, # /finance/profit-loss/*, subledger/*, chart-of-accounts, general-ledger (F5)
         finance_payables_router, # /finance/payables/*, income/*, dashboard, company-settings (F4)
         accounting_router,      # /accounting/* (Chart of Accounts, Journal Entries, Trial Balance)
+        superadmin_portal_router, # /superadmin/* (Super Admin Portal)
     ]
 
 __all__ = [
@@ -88,5 +89,6 @@ __all__ = [
     'finance_reports_router',
     'finance_payables_router',
     'accounting_router',
+    'superadmin_portal_router',
     'get_all_routers',
 ]
