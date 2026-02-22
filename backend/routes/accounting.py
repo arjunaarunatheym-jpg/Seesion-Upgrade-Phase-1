@@ -2513,3 +2513,521 @@ async def create_opening_balance(
         },
         "journal_entry": result.get("journal_entry")
     }
+
+
+# ============ EXCEL EXPORT ENDPOINTS ============
+
+@router.get("/journal-entries/export/excel")
+async def export_journal_entries_excel(
+    year: int = 2026,
+    month: Optional[int] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Export journal entries to Excel"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+    
+    # Build query
+    query = {"$expr": {"$eq": [{"$year": {"$dateFromString": {"dateString": "$date"}}}, year]}}
+    if month:
+        query["$expr"] = {"$and": [
+            {"$eq": [{"$year": {"$dateFromString": {"dateString": "$date"}}}, year]},
+            {"$eq": [{"$month": {"$dateFromString": {"dateString": "$date"}}}, month]}
+        ]}
+    
+    entries = await db.journal_entries.find(
+        query, {"_id": 0}
+    ).sort("date", 1).to_list(5000)
+    
+    # Create workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Journal Entries"
+    
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+    
+    # Headers
+    headers = ["Journal #", "Date", "Description", "Source", "Reference", "Account Code", "Account Name", "Debit (RM)", "Credit (RM)", "Status"]
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = thin_border
+        cell.alignment = Alignment(horizontal='center')
+    
+    # Data
+    row = 2
+    for entry in entries:
+        for line in entry.get("lines", []):
+            ws.cell(row=row, column=1, value=entry.get("journal_no", "")).border = thin_border
+            ws.cell(row=row, column=2, value=entry.get("date", "")).border = thin_border
+            ws.cell(row=row, column=3, value=entry.get("description", "")).border = thin_border
+            ws.cell(row=row, column=4, value=entry.get("source_module", "")).border = thin_border
+            ws.cell(row=row, column=5, value=entry.get("source_reference", "")).border = thin_border
+            ws.cell(row=row, column=6, value=line.get("account_code", "")).border = thin_border
+            ws.cell(row=row, column=7, value=line.get("account_name", "")).border = thin_border
+            
+            debit_cell = ws.cell(row=row, column=8, value=float(line.get("debit", 0)))
+            debit_cell.number_format = '#,##0.00'
+            debit_cell.border = thin_border
+            
+            credit_cell = ws.cell(row=row, column=9, value=float(line.get("credit", 0)))
+            credit_cell.number_format = '#,##0.00'
+            credit_cell.border = thin_border
+            
+            ws.cell(row=row, column=10, value=entry.get("status", "")).border = thin_border
+            row += 1
+    
+    # Adjust column widths
+    ws.column_dimensions['A'].width = 18
+    ws.column_dimensions['B'].width = 12
+    ws.column_dimensions['C'].width = 40
+    ws.column_dimensions['D'].width = 12
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 12
+    ws.column_dimensions['G'].width = 25
+    ws.column_dimensions['H'].width = 15
+    ws.column_dimensions['I'].width = 15
+    ws.column_dimensions['J'].width = 10
+    
+    # Save to buffer
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    filename = f"journal_entries_{year}_{month or 'all'}.xlsx"
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@router.get("/trial-balance/export/excel")
+async def export_trial_balance_excel(
+    year: int = 2026,
+    month: int = 2,
+    current_user: User = Depends(get_current_user)
+):
+    """Export trial balance to Excel"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+    
+    # Get trial balance data
+    accounts = await db.chart_of_accounts.find(
+        {"is_active": True}, {"_id": 0}
+    ).sort("account_code", 1).to_list(500)
+    
+    period_start = f"{year}-{month:02d}-01"
+    if month == 12:
+        period_end = f"{year+1}-01-01"
+    else:
+        period_end = f"{year}-{month+1:02d}-01"
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Trial Balance"
+    
+    # Title
+    ws.merge_cells('A1:E1')
+    title_cell = ws.cell(row=1, column=1, value="TRIAL BALANCE")
+    title_cell.font = Font(bold=True, size=14)
+    title_cell.alignment = Alignment(horizontal='center')
+    
+    ws.merge_cells('A2:E2')
+    period_cell = ws.cell(row=2, column=1, value=f"As of {year}-{month:02d}")
+    period_cell.alignment = Alignment(horizontal='center')
+    
+    # Headers
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+    
+    headers = ["Account Code", "Account Name", "Account Type", "Debit (RM)", "Credit (RM)"]
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=4, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = thin_border
+    
+    row = 5
+    total_debit = 0
+    total_credit = 0
+    
+    for acc in accounts:
+        # Get balance from posted journal entries
+        pipeline = [
+            {"$match": {"status": "posted", "date": {"$lt": period_end}}},
+            {"$unwind": "$lines"},
+            {"$match": {"lines.account_code": acc["account_code"]}},
+            {"$group": {
+                "_id": None,
+                "total_debit": {"$sum": "$lines.debit"},
+                "total_credit": {"$sum": "$lines.credit"}
+            }}
+        ]
+        result = await db.journal_entries.aggregate(pipeline).to_list(1)
+        
+        debit = float(result[0]["total_debit"]) if result else 0
+        credit = float(result[0]["total_credit"]) if result else 0
+        
+        if debit == 0 and credit == 0:
+            continue
+        
+        # Calculate balance based on normal balance
+        net = debit - credit
+        show_debit = net if net > 0 else 0
+        show_credit = abs(net) if net < 0 else 0
+        
+        ws.cell(row=row, column=1, value=acc["account_code"]).border = thin_border
+        ws.cell(row=row, column=2, value=acc["account_name"]).border = thin_border
+        ws.cell(row=row, column=3, value=acc["account_type"]).border = thin_border
+        
+        debit_cell = ws.cell(row=row, column=4, value=show_debit)
+        debit_cell.number_format = '#,##0.00'
+        debit_cell.border = thin_border
+        
+        credit_cell = ws.cell(row=row, column=5, value=show_credit)
+        credit_cell.number_format = '#,##0.00'
+        credit_cell.border = thin_border
+        
+        total_debit += show_debit
+        total_credit += show_credit
+        row += 1
+    
+    # Totals row
+    total_font = Font(bold=True)
+    ws.cell(row=row, column=1, value="").border = thin_border
+    ws.cell(row=row, column=2, value="TOTAL").font = total_font
+    ws.cell(row=row, column=2).border = thin_border
+    ws.cell(row=row, column=3, value="").border = thin_border
+    
+    total_debit_cell = ws.cell(row=row, column=4, value=total_debit)
+    total_debit_cell.number_format = '#,##0.00'
+    total_debit_cell.font = total_font
+    total_debit_cell.border = thin_border
+    
+    total_credit_cell = ws.cell(row=row, column=5, value=total_credit)
+    total_credit_cell.number_format = '#,##0.00'
+    total_credit_cell.font = total_font
+    total_credit_cell.border = thin_border
+    
+    # Column widths
+    ws.column_dimensions['A'].width = 15
+    ws.column_dimensions['B'].width = 35
+    ws.column_dimensions['C'].width = 12
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 15
+    
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=trial_balance_{year}_{month}.xlsx"}
+    )
+
+
+@router.get("/profit-loss/export/excel")
+async def export_pl_excel(
+    year: int = 2026,
+    month: Optional[int] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Export P&L to Excel"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+    
+    # Get P&L data
+    if month:
+        period_start = f"{year}-{month:02d}-01"
+        if month == 12:
+            period_end = f"{year+1}-01-01"
+        else:
+            period_end = f"{year}-{month+1:02d}-01"
+        period_label = f"{year}-{month:02d}"
+    else:
+        period_start = f"{year}-01-01"
+        period_end = f"{year+1}-01-01"
+        period_label = f"Full Year {year}"
+    
+    income_accounts = await db.chart_of_accounts.find(
+        {"account_type": "Income", "is_active": True}, {"_id": 0}
+    ).to_list(100)
+    
+    expense_accounts = await db.chart_of_accounts.find(
+        {"account_type": "Expense", "is_active": True}, {"_id": 0}
+    ).to_list(100)
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "P&L"
+    
+    # Title
+    ws.merge_cells('A1:C1')
+    ws.cell(row=1, column=1, value="PROFIT & LOSS STATEMENT").font = Font(bold=True, size=14)
+    ws.cell(row=1, column=1).alignment = Alignment(horizontal='center')
+    
+    ws.merge_cells('A2:C2')
+    ws.cell(row=2, column=1, value=period_label).alignment = Alignment(horizontal='center')
+    
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+    
+    row = 4
+    
+    # Revenue section
+    ws.cell(row=row, column=1, value="REVENUE").font = Font(bold=True, color="228B22")
+    row += 1
+    
+    total_revenue = 0
+    for acc in income_accounts:
+        pipeline = [
+            {"$match": {"status": "posted", "date": {"$gte": period_start, "$lt": period_end}}},
+            {"$unwind": "$lines"},
+            {"$match": {"lines.account_code": acc["account_code"]}},
+            {"$group": {"_id": None, "credit": {"$sum": "$lines.credit"}, "debit": {"$sum": "$lines.debit"}}}
+        ]
+        result = await db.journal_entries.aggregate(pipeline).to_list(1)
+        amount = float(result[0]["credit"] - result[0]["debit"]) if result else 0
+        
+        if amount != 0:
+            ws.cell(row=row, column=1, value=acc["account_name"]).border = thin_border
+            amt_cell = ws.cell(row=row, column=3, value=amount)
+            amt_cell.number_format = '#,##0.00'
+            amt_cell.border = thin_border
+            total_revenue += amount
+            row += 1
+    
+    ws.cell(row=row, column=1, value="Total Revenue").font = Font(bold=True)
+    ws.cell(row=row, column=1).border = thin_border
+    total_rev_cell = ws.cell(row=row, column=3, value=total_revenue)
+    total_rev_cell.number_format = '#,##0.00'
+    total_rev_cell.font = Font(bold=True)
+    total_rev_cell.border = thin_border
+    row += 2
+    
+    # Expenses section
+    ws.cell(row=row, column=1, value="EXPENSES").font = Font(bold=True, color="B22222")
+    row += 1
+    
+    total_expenses = 0
+    for acc in expense_accounts:
+        pipeline = [
+            {"$match": {"status": "posted", "date": {"$gte": period_start, "$lt": period_end}}},
+            {"$unwind": "$lines"},
+            {"$match": {"lines.account_code": acc["account_code"]}},
+            {"$group": {"_id": None, "debit": {"$sum": "$lines.debit"}, "credit": {"$sum": "$lines.credit"}}}
+        ]
+        result = await db.journal_entries.aggregate(pipeline).to_list(1)
+        amount = float(result[0]["debit"] - result[0]["credit"]) if result else 0
+        
+        if amount != 0:
+            ws.cell(row=row, column=1, value=acc["account_name"]).border = thin_border
+            amt_cell = ws.cell(row=row, column=3, value=amount)
+            amt_cell.number_format = '#,##0.00'
+            amt_cell.border = thin_border
+            total_expenses += amount
+            row += 1
+    
+    ws.cell(row=row, column=1, value="Total Expenses").font = Font(bold=True)
+    ws.cell(row=row, column=1).border = thin_border
+    total_exp_cell = ws.cell(row=row, column=3, value=total_expenses)
+    total_exp_cell.number_format = '#,##0.00'
+    total_exp_cell.font = Font(bold=True)
+    total_exp_cell.border = thin_border
+    row += 2
+    
+    # Net profit
+    net_profit = total_revenue - total_expenses
+    ws.cell(row=row, column=1, value="NET PROFIT" if net_profit >= 0 else "NET LOSS").font = Font(bold=True, size=12)
+    profit_cell = ws.cell(row=row, column=3, value=net_profit)
+    profit_cell.number_format = '#,##0.00'
+    profit_cell.font = Font(bold=True, size=12, color="228B22" if net_profit >= 0 else "B22222")
+    
+    ws.column_dimensions['A'].width = 35
+    ws.column_dimensions['C'].width = 18
+    
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=pl_{year}_{month or 'full'}.xlsx"}
+    )
+
+
+@router.get("/balance-sheet/export/excel")
+async def export_balance_sheet_excel(
+    year: int = 2026,
+    month: int = 2,
+    current_user: User = Depends(get_current_user)
+):
+    """Export Balance Sheet to Excel"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+    
+    if month == 12:
+        period_end = f"{year+1}-01-01"
+    else:
+        period_end = f"{year}-{month+1:02d}-01"
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Balance Sheet"
+    
+    # Title
+    ws.merge_cells('A1:C1')
+    ws.cell(row=1, column=1, value="BALANCE SHEET").font = Font(bold=True, size=14)
+    ws.cell(row=1, column=1).alignment = Alignment(horizontal='center')
+    
+    ws.merge_cells('A2:C2')
+    ws.cell(row=2, column=1, value=f"As of {year}-{month:02d}").alignment = Alignment(horizontal='center')
+    
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+    
+    row = 4
+    
+    async def get_account_balance(account_code: str) -> float:
+        pipeline = [
+            {"$match": {"status": "posted", "date": {"$lt": period_end}}},
+            {"$unwind": "$lines"},
+            {"$match": {"lines.account_code": account_code}},
+            {"$group": {"_id": None, "debit": {"$sum": "$lines.debit"}, "credit": {"$sum": "$lines.credit"}}}
+        ]
+        result = await db.journal_entries.aggregate(pipeline).to_list(1)
+        if result:
+            return float(result[0]["debit"] - result[0]["credit"])
+        return 0
+    
+    # Assets
+    ws.cell(row=row, column=1, value="ASSETS").font = Font(bold=True, size=12)
+    row += 1
+    
+    asset_accounts = await db.chart_of_accounts.find(
+        {"account_type": "Asset", "is_active": True}, {"_id": 0}
+    ).to_list(100)
+    
+    total_assets = 0
+    for acc in asset_accounts:
+        balance = await get_account_balance(acc["account_code"])
+        if balance != 0:
+            ws.cell(row=row, column=1, value=acc["account_name"]).border = thin_border
+            bal_cell = ws.cell(row=row, column=3, value=balance)
+            bal_cell.number_format = '#,##0.00'
+            bal_cell.border = thin_border
+            total_assets += balance
+            row += 1
+    
+    ws.cell(row=row, column=1, value="Total Assets").font = Font(bold=True)
+    ws.cell(row=row, column=1).border = thin_border
+    total_assets_cell = ws.cell(row=row, column=3, value=total_assets)
+    total_assets_cell.number_format = '#,##0.00'
+    total_assets_cell.font = Font(bold=True)
+    total_assets_cell.border = thin_border
+    row += 2
+    
+    # Liabilities
+    ws.cell(row=row, column=1, value="LIABILITIES").font = Font(bold=True, size=12)
+    row += 1
+    
+    liability_accounts = await db.chart_of_accounts.find(
+        {"account_type": "Liability", "is_active": True}, {"_id": 0}
+    ).to_list(100)
+    
+    total_liabilities = 0
+    for acc in liability_accounts:
+        balance = await get_account_balance(acc["account_code"])
+        balance = -balance  # Liabilities have credit balance
+        if balance != 0:
+            ws.cell(row=row, column=1, value=acc["account_name"]).border = thin_border
+            bal_cell = ws.cell(row=row, column=3, value=balance)
+            bal_cell.number_format = '#,##0.00'
+            bal_cell.border = thin_border
+            total_liabilities += balance
+            row += 1
+    
+    ws.cell(row=row, column=1, value="Total Liabilities").font = Font(bold=True)
+    ws.cell(row=row, column=1).border = thin_border
+    total_liab_cell = ws.cell(row=row, column=3, value=total_liabilities)
+    total_liab_cell.number_format = '#,##0.00'
+    total_liab_cell.font = Font(bold=True)
+    total_liab_cell.border = thin_border
+    row += 2
+    
+    # Equity
+    ws.cell(row=row, column=1, value="EQUITY").font = Font(bold=True, size=12)
+    row += 1
+    
+    equity_accounts = await db.chart_of_accounts.find(
+        {"account_type": "Equity", "is_active": True}, {"_id": 0}
+    ).to_list(100)
+    
+    total_equity = 0
+    for acc in equity_accounts:
+        balance = await get_account_balance(acc["account_code"])
+        balance = -balance  # Equity has credit balance
+        if balance != 0:
+            ws.cell(row=row, column=1, value=acc["account_name"]).border = thin_border
+            bal_cell = ws.cell(row=row, column=3, value=balance)
+            bal_cell.number_format = '#,##0.00'
+            bal_cell.border = thin_border
+            total_equity += balance
+            row += 1
+    
+    ws.cell(row=row, column=1, value="Total Equity").font = Font(bold=True)
+    ws.cell(row=row, column=1).border = thin_border
+    total_eq_cell = ws.cell(row=row, column=3, value=total_equity)
+    total_eq_cell.number_format = '#,##0.00'
+    total_eq_cell.font = Font(bold=True)
+    total_eq_cell.border = thin_border
+    row += 2
+    
+    # Total Liabilities + Equity
+    ws.cell(row=row, column=1, value="TOTAL LIABILITIES + EQUITY").font = Font(bold=True, size=12)
+    total_le_cell = ws.cell(row=row, column=3, value=total_liabilities + total_equity)
+    total_le_cell.number_format = '#,##0.00'
+    total_le_cell.font = Font(bold=True, size=12)
+    
+    ws.column_dimensions['A'].width = 35
+    ws.column_dimensions['C'].width = 18
+    
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=balance_sheet_{year}_{month}.xlsx"}
+    )
