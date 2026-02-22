@@ -1960,3 +1960,554 @@ async def get_accounting_audit_log(
     logs = await db.accounting_audit_log.find(query, {"_id": 0}).sort("timestamp", -1).to_list(limit)
     
     return {"logs": logs, "count": len(logs)}
+
+
+# ============ BALANCE SHEET ============
+
+@router.get("/balance-sheet")
+async def get_balance_sheet(
+    year: int,
+    month: int,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate Balance Sheet for a specific month
+    
+    Assets = Liabilities + Equity
+    """
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # End date for balance calculation
+    if month == 12:
+        end_date = f"{year + 1}-01-01"
+    else:
+        end_date = f"{year}-{str(month + 1).zfill(2)}-01"
+    
+    # Aggregate balances by account
+    pipeline = [
+        {"$match": {"status": "posted", "date": {"$lt": end_date}}},
+        {"$unwind": "$lines"},
+        {"$group": {
+            "_id": "$lines.account_code",
+            "account_name": {"$first": "$lines.account_name"},
+            "account_type": {"$first": "$lines.account_type"},
+            "total_debit": {"$sum": "$lines.debit"},
+            "total_credit": {"$sum": "$lines.credit"}
+        }},
+        {"$sort": {"_id": 1}}
+    ]
+    
+    results = await db.journal_entries.aggregate(pipeline).to_list(500)
+    
+    # Get account details
+    accounts = await db.chart_of_accounts.find({}, {"_id": 0}).to_list(500)
+    account_map = {a["account_code"]: a for a in accounts}
+    
+    # Separate by type
+    assets = {"accounts": [], "total": 0}
+    liabilities = {"accounts": [], "total": 0}
+    equity = {"accounts": [], "total": 0}
+    income_total = 0
+    expense_total = 0
+    
+    for row in results:
+        account_code = row["_id"]
+        account = account_map.get(account_code, {})
+        account_type = account.get("account_type", row.get("account_type", ""))
+        
+        debit = round_money(row["total_debit"])
+        credit = round_money(row["total_credit"])
+        
+        # Calculate balance based on normal balance
+        normal_balance = account.get("normal_balance", "debit")
+        if normal_balance == "debit":
+            balance = debit - credit
+        else:
+            balance = credit - debit
+        
+        account_data = {
+            "account_code": account_code,
+            "account_name": row["account_name"],
+            "balance": round_money(abs(balance)) if balance >= 0 else round_money(-abs(balance))
+        }
+        
+        if account_type == "Asset":
+            account_data["balance"] = round_money(debit - credit)
+            assets["accounts"].append(account_data)
+            assets["total"] += account_data["balance"]
+        elif account_type == "Liability":
+            account_data["balance"] = round_money(credit - debit)
+            liabilities["accounts"].append(account_data)
+            liabilities["total"] += account_data["balance"]
+        elif account_type == "Equity":
+            account_data["balance"] = round_money(credit - debit)
+            equity["accounts"].append(account_data)
+            equity["total"] += account_data["balance"]
+        elif account_type == "Income":
+            income_total += round_money(credit - debit)
+        elif account_type == "Expense":
+            expense_total += round_money(debit - credit)
+    
+    # Calculate current year earnings (Net Income)
+    current_year_earnings = round_money(income_total - expense_total)
+    equity["current_year_earnings"] = current_year_earnings
+    equity["total"] = round_money(equity["total"] + current_year_earnings)
+    
+    assets["total"] = round_money(assets["total"])
+    liabilities["total"] = round_money(liabilities["total"])
+    
+    total_liabilities_equity = round_money(liabilities["total"] + equity["total"])
+    
+    month_name = ["", "January", "February", "March", "April", "May", "June",
+                  "July", "August", "September", "October", "November", "December"][month]
+    
+    return {
+        "period": f"As of {month_name} {year}",
+        "assets": assets,
+        "liabilities": liabilities,
+        "equity": equity,
+        "total_liabilities_equity": total_liabilities_equity,
+        "is_balanced": abs(assets["total"] - total_liabilities_equity) < 0.01,
+        "generated_at": get_malaysia_time().isoformat()
+    }
+
+
+# ============ ACCOUNTING PROFIT & LOSS ============
+
+@router.get("/profit-loss")
+async def get_accounting_profit_loss(
+    year: int,
+    month: Optional[int] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate Profit & Loss from journal entries
+    
+    Revenue - Expenses = Net Profit/Loss
+    """
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Build date range
+    if month:
+        start_date = f"{year}-{str(month).zfill(2)}-01"
+        if month == 12:
+            end_date = f"{year + 1}-01-01"
+        else:
+            end_date = f"{year}-{str(month + 1).zfill(2)}-01"
+        period_name = ["", "January", "February", "March", "April", "May", "June",
+                      "July", "August", "September", "October", "November", "December"][month]
+        period = f"{period_name} {year}"
+    else:
+        start_date = f"{year}-01-01"
+        end_date = f"{year + 1}-01-01"
+        period = f"Year {year}"
+    
+    # Aggregate by account for the period
+    pipeline = [
+        {"$match": {"status": "posted", "date": {"$gte": start_date, "$lt": end_date}}},
+        {"$unwind": "$lines"},
+        {"$group": {
+            "_id": "$lines.account_code",
+            "account_name": {"$first": "$lines.account_name"},
+            "account_type": {"$first": "$lines.account_type"},
+            "total_debit": {"$sum": "$lines.debit"},
+            "total_credit": {"$sum": "$lines.credit"}
+        }},
+        {"$sort": {"_id": 1}}
+    ]
+    
+    results = await db.journal_entries.aggregate(pipeline).to_list(500)
+    
+    # Get account details
+    accounts = await db.chart_of_accounts.find({}, {"_id": 0}).to_list(500)
+    account_map = {a["account_code"]: a for a in accounts}
+    
+    revenue = {"accounts": [], "total": 0}
+    expenses = {"accounts": [], "total": 0}
+    
+    for row in results:
+        account_code = row["_id"]
+        account = account_map.get(account_code, {})
+        account_type = account.get("account_type", row.get("account_type", ""))
+        
+        debit = round_money(row["total_debit"])
+        credit = round_money(row["total_credit"])
+        
+        if account_type == "Income":
+            amount = round_money(credit - debit)  # Income has credit normal balance
+            if amount != 0:
+                revenue["accounts"].append({
+                    "account_code": account_code,
+                    "account_name": row["account_name"],
+                    "amount": amount
+                })
+                revenue["total"] += amount
+        elif account_type == "Expense":
+            amount = round_money(debit - credit)  # Expense has debit normal balance
+            if amount != 0:
+                expenses["accounts"].append({
+                    "account_code": account_code,
+                    "account_name": row["account_name"],
+                    "amount": amount
+                })
+                expenses["total"] += amount
+    
+    revenue["total"] = round_money(revenue["total"])
+    expenses["total"] = round_money(expenses["total"])
+    net_profit = round_money(revenue["total"] - expenses["total"])
+    
+    return {
+        "period": period,
+        "revenue": revenue,
+        "expenses": expenses,
+        "net_profit": net_profit,
+        "generated_at": get_malaysia_time().isoformat()
+    }
+
+
+# ============ MIGRATION ENDPOINT (Phase 3) ============
+
+@router.post("/migrate/2026")
+async def migrate_2026_data(current_user: User = Depends(get_current_user)):
+    """
+    One-time migration to create journal entries from Jan-Feb 2026 transactions.
+    
+    Migrates:
+    - Invoices (issued, partial, paid)
+    - Payments received
+    - Credit notes issued
+    - Session expenses (with actuals)
+    - Trainer fees
+    - Coordinator fees
+    - Marketing commissions
+    """
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Super Admin can run migration")
+    
+    results = {
+        "invoices": {"processed": 0, "created": 0, "skipped": 0, "errors": []},
+        "payments": {"processed": 0, "created": 0, "skipped": 0, "errors": []},
+        "credit_notes": {"processed": 0, "created": 0, "skipped": 0, "errors": []},
+        "expenses": {"processed": 0, "created": 0, "skipped": 0, "errors": []},
+        "trainer_fees": {"processed": 0, "created": 0, "skipped": 0, "errors": []},
+        "coordinator_fees": {"processed": 0, "created": 0, "skipped": 0, "errors": []},
+        "marketing_commissions": {"processed": 0, "created": 0, "skipped": 0, "errors": []}
+    }
+    
+    settings = await get_accounting_settings()
+    start_date = settings.get("accounting_start_date", "2026-01-01")
+    
+    # Import auto-posting functions
+    from routes.accounting import (
+        post_invoice_issued, post_payment_received, post_credit_note_issued,
+        post_expense_recorded, post_trainer_fee, post_coordinator_fee, post_marketing_commission
+    )
+    
+    # 1. Migrate Invoices
+    invoices = await db.invoices.find({
+        "status": {"$in": ["issued", "partial", "paid"]},
+        "$or": [
+            {"invoice_date": {"$gte": start_date}},
+            {"created_at": {"$gte": start_date}}
+        ]
+    }, {"_id": 0}).to_list(1000)
+    
+    for inv in invoices:
+        results["invoices"]["processed"] += 1
+        try:
+            session = None
+            if inv.get("session_id"):
+                session = await db.sessions.find_one({"id": inv["session_id"]}, {"_id": 0})
+            
+            result = await post_invoice_issued(inv, session, current_user.id, current_user.full_name)
+            if result.get("is_duplicate"):
+                results["invoices"]["skipped"] += 1
+            elif result.get("journal_entry"):
+                results["invoices"]["created"] += 1
+            elif result.get("error"):
+                results["invoices"]["errors"].append(f"{inv.get('invoice_number')}: {result['error']}")
+        except Exception as e:
+            results["invoices"]["errors"].append(f"{inv.get('invoice_number')}: {str(e)}")
+    
+    # 2. Migrate Payments
+    payments = await db.payments.find({
+        "created_at": {"$gte": start_date}
+    }, {"_id": 0}).to_list(1000)
+    
+    for pmt in payments:
+        results["payments"]["processed"] += 1
+        try:
+            invoice = await db.invoices.find_one({"id": pmt.get("invoice_id")}, {"_id": 0})
+            result = await post_payment_received(pmt, invoice, current_user.id, current_user.full_name)
+            if result.get("is_duplicate"):
+                results["payments"]["skipped"] += 1
+            elif result.get("journal_entry"):
+                results["payments"]["created"] += 1
+            elif result.get("error"):
+                results["payments"]["errors"].append(f"{pmt.get('id')[:8]}: {result['error']}")
+        except Exception as e:
+            results["payments"]["errors"].append(f"{pmt.get('id')[:8]}: {str(e)}")
+    
+    # 3. Migrate Credit Notes
+    credit_notes = await db.credit_notes.find({
+        "status": "issued",
+        "created_at": {"$gte": start_date}
+    }, {"_id": 0}).to_list(1000)
+    
+    for cn in credit_notes:
+        results["credit_notes"]["processed"] += 1
+        try:
+            result = await post_credit_note_issued(cn, current_user.id, current_user.full_name)
+            if result.get("is_duplicate"):
+                results["credit_notes"]["skipped"] += 1
+            elif result.get("journal_entry"):
+                results["credit_notes"]["created"] += 1
+            elif result.get("error"):
+                results["credit_notes"]["errors"].append(f"{cn.get('cn_number')}: {result['error']}")
+        except Exception as e:
+            results["credit_notes"]["errors"].append(f"{cn.get('cn_number')}: {str(e)}")
+    
+    # 4. Migrate Session Expenses
+    # Get sessions from 2026
+    sessions_2026 = await db.sessions.find({
+        "start_date": {"$gte": start_date}
+    }, {"_id": 0, "id": 1}).to_list(1000)
+    session_ids_2026 = [s["id"] for s in sessions_2026]
+    
+    expenses = await db.session_expenses.find({
+        "session_id": {"$in": session_ids_2026},
+        "actual_amount": {"$gt": 0}
+    }, {"_id": 0}).to_list(1000)
+    
+    for exp in expenses:
+        results["expenses"]["processed"] += 1
+        try:
+            result = await post_expense_recorded(exp, "session", current_user.id, current_user.full_name)
+            if result.get("is_duplicate"):
+                results["expenses"]["skipped"] += 1
+            elif result.get("journal_entry"):
+                results["expenses"]["created"] += 1
+            elif result.get("error"):
+                results["expenses"]["errors"].append(f"{exp.get('id')[:8]}: {result['error']}")
+        except Exception as e:
+            results["expenses"]["errors"].append(f"{exp.get('id')[:8]}: {str(e)}")
+    
+    # 5. Migrate Trainer Fees
+    trainer_fees = await db.trainer_fees.find({
+        "session_id": {"$in": session_ids_2026}
+    }, {"_id": 0}).to_list(1000)
+    
+    for tf in trainer_fees:
+        results["trainer_fees"]["processed"] += 1
+        try:
+            session = await db.sessions.find_one({"id": tf.get("session_id")}, {"_id": 0})
+            result = await post_trainer_fee(tf, session, current_user.id, current_user.full_name)
+            if result.get("is_duplicate"):
+                results["trainer_fees"]["skipped"] += 1
+            elif result.get("journal_entry"):
+                results["trainer_fees"]["created"] += 1
+            elif result.get("error"):
+                results["trainer_fees"]["errors"].append(f"{tf.get('id')[:8]}: {result['error']}")
+        except Exception as e:
+            results["trainer_fees"]["errors"].append(f"{tf.get('id')[:8]}: {str(e)}")
+    
+    # 6. Migrate Coordinator Fees
+    coordinator_fees = await db.coordinator_fees.find({
+        "session_id": {"$in": session_ids_2026}
+    }, {"_id": 0}).to_list(1000)
+    
+    for cf in coordinator_fees:
+        results["coordinator_fees"]["processed"] += 1
+        try:
+            session = await db.sessions.find_one({"id": cf.get("session_id")}, {"_id": 0})
+            result = await post_coordinator_fee(cf, session, current_user.id, current_user.full_name)
+            if result.get("is_duplicate"):
+                results["coordinator_fees"]["skipped"] += 1
+            elif result.get("journal_entry"):
+                results["coordinator_fees"]["created"] += 1
+            elif result.get("error"):
+                results["coordinator_fees"]["errors"].append(f"{cf.get('id')[:8]}: {result['error']}")
+        except Exception as e:
+            results["coordinator_fees"]["errors"].append(f"{cf.get('id')[:8]}: {str(e)}")
+    
+    # 7. Migrate Marketing Commissions
+    commissions = await db.marketing_commissions.find({
+        "session_id": {"$in": session_ids_2026},
+        "status": {"$in": ["approved", "paid"]}
+    }, {"_id": 0}).to_list(1000)
+    
+    for mc in commissions:
+        results["marketing_commissions"]["processed"] += 1
+        try:
+            session = await db.sessions.find_one({"id": mc.get("session_id")}, {"_id": 0})
+            result = await post_marketing_commission(mc, session, current_user.id, current_user.full_name)
+            if result.get("is_duplicate"):
+                results["marketing_commissions"]["skipped"] += 1
+            elif result.get("journal_entry"):
+                results["marketing_commissions"]["created"] += 1
+            elif result.get("error"):
+                results["marketing_commissions"]["errors"].append(f"{mc.get('id')[:8]}: {result['error']}")
+        except Exception as e:
+            results["marketing_commissions"]["errors"].append(f"{mc.get('id')[:8]}: {str(e)}")
+    
+    # Calculate totals
+    total_processed = sum(r["processed"] for r in results.values())
+    total_created = sum(r["created"] for r in results.values())
+    total_skipped = sum(r["skipped"] for r in results.values())
+    
+    await log_accounting_action(
+        action="migration_completed",
+        entity_type="migration",
+        entity_id="2026",
+        performed_by=current_user,
+        after_value={
+            "total_processed": total_processed,
+            "total_created": total_created,
+            "total_skipped": total_skipped
+        }
+    )
+    
+    return {
+        "message": "Migration completed",
+        "summary": {
+            "total_processed": total_processed,
+            "total_created": total_created,
+            "total_skipped": total_skipped
+        },
+        "details": results
+    }
+
+
+# ============ OPENING BALANCE (Phase 4) ============
+
+@router.post("/opening-balance")
+async def create_opening_balance(
+    data: dict,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Create opening balance journal entry as of accounting start date.
+    
+    Expected data:
+    {
+        "date": "2026-01-01",
+        "cash_at_bank": 0,
+        "petty_cash": 0,
+        "accounts_receivable": 0,  # Will be calculated from unpaid invoices if not provided
+        "accounts_payable": 0      # Will be calculated from unpaid expenses if not provided
+    }
+    """
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Super Admin can create opening balance")
+    
+    entry_date = data.get("date", "2026-01-01")
+    
+    # Check if opening balance already exists
+    existing = await db.journal_entries.find_one({
+        "source_module": "opening_balance",
+        "status": {"$ne": "voided"}
+    }, {"_id": 0})
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Opening balance already exists. Void it first to create a new one.")
+    
+    settings = await get_accounting_settings()
+    
+    # Get values from input or calculate
+    cash_at_bank = round_money(float(data.get("cash_at_bank", 0)))
+    petty_cash = round_money(float(data.get("petty_cash", 0)))
+    
+    # Calculate AR from unpaid invoices before accounting start date
+    if "accounts_receivable" in data:
+        accounts_receivable = round_money(float(data["accounts_receivable"]))
+    else:
+        # Calculate from invoices issued before start date that are not fully paid
+        ar_invoices = await db.invoices.find({
+            "status": {"$in": ["issued", "partial"]},
+            "created_at": {"$lt": entry_date}
+        }, {"_id": 0, "total_amount": 1}).to_list(1000)
+        accounts_receivable = round_money(sum(inv.get("total_amount", 0) for inv in ar_invoices))
+    
+    # Calculate AP from unpaid expenses before start date
+    if "accounts_payable" in data:
+        accounts_payable = round_money(float(data["accounts_payable"]))
+    else:
+        accounts_payable = 0  # Default to 0 if not provided
+    
+    # Build journal lines
+    lines = []
+    total_debit = 0
+    total_credit = 0
+    
+    # Debit: Assets
+    if cash_at_bank > 0:
+        lines.append({
+            "account_code": settings.get("default_bank_account", "1000"),
+            "debit": cash_at_bank,
+            "credit": 0,
+            "memo": "Opening balance - Cash at Bank"
+        })
+        total_debit += cash_at_bank
+    
+    if petty_cash > 0:
+        lines.append({
+            "account_code": "1001",
+            "debit": petty_cash,
+            "credit": 0,
+            "memo": "Opening balance - Petty Cash"
+        })
+        total_debit += petty_cash
+    
+    if accounts_receivable > 0:
+        lines.append({
+            "account_code": settings.get("default_ar_account", "1100"),
+            "debit": accounts_receivable,
+            "credit": 0,
+            "memo": "Opening balance - Accounts Receivable"
+        })
+        total_debit += accounts_receivable
+    
+    # Credit: Liabilities
+    if accounts_payable > 0:
+        lines.append({
+            "account_code": settings.get("default_ap_account", "2100"),
+            "debit": 0,
+            "credit": accounts_payable,
+            "memo": "Opening balance - Accounts Payable"
+        })
+        total_credit += accounts_payable
+    
+    # Calculate balancing equity
+    equity_balance = round_money(total_debit - total_credit)
+    
+    if equity_balance != 0:
+        lines.append({
+            "account_code": "3000",  # Opening Balance Equity
+            "debit": 0 if equity_balance > 0 else abs(equity_balance),
+            "credit": equity_balance if equity_balance > 0 else 0,
+            "memo": "Opening balance - Equity (balancing)"
+        })
+    
+    # Create journal entry
+    result = await create_auto_journal_entry(
+        entry_date=entry_date,
+        description=f"Opening Balance as of {entry_date}",
+        source_module="opening_balance",
+        source_id="opening_balance_2026",
+        source_reference="OB-2026",
+        lines=lines,
+        created_by_id=current_user.id,
+        created_by_name=current_user.full_name
+    )
+    
+    return {
+        "message": "Opening balance created",
+        "opening_balance": {
+            "cash_at_bank": cash_at_bank,
+            "petty_cash": petty_cash,
+            "accounts_receivable": accounts_receivable,
+            "accounts_payable": accounts_payable,
+            "equity_balance": equity_balance
+        },
+        "journal_entry": result.get("journal_entry")
+    }
