@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 
 const SuperAdminPortal = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   
