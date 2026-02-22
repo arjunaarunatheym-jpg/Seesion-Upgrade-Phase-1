@@ -499,7 +499,29 @@ const LeadPipelineTab = ({
             ))}
           </SelectContent>
         </Select>
+        <Select value={sourceFilter} onValueChange={setSourceFilter}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="All Sources" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sources</SelectItem>
+            {SOURCES.map((s) => (
+              <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <div className="flex gap-2">
+          {isAdmin && (
+            <Button 
+              variant="outline"
+              size="sm"
+              onClick={loadArchivedLeads}
+              className="text-orange-600 border-orange-300"
+            >
+              <Archive className="w-4 h-4 mr-1" />
+              Archived
+            </Button>
+          )}
           <Button 
             variant={viewMode === "pipeline" ? "default" : "outline"}
             size="sm"
