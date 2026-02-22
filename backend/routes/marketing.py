@@ -341,24 +341,20 @@ async def get_quotation(quotation_id: str, current_user: User = Depends(get_curr
 
 @router.post("/quotations")
 async def create_quotation(quotation_data: dict, current_user: User = Depends(get_current_user)):
-    """Create a new quotation"""
+    """Create a new quotation with atomic quotation number generation
+    
+    Uses atomic counter to prevent duplicate quotation numbers (Improvement 2).
+    Format: QUO/MDDRC/YYYY/MM/XXXXX - counter resets monthly.
+    """
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     
-    # Generate quotation number: QUO/MDDRC/YYYY/MM/XXXXX
-    now = get_malaysia_time()
-    year = now.year
-    month = now.month
+    # ============ ATOMIC QUOTATION NUMBER (Improvement 2) ============
+    # Use atomic counter instead of count-based approach to prevent race conditions
+    quotation_number = await get_next_quotation_number()
+    # ============ END ATOMIC NUMBER ============
     
-    # Count quotations in current month (shared sequence across all marketing users)
-    month_prefix = f"QUO/MDDRC/{year}/{str(month).zfill(2)}/"
-    # Escape slashes for regex
-    escaped_prefix = month_prefix.replace('/', r'\/')
-    regex_pattern = f"^{escaped_prefix}" + r"\d{5}$"
-    count = await db.quotations.count_documents({
-        "quotation_number": {"$regex": regex_pattern}
-    })
-    quotation_number = f"{month_prefix}{str(count + 1).zfill(5)}"
+    now = get_malaysia_time()
     
     # Calculate valid_until date
     validity_days = quotation_data.get("validity_days", 30)
