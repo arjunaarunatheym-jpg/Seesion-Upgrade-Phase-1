@@ -605,12 +605,12 @@ const SuperAdminPortal = () => {
               <div className="flex items-center justify-between">
                 <CardTitle>Invoice Management</CardTitle>
                 <div className="flex gap-2">
-                  <Select value={invoiceFilter.status} onValueChange={(v) => setInvoiceFilter(prev => ({ ...prev, status: v }))}>
+                  <Select value={invoiceFilter.status || "all"} onValueChange={(v) => setInvoiceFilter(prev => ({ ...prev, status: v === "all" ? "" : v }))}>
                     <SelectTrigger className="w-40">
                       <SelectValue placeholder="All Status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Status</SelectItem>
+                      <SelectItem value="all">All Status</SelectItem>
                       <SelectItem value="auto_draft">Draft</SelectItem>
                       <SelectItem value="issued">Issued</SelectItem>
                       <SelectItem value="partial">Partial</SelectItem>
