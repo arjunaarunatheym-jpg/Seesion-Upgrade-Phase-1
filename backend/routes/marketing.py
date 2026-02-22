@@ -432,6 +432,16 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
     
     await db.quotations.insert_one(quotation)
     
+    # Audit log: Quotation created
+    await log_marketing_action(
+        action="quotation_created",
+        entity_type="quotation",
+        entity_id=quotation["id"],
+        changed_by=current_user,
+        after_value={"quotation_number": quotation_number, "total_amount": quotation.get("total_amount", 0)},
+        details=f"New quotation created: {quotation_number}"
+    )
+    
     # Remove _id before returning (MongoDB adds it)
     quotation.pop("_id", None)
     return {"message": "Quotation created", "quotation": quotation}
