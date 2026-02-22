@@ -269,17 +269,48 @@ const SuperAdminPortal = () => {
 
   const roles = ['admin', 'super_admin', 'finance', 'marketing', 'trainer', 'coordinator', 'pic_supervisor', 'participant'];
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/login');
+  };
+
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Shield className="w-8 h-8 text-red-600" />
-          <h1 className="text-2xl font-bold text-gray-900">Super Admin Portal</h1>
-          <Badge className="bg-red-600">Restricted Access</Badge>
+      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/admin')}
+              className="flex items-center gap-2"
+              data-testid="back-to-admin-button"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Admin
+            </Button>
+            <div className="flex items-center gap-3">
+              <Shield className="w-8 h-8 text-red-600" />
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Super Admin Portal</h1>
+                <Badge className="bg-red-600 text-xs">Restricted Access</Badge>
+              </div>
+            </div>
+          </div>
+          <Button
+            data-testid="superadmin-logout-button"
+            onClick={handleLogout}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <LogOut className="w-4 h-4" />
+            Logout
+          </Button>
         </div>
-        <p className="text-gray-500">Full system administration and control panel</p>
-      </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-4">
