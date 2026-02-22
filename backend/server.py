@@ -10897,9 +10897,9 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
         coordinator_fee_total = coord_fee.get("total_fee", 0) if coord_fee else 0
         
         expenses = await db.session_expenses.find({"session_id": session_id}, {"_id": 0, "actual_amount": 1, "estimated_amount": 1}).to_list(100)
+        # ACTUALS ONLY (Improvement 2): Only use actual_amount for commission calculation
         cash_expenses_actual = sum(e.get("actual_amount", 0) for e in expenses)
-        cash_expenses_estimated = sum(e.get("estimated_amount", 0) for e in expenses)
-        cash_expenses = cash_expenses_actual if cash_expenses_actual > 0 else cash_expenses_estimated
+        cash_expenses = cash_expenses_actual  # Never fall back to estimated
         
         # Calculate profit before marketing
         total_expenses_before_marketing = trainer_fees_total + coordinator_fee_total + cash_expenses
