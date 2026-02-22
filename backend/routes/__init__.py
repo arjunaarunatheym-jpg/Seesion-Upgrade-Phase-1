@@ -29,6 +29,7 @@ from .finance_petty_cash import router as finance_petty_cash_router
 from .finance_reports import router as finance_reports_router
 from .finance_payables import router as finance_payables_router
 from .accounting import router as accounting_router
+from .superadmin_portal import router as superadmin_portal_router
 
 # Create combined router for easy registration
 def get_all_routers():
