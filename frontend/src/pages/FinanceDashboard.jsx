@@ -13,7 +13,7 @@ import {
   DollarSign, FileText, CreditCard, TrendingUp, 
   CheckCircle, Clock, AlertCircle, LogOut, RefreshCw,
   Check, X, Plus, FileX, Receipt, Edit, Printer, Settings, Download, FileSpreadsheet, Users,
-  BarChart3, Wallet, Lock, Unlock, RotateCcw, Globe
+  BarChart3, Wallet, Lock, Unlock, RotateCcw, Globe, BookOpen
 } from 'lucide-react';
 import { FaFacebook, FaInstagram, FaTiktok, FaYoutube, FaTwitter, FaLinkedin } from 'react-icons/fa';
 import HRModule from '../components/HRModule';
