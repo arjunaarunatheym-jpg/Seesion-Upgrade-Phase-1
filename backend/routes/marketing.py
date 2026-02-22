@@ -675,13 +675,27 @@ async def record_client_response(quotation_id: str, response_data: dict, current
 
 @router.post("/quotations/{quotation_id}/apply-discount")
 async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, current_user: User = Depends(get_current_user)):
-    """Apply discount to a sent quotation (for negotiation) - creates revision number"""
+    """Apply discount to a sent quotation (for negotiation) - creates revision number
+    
+    Validation Rules (Improvement 2 - Marketing & Finance Hardening):
+    1. Discount cannot be negative
+    2. Discount cannot exceed subtotal
+    3. Percentage discount cannot exceed 100%
+    4. Cannot apply discount if subtotal = 0
+    5. Cannot modify discount if quotation is accepted
+    6. Final total must not be negative
+    7. SST rate must be valid (0% or 6%)
+    """
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     
     quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
     if not quotation:
         raise HTTPException(status_code=404, detail="Quotation not found")
+    
+    # VALIDATION 5: Cannot modify discount if quotation is accepted
+    if quotation.get("status") == "accepted":
+        raise HTTPException(status_code=400, detail="Cannot modify discount on accepted quotations")
     
     # Only allow discount on SENT quotations (negotiation phase - client has already seen it)
     if quotation.get("status") != "sent":
@@ -693,19 +707,45 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
     
     # Calculate new totals with discount
     subtotal = quotation.get("subtotal", 0)
+    
+    # VALIDATION 4: Cannot apply discount if subtotal = 0
+    if subtotal <= 0:
+        raise HTTPException(status_code=400, detail="Cannot apply discount to quotation with zero or negative subtotal")
+    
     discount_type = discount_data.get("discount_type", "percentage")  # percentage or fixed
     discount_value = float(discount_data.get("discount_value", 0))
+    
+    # VALIDATION 1: Discount cannot be negative
+    if discount_value < 0:
+        raise HTTPException(status_code=400, detail="Discount value cannot be negative")
+    
+    # VALIDATION 3: Percentage discount cannot exceed 100%
+    if discount_type == "percentage" and discount_value > 100:
+        raise HTTPException(status_code=400, detail="Percentage discount cannot exceed 100%")
     
     if discount_type == "percentage":
         discount_amount = subtotal * (discount_value / 100)
         discount_percentage = discount_value
     else:
+        # VALIDATION 2: Fixed discount cannot exceed subtotal
+        if discount_value > subtotal:
+            raise HTTPException(status_code=400, detail="Fixed discount cannot exceed subtotal amount")
         discount_amount = discount_value
         discount_percentage = (discount_value / subtotal * 100) if subtotal > 0 else 0
     
     # Recalculate with discount
     discounted_subtotal = subtotal - discount_amount
+    
+    # VALIDATION 6: Final total must not be negative (sanity check after discount)
+    if discounted_subtotal < 0:
+        raise HTTPException(status_code=400, detail="Discount would result in negative subtotal")
+    
     sst_percentage = quotation.get("sst_percentage", 0)
+    
+    # VALIDATION 7: SST rate must be valid (0% or 6% for Malaysia)
+    if sst_percentage not in [0, 6]:
+        raise HTTPException(status_code=400, detail="SST rate must be 0% or 6%")
+    
     sst_amount = discounted_subtotal * (sst_percentage / 100)
     new_total = discounted_subtotal + sst_amount
     
