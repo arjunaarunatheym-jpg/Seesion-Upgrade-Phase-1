@@ -557,6 +557,9 @@ const AccountingTab = () => {
                   <Button variant="outline" size="sm" onClick={loadJournalEntries}>
                     <RefreshCw className="w-4 h-4 mr-1" /> Load
                   </Button>
+                  <Button variant="outline" size="sm" onClick={exportJournalEntriesToExcel}>
+                    <Download className="w-4 h-4 mr-1" /> Excel
+                  </Button>
                   <Button size="sm" onClick={() => {
                     setNewJournal({
                       date: new Date().toISOString().split('T')[0],
