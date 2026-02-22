@@ -1126,9 +1126,10 @@ class LeadUpdate(BaseModel):
 @router.get("/leads")
 async def get_leads(
     stage: Optional[str] = None,
+    include_archived: bool = False,
     current_user: User = Depends(get_current_user)
 ):
-    """Get leads - Marketing sees own, Admin sees all"""
+    """Get leads - Marketing sees own (non-archived), Admin sees all including archived"""
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     
@@ -1137,11 +1138,27 @@ async def get_leads(
     # Marketing users only see their own leads
     if current_user.role not in ["admin", "super_admin"]:
         query["created_by"] = current_user.id
+        # Marketing users never see archived leads
+        query["is_archived"] = {"$ne": True}
+    else:
+        # Admins can choose to include archived or not
+        if not include_archived:
+            query["is_archived"] = {"$ne": True}
     
     if stage:
         query["stage"] = stage
     
     leads = await db.leads.find(query, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    return leads
+
+
+@router.get("/leads/archived")
+async def get_archived_leads(current_user: User = Depends(get_current_user)):
+    """Get archived leads (Admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    leads = await db.leads.find({"is_archived": True}, {"_id": 0}).sort("archived_at", -1).to_list(500)
     return leads
 
 
