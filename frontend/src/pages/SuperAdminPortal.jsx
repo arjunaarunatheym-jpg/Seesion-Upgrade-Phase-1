@@ -4,6 +4,7 @@
  * Access: Super Admin role only (arjuna@mddrc.com.my or role=super_admin)
  */
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { axiosInstance } from '../App';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -21,7 +22,8 @@ import {
   Settings, BarChart3, Download, RefreshCw, Search,
   Edit, Trash2, Lock, Unlock, Eye, AlertTriangle,
   CheckCircle, XCircle, Activity, Database, Clock,
-  DollarSign, BookOpen, Loader2, UserCog, FileSpreadsheet
+  DollarSign, BookOpen, Loader2, UserCog, FileSpreadsheet,
+  ArrowLeft, LogOut
 } from 'lucide-react';
 
 const SuperAdminPortal = () => {
