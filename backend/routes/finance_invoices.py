@@ -12,6 +12,9 @@ import pytz
 from core import db, get_current_user, get_malaysia_time
 from models import User
 
+# Import accounting auto-posting functions (Phase 2)
+from routes.accounting import post_invoice_issued
+
 router = APIRouter(prefix="/finance", tags=["finance-invoices"])
 
 MALAYSIA_TZ = pytz.timezone("Asia/Kuala_Lumpur")
