@@ -264,6 +264,79 @@ const SuperAdminPortal = () => {
     }
   };
 
+  // Edit User (Full Edit)
+  const handleSaveUser = async () => {
+    if (!editUserDialog.user) return;
+    const reason = prompt('Enter reason for changes:');
+    if (!reason || reason.length < 5) {
+      toast.error('Reason is required');
+      return;
+    }
+    try {
+      await axiosInstance.put(`/superadmin/users/${editUserDialog.user.id}?reason=${encodeURIComponent(reason)}`, editUserDialog.user);
+      toast.success('User updated');
+      setEditUserDialog({ open: false, user: null });
+      loadUsers();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update user');
+    }
+  };
+
+  // Edit Session (Full Edit)
+  const handleSaveSession = async () => {
+    if (!editSessionDialog.session) return;
+    const reason = prompt('Enter reason for changes:');
+    if (!reason || reason.length < 5) {
+      toast.error('Reason is required');
+      return;
+    }
+    try {
+      await axiosInstance.put(`/superadmin/sessions/${editSessionDialog.session.id}?reason=${encodeURIComponent(reason)}`, editSessionDialog.session);
+      toast.success('Session updated');
+      setEditSessionDialog({ open: false, session: null });
+      loadSessions();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update session');
+    }
+  };
+
+  // Edit Invoice (Full Edit)
+  const handleSaveInvoice = async () => {
+    if (!editInvoiceDialog.invoice) return;
+    const reason = prompt('Enter reason for changes:');
+    if (!reason || reason.length < 5) {
+      toast.error('Reason is required');
+      return;
+    }
+    try {
+      await axiosInstance.put(`/superadmin/invoices/${editInvoiceDialog.invoice.id}?reason=${encodeURIComponent(reason)}`, editInvoiceDialog.invoice);
+      toast.success('Invoice updated');
+      setEditInvoiceDialog({ open: false, invoice: null });
+      loadInvoices();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update invoice');
+    }
+  };
+
+  // Fix Unknown Journal Entry
+  const handleFixJournalEntry = async () => {
+    if (!editJournalDialog.entry) return;
+    const reason = prompt('Enter reason for changes:');
+    if (!reason || reason.length < 5) {
+      toast.error('Reason is required');
+      return;
+    }
+    try {
+      await axiosInstance.put(`/superadmin/journal-entries/${editJournalDialog.entry.id}?reason=${encodeURIComponent(reason)}`, {
+        description: editJournalDialog.entry.description
+      });
+      toast.success('Journal entry updated');
+      setEditJournalDialog({ open: false, entry: null });
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update journal entry');
+    }
+  };
+
   const formatMoney = (amount) => {
     return new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR' }).format(amount || 0);
   };
