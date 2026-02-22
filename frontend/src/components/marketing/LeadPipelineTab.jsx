@@ -149,6 +149,27 @@ const LeadPipelineTab = ({
     }
   };
 
+  const loadArchivedLeads = async () => {
+    try {
+      const response = await axiosInstance.get('/marketing/leads/archived');
+      setArchivedLeads(response.data || []);
+      setShowArchivedDialog(true);
+    } catch (error) {
+      toast.error("Failed to load archived leads");
+    }
+  };
+
+  const handleRestoreLead = async (leadId) => {
+    try {
+      await axiosInstance.post(`/marketing/leads/${leadId}/unarchive`);
+      toast.success("Lead restored");
+      setArchivedLeads(prev => prev.filter(l => l.id !== leadId));
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to restore lead");
+    }
+  };
+
   const handleStageChange = async (leadId, newStage) => {
     // If changing to "won", open the won dialog instead
     if (newStage === "won") {
