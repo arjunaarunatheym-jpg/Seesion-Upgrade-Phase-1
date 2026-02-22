@@ -10933,8 +10933,6 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
                 calculated_amount = profit_before_marketing * (comm.get("commission_rate", 0) / 100)
             else:
                 calculated_amount = comm.get("fixed_amount") or 0.0
-        else:
-            calculated_amount = comm.get("fixed_amount") or 0.0
         
         # Update the stored value if it differs (keep DB in sync)
         if abs(calculated_amount - (comm.get("calculated_amount") or 0)) > 0.01:
