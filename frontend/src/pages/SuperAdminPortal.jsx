@@ -804,6 +804,7 @@ const SuperAdminPortal = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      </main>
     </div>
   );
 };
