@@ -420,6 +420,21 @@ async def issue_credit_note(cn_id: str, current_user: User = Depends(get_current
     await db.credit_notes.update_one({"id": cn_id}, {"$set": update_dict})
     await log_finance_action("credit_note", cn_id, "issued", current_user.id, credit_note, update_dict)
     
+    # ============ ACCOUNTING AUTO-POST (Phase 2) ============
+    # Create journal entry for credit note issued
+    try:
+        updated_cn = await db.credit_notes.find_one({"id": cn_id}, {"_id": 0})
+        accounting_result = await post_credit_note_issued(
+            credit_note=updated_cn,
+            user_id=current_user.id,
+            user_name=current_user.full_name
+        )
+        if accounting_result.get("error"):
+            print(f"Accounting auto-post warning: {accounting_result.get('error')}")
+    except Exception as e:
+        print(f"Accounting auto-post error: {str(e)}")
+    # ============ END ACCOUNTING AUTO-POST ============
+    
     return {"message": "Credit note issued", "cn_number": credit_note.get("cn_number")}
 
 
