@@ -293,6 +293,102 @@ const AccountingTab = () => {
     return new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR' }).format(amount || 0);
   };
 
+  // Export functions
+  const exportJournalEntriesToExcel = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (journalFilter.year) params.append('year', journalFilter.year);
+      if (journalFilter.month) params.append('month', journalFilter.month);
+      
+      const response = await axiosInstance.get(`/accounting/journal-entries/export/excel?${params}`, {
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `journal_entries_${journalFilter.year}_${journalFilter.month || 'all'}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Journal entries exported');
+    } catch (error) {
+      toast.error('Failed to export journal entries');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportTrialBalanceToExcel = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get(`/accounting/trial-balance/export/excel?year=${tbPeriod.year}&month=${tbPeriod.month}`, {
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `trial_balance_${tbPeriod.year}_${tbPeriod.month}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Trial balance exported');
+    } catch (error) {
+      toast.error('Failed to export trial balance');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportPLToExcel = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({ year: plPeriod.year });
+      if (plPeriod.month) params.append('month', plPeriod.month);
+      
+      const response = await axiosInstance.get(`/accounting/profit-loss/export/excel?${params}`, {
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `profit_loss_${plPeriod.year}_${plPeriod.month || 'all'}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('P&L exported');
+    } catch (error) {
+      toast.error('Failed to export P&L');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportBalanceSheetToExcel = async () => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get(`/accounting/balance-sheet/export/excel?year=${bsPeriod.year}&month=${bsPeriod.month}`, {
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `balance_sheet_${bsPeriod.year}_${bsPeriod.month}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Balance sheet exported');
+    } catch (error) {
+      toast.error('Failed to export balance sheet');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const months = [
     { value: 1, label: 'January' },
     { value: 2, label: 'February' },
