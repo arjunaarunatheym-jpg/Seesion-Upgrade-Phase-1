@@ -1665,15 +1665,28 @@ const AdminDashboard = ({ user, onLogout }) => {
               <p className="text-sm text-gray-600">Welcome, {user.full_name}</p>
             </div>
           </div>
-          <Button
-            data-testid="admin-logout-button"
-            onClick={onLogout}
-            variant="outline"
-            className="flex items-center gap-2"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-2">
+            {(user.email === "arjuna@mddrc.com.my" || user.role === "super_admin") && (
+              <Button
+                data-testid="superadmin-portal-button"
+                onClick={() => navigate('/superadmin')}
+                variant="outline"
+                className="flex items-center gap-2 border-red-600 text-red-600 hover:bg-red-50"
+              >
+                <Shield className="w-4 h-4" />
+                Super Admin
+              </Button>
+            )}
+            <Button
+              data-testid="admin-logout-button"
+              onClick={onLogout}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </Button>
+          </div>
         </div>
       </header>
 
