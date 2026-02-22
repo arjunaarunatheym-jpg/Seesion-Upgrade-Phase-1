@@ -10,15 +10,17 @@ Collections:
 - journal_entry_counters: Atomic journal numbering
 - accounting_audit_log: Audit trail
 
-Endpoints: ~25
+Endpoints: ~30 (including Excel exports)
 """
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from pydantic import BaseModel, Field, ConfigDict, validator
 from pymongo import ReturnDocument
 import uuid
+import io
 
 from core import db, get_current_user, get_malaysia_time
 from models import User
