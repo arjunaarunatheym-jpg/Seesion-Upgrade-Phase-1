@@ -762,6 +762,46 @@ async def void_journal_entry_admin(
     return {"message": f"Journal entry {entry.get('journal_no')} voided"}
 
 
+@router.put("/journal-entries/{journal_id}")
+async def update_journal_entry_description(
+    journal_id: str,
+    update_data: dict,
+    reason: str = Query(..., min_length=5),
+    current_user: User = Depends(get_current_user)
+):
+    """Update journal entry description (to fix Unknown values)"""
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+    
+    entry = await db.journal_entries.find_one({"id": journal_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Journal entry not found")
+    
+    # Only allow description update
+    new_description = update_data.get("description")
+    if not new_description:
+        raise HTTPException(status_code=400, detail="Description is required")
+    
+    old_description = entry.get("description", "")
+    
+    await db.journal_entries.update_one({"id": journal_id}, {"$set": {
+        "description": new_description,
+        "updated_at": get_malaysia_time().isoformat()
+    }})
+    
+    await log_super_admin_action(
+        action="journal_description_updated",
+        entity_type="journal_entry",
+        entity_id=journal_id,
+        performed_by=current_user,
+        before_value={"description": old_description},
+        after_value={"description": new_description},
+        reason=reason
+    )
+    
+    return {"message": f"Journal entry {entry.get('journal_no')} description updated"}
+
+
 # ============ AUDIT LOG ============
 
 @router.get("/audit-log")
