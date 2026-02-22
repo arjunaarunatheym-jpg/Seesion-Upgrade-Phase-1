@@ -62,6 +62,45 @@ async def get_next_quotation_number():
     return quotation_number
 # ============ END ATOMIC COUNTER ============
 
+
+# ============ MARKETING AUDIT LOG (Improvement 2) ============
+async def log_marketing_action(
+    action: str,
+    entity_type: str,  # "quotation", "client", "lead", "discount"
+    entity_id: str,
+    changed_by: User,
+    before_value: dict = None,
+    after_value: dict = None,
+    reason: str = None,
+    details: str = None
+):
+    """Log marketing actions for audit trail
+    
+    Used for tracking:
+    - Quotation creation, status changes
+    - Discount applications
+    - Client modifications
+    - Lead stage changes
+    """
+    log_entry = {
+        "id": str(uuid.uuid4()),
+        "action": action,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "before_value": before_value,
+        "after_value": after_value,
+        "changed_by_id": changed_by.id,
+        "changed_by_name": changed_by.full_name,
+        "changed_by_email": changed_by.email,
+        "reason": reason,
+        "details": details,
+        "timestamp": get_malaysia_time().isoformat()
+    }
+    await db.marketing_audit_log.insert_one(log_entry)
+    return log_entry
+# ============ END MARKETING AUDIT LOG ============
+
+
 # Marketing Models
 class MarketingClient(BaseModel):
     model_config = ConfigDict(extra="ignore")
