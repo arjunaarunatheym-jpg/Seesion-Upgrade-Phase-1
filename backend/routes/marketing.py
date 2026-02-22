@@ -1296,8 +1296,34 @@ async def delete_lead(lead_id: str, current_user: User = Depends(get_current_use
     if current_user.role not in ["admin", "super_admin"] and lead.get("created_by") != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    await db.leads.delete_one({"id": lead_id})
-    return {"message": "Lead deleted"}
+    # Soft delete - archive the lead instead of permanent deletion
+    await db.leads.update_one(
+        {"id": lead_id},
+        {"$set": {
+            "is_archived": True,
+            "archived_at": get_malaysia_time().isoformat(),
+            "archived_by": current_user.id,
+            "archived_by_name": current_user.full_name
+        }}
+    )
+    return {"message": "Lead archived"}
+
+
+@router.post("/leads/{lead_id}/unarchive")
+async def unarchive_lead(lead_id: str, current_user: User = Depends(get_current_user)):
+    """Unarchive a lead (Admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    await db.leads.update_one(
+        {"id": lead_id},
+        {"$set": {"is_archived": False}, "$unset": {"archived_at": "", "archived_by": "", "archived_by_name": ""}}
+    )
+    return {"message": "Lead restored"}
 
 
 @router.post("/leads/{lead_id}/revive")
