@@ -214,7 +214,7 @@ async def get_profit_loss_report(
         except:
             pass
     
-    # Process session expenses
+    # Process session expenses - ACTUALS ONLY (Improvement 2)
     for exp in all_session_expenses:
         try:
             session_id = exp.get("session_id")
@@ -222,7 +222,10 @@ async def get_profit_loss_report(
             if not session_date or not session_date.startswith(str(year)):
                 continue
             exp_month = int(session_date[5:7]) if len(session_date) >= 7 else 1
-            amount = float(exp.get("actual_amount") or exp.get("estimated_amount") or exp.get("amount") or 0)
+            # ACTUALS ONLY: Only use actual_amount, never fall back to estimated
+            # If actual_amount is 0 or missing, expense is not counted
+            # This is expected behavior per user requirement
+            amount = float(exp.get("actual_amount") or 0)
             monthly_data[exp_month]["expenses"]["session_expenses"] += amount
         except:
             pass
