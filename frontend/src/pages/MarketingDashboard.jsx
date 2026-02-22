@@ -719,7 +719,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
               leads={leads}
               onRefresh={loadData}
               formatCurrency={formatCurrency}
-              isAdmin={false}
+              isAdmin={user?.role === 'admin' || user?.role === 'super_admin'}
               onCreateQuotation={handleCreateQuotationFromLead}
               quotations={quotations}
               onViewQuotation={viewQuotationDetails}
