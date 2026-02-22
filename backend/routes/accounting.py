@@ -92,32 +92,6 @@ def round_money(value: float) -> float:
     return float(Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
 
 
-async def log_accounting_action(
-    action: str,
-    entity_type: str,
-    entity_id: str,
-    performed_by: User,
-    before_value: dict = None,
-    after_value: dict = None,
-    reason: str = None
-):
-    """Log accounting actions for audit trail"""
-    log_entry = {
-        "id": str(uuid.uuid4()),
-        "action": action,
-        "entity_type": entity_type,
-        "entity_id": entity_id,
-        "before_value": before_value,
-        "after_value": after_value,
-        "performed_by": performed_by.id,
-        "performed_by_name": performed_by.full_name,
-        "reason": reason,
-        "timestamp": get_malaysia_time().isoformat()
-    }
-    await db.accounting_audit_log.insert_one(log_entry)
-    return log_entry
-
-
 async def get_next_journal_number(entry_date: str) -> str:
     """
     Generate atomic, unique journal entry number.
