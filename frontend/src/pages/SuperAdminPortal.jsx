@@ -408,6 +408,9 @@ const SuperAdminPortal = () => {
           <TabsTrigger value="quotations" className="flex items-center gap-1" onClick={loadQuotations}>
             <FileSpreadsheet className="w-4 h-4" /> Quotations
           </TabsTrigger>
+          <TabsTrigger value="session-data" className="flex items-center gap-1">
+            <Activity className="w-4 h-4" /> Session Data
+          </TabsTrigger>
           <TabsTrigger value="audit" className="flex items-center gap-1" onClick={loadAuditLog}>
             <Clock className="w-4 h-4" /> Audit Log
           </TabsTrigger>
