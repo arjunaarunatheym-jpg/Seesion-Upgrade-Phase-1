@@ -60,9 +60,20 @@ async def get_profit_loss_report(
 ):
     """Get Profit/Loss report - monthly breakdown and YTD
     
-    IMPORTANT: All session-related expenses (trainer fees, coordinator fees, 
-    marketing commissions, session expenses) are attributed to the month based 
-    on the SESSION'S START DATE, not the record's created_at date.
+    REVENUE RECOGNITION (Improvement 2 - Accrual Basis):
+    - Revenue is recognized when:
+      * session.completion_status = "completed" AND
+      * invoice.status IN ["issued", "partial", "paid"]
+    - SST/Tax is excluded from revenue (gross revenue = total - tax)
+    - If session.completion_status is missing (backward compatibility), treat as eligible
+    
+    EXPENSE POLICY (Improvement 2 - Actuals Only):
+    - Session expenses use ONLY actual_amount
+    - No fallback to estimated_amount
+    - This may show higher profit if actuals not entered (expected behavior)
+    
+    All session-related expenses are attributed to the month based on 
+    the SESSION'S START DATE, not the record's created_at date.
     """
     if current_user.role not in ["admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -74,14 +85,18 @@ async def get_profit_loss_report(
     end_date = f"{year}-12-31"
     
     # Get sessions for the year to map expenses to correct months
+    # Include completion_status for revenue recognition
     sessions = await db.sessions.find({
         "start_date": {"$gte": start_date, "$lte": end_date}
-    }, {"_id": 0, "id": 1, "start_date": 1, "invoice_id": 1}).to_list(10000)
+    }, {"_id": 0, "id": 1, "start_date": 1, "invoice_id": 1, "completion_status": 1}).to_list(10000)
     
     session_date_map = {}
+    session_completion_map = {}  # Track completion status
     invoice_session_map = {}
     for s in sessions:
         session_date_map[s.get("id")] = s.get("start_date", "")
+        # Backward compatibility: missing completion_status is treated as eligible (completed)
+        session_completion_map[s.get("id")] = s.get("completion_status", "completed")
         if s.get("invoice_id"):
             invoice_session_map[s.get("invoice_id")] = s.get("id")
     
@@ -110,25 +125,40 @@ async def get_profit_loss_report(
             "net_profit": 0
         }
     
-    # Process invoices (income)
+    # ELIGIBLE invoice statuses for revenue recognition
+    REVENUE_INVOICE_STATUSES = ["issued", "partial", "paid"]
+    
+    # Process invoices (income) - with revenue recognition rules
     for inv in invoices:
         try:
-            if inv.get("status") not in ["approved", "paid"]:
+            # REVENUE RECOGNITION: Only count invoices in eligible statuses
+            if inv.get("status") not in REVENUE_INVOICE_STATUSES:
                 continue
-            amount = float(inv.get("total_amount") or inv.get("amount") or 0)
-            inv_id = inv.get("id")
             
+            inv_id = inv.get("id")
             session_id = invoice_session_map.get(inv_id)
+            
+            # REVENUE RECOGNITION: Session must be completed (or missing status for backward compat)
+            if session_id:
+                completion_status = session_completion_map.get(session_id, "completed")
+                if completion_status != "completed":
+                    continue  # Session not completed - don't recognize revenue
+            
+            # Calculate gross revenue (exclude SST/tax)
+            total_amount = float(inv.get("total_amount") or inv.get("amount") or 0)
+            tax_amount = float(inv.get("tax_amount") or inv.get("sst_amount") or 0)
+            gross_revenue = total_amount - tax_amount
+            
             if session_id and session_id in session_date_map:
                 session_date = session_date_map[session_id]
                 if session_date.startswith(str(year)):
                     inv_month = int(session_date[5:7])
-                    monthly_data[inv_month]["income"]["invoices"] += amount
+                    monthly_data[inv_month]["income"]["invoices"] += gross_revenue
             else:
                 inv_date = inv.get("created_at", "")[:10]
                 if inv_date.startswith(str(year)):
                     inv_month = int(inv_date[5:7]) if len(inv_date) >= 7 else 1
-                    monthly_data[inv_month]["income"]["invoices"] += amount
+                    monthly_data[inv_month]["income"]["invoices"] += gross_revenue
         except:
             pass
     
