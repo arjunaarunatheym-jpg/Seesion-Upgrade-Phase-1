@@ -927,6 +927,176 @@ const SuperAdminPortal = () => {
           </Card>
         </TabsContent>
 
+        {/* Session Data Entry Tab */}
+        <TabsContent value="session-data">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="w-5 h-5" />
+                  Session Data Entry (Attendance, Test Results, Feedback)
+                </CardTitle>
+              </div>
+              <CardDescription>
+                Select a session to enter attendance, pre/post test results, and feedback data
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Session Selector */}
+              <div className="mb-6">
+                <Label className="mb-2 block">Select Session</Label>
+                <div className="flex gap-2">
+                  <Select 
+                    value={selectedSessionForData?.id || ''} 
+                    onValueChange={(sessionId) => sessionId && loadSessionData(sessionId)}
+                  >
+                    <SelectTrigger className="w-full max-w-md">
+                      <SelectValue placeholder="Choose a session..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sessions.map(session => (
+                        <SelectItem key={session.id} value={session.id}>
+                          {session.name} - {session.company_name} ({formatDate(session.start_date)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" onClick={loadSessions}>
+                    <RefreshCw className="w-4 h-4 mr-1" /> Load Sessions
+                  </Button>
+                </div>
+              </div>
+
+              {/* Session Data Entry Form */}
+              {selectedSessionForData && (
+                <div className="space-y-6">
+                  {/* Session Info */}
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-lg">{selectedSessionForData.name}</h3>
+                    <p className="text-sm text-gray-600">
+                      Company: {selectedSessionForData.company_name} | 
+                      Date: {formatDate(selectedSessionForData.start_date)} | 
+                      Participants: {sessionParticipants.length}
+                    </p>
+                  </div>
+
+                  {/* Attendance & Test Results Table */}
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-semibold">Participant Data</h4>
+                      <Button onClick={saveBulkAttendance} disabled={loading}>
+                        {loading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-1" />}
+                        Save All Attendance
+                      </Button>
+                    </div>
+                    
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Participant Name</TableHead>
+                          <TableHead>IC Number</TableHead>
+                          <TableHead className="text-center">Attendance</TableHead>
+                          <TableHead className="text-center">Pre-Test Score</TableHead>
+                          <TableHead className="text-center">Post-Test Score</TableHead>
+                          <TableHead>Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sessionParticipants.map(participant => (
+                          <TableRow key={participant.id}>
+                            <TableCell className="font-medium">{participant.full_name}</TableCell>
+                            <TableCell>{participant.ic_number || '-'}</TableCell>
+                            <TableCell className="text-center">
+                              <input
+                                type="checkbox"
+                                checked={attendanceData[participant.id]?.present ?? true}
+                                onChange={(e) => setAttendanceData(prev => ({
+                                  ...prev,
+                                  [participant.id]: { ...prev[participant.id], present: e.target.checked }
+                                }))}
+                                className="w-5 h-5"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  placeholder="0-100"
+                                  className="w-20 text-center"
+                                  value={testResultsData[participant.id]?.pre_test_score || ''}
+                                  onChange={(e) => setTestResultsData(prev => ({
+                                    ...prev,
+                                    [participant.id]: { ...prev[participant.id], pre_test_score: e.target.value }
+                                  }))}
+                                />
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => saveTestResult(participant.id, 'pre')}
+                                >
+                                  Save
+                                </Button>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  placeholder="0-100"
+                                  className="w-20 text-center"
+                                  value={testResultsData[participant.id]?.post_test_score || ''}
+                                  onChange={(e) => setTestResultsData(prev => ({
+                                    ...prev,
+                                    [participant.id]: { ...prev[participant.id], post_test_score: e.target.value }
+                                  }))}
+                                />
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => saveTestResult(participant.id, 'post')}
+                                >
+                                  Save
+                                </Button>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => saveAttendance(participant.id)}
+                              >
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {sessionParticipants.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      No participants found for this session. Add participants first.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!selectedSessionForData && (
+                <div className="text-center py-12 text-gray-500">
+                  <Activity className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Select a session above to enter attendance, test results, and feedback data.</p>
+                  <p className="text-sm mt-2">Click "Load Sessions" first if the dropdown is empty.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Audit Log Tab */}
         <TabsContent value="audit">
           <Card>
