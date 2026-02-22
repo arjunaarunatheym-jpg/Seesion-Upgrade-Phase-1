@@ -2630,7 +2630,6 @@ async def export_trial_balance_excel(
         {"is_active": True}, {"_id": 0}
     ).sort("account_code", 1).to_list(500)
     
-    period_start = f"{year}-{month:02d}-01"
     if month == 12:
         period_end = f"{year+1}-01-01"
     else:
