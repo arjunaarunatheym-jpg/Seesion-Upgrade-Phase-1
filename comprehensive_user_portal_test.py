@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 import uuid
 
 # Configuration
-BASE_URL = "https://lead-to-session.preview.emergentagent.com/api"
+BASE_URL = "https://payment-accuracy.preview.emergentagent.com/api"
 
 # Test Credentials
 TEST_CREDENTIALS = {

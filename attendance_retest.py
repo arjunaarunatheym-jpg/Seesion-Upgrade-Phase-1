@@ -16,7 +16,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://lead-to-session.preview.emergentagent.com/api"
+BASE_URL = "https://payment-accuracy.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@example.com"
 ADMIN_PASSWORD = "admin123"
 
