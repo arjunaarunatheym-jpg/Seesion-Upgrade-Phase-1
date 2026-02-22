@@ -59,6 +59,13 @@ const SuperAdminPortal = () => {
   // Settings
   const [systemSettings, setSystemSettings] = useState(null);
   
+  // Session Data Entry
+  const [selectedSessionForData, setSelectedSessionForData] = useState(null);
+  const [sessionParticipants, setSessionParticipants] = useState([]);
+  const [sessionTests, setSessionTests] = useState([]);
+  const [attendanceData, setAttendanceData] = useState({});
+  const [testResultsData, setTestResultsData] = useState({});
+  
   // Edit Dialogs
   const [editUserDialog, setEditUserDialog] = useState({ open: false, user: null });
   const [editSessionDialog, setEditSessionDialog] = useState({ open: false, session: null });
