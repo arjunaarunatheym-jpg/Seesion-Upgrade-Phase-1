@@ -1993,6 +1993,11 @@ const FinanceDashboard = ({ user, onLogout }) => {
               setSocialMediaLinks={setSocialMediaLinks}
             />
           </TabsContent>
+
+          {/* Accounting Tab */}
+          <TabsContent value="accounting">
+            <AccountingTab />
+          </TabsContent>
         </Tabs>
       </main>
 
