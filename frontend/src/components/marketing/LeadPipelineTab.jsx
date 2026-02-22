@@ -286,10 +286,10 @@ const LeadPipelineTab = ({
           </button>
           <button 
             onClick={() => handleDelete(lead.id)}
-            className="p-1 hover:bg-red-100 rounded"
-            title="Delete"
+            className="p-1 hover:bg-orange-100 rounded"
+            title="Archive"
           >
-            <Trash2 className="w-3 h-3 text-red-500" />
+            <Trash2 className="w-3 h-3 text-orange-500" />
           </button>
         </div>
       </div>
