@@ -187,6 +187,933 @@ async def validate_journal_accounts(lines: List[JournalLine]) -> List[dict]:
     return enriched_lines
 
 
+# ============ PHASE 2: AUTO-POSTING FUNCTIONS ============
+
+async def get_accounting_settings():
+    """Get accounting settings with defaults"""
+    settings = await db.accounting_settings.find_one({"id": "accounting_settings"}, {"_id": 0})
+    if not settings:
+        # Return defaults if not initialized
+        return {
+            "use_deferred_revenue": True,
+            "auto_post_invoices": True,
+            "auto_post_payments": True,
+            "auto_post_expenses": True,
+            "auto_post_payroll": True,
+            "default_bank_account": "1000",
+            "default_ar_account": "1100",
+            "default_ap_account": "2100",
+            "default_revenue_account": "4000",
+            "default_deferred_revenue_account": "2300",
+            "default_sst_account": "2200",
+            "accounting_start_date": "2026-01-01"
+        }
+    return settings
+
+
+async def create_auto_journal_entry(
+    entry_date: str,
+    description: str,
+    source_module: str,
+    source_id: str,
+    source_reference: str,
+    lines: list,
+    created_by_id: str = "system",
+    created_by_name: str = "System Auto-Post"
+) -> dict:
+    """
+    Create and post a journal entry automatically from a source module.
+    
+    Idempotent: Checks if entry already exists for source_id to prevent duplicates.
+    
+    Args:
+        entry_date: Date in YYYY-MM-DD format
+        description: Journal description
+        source_module: invoice, payment, credit_note, expense, payroll
+        source_id: ID of the source document
+        source_reference: Human-readable reference (e.g., invoice number)
+        lines: List of dicts with account_code, debit, credit, memo
+        created_by_id: User ID who triggered the action
+        created_by_name: User name for display
+    
+    Returns:
+        Created journal entry dict or existing entry if duplicate
+    """
+    # IDEMPOTENCY CHECK: Don't create duplicate entries
+    existing = await db.journal_entries.find_one({
+        "source_module": source_module,
+        "source_id": source_id,
+        "status": {"$ne": "voided"}
+    }, {"_id": 0})
+    
+    if existing:
+        return {"message": "Journal entry already exists", "journal_entry": existing, "is_duplicate": True}
+    
+    # Check if period is open
+    if not await check_period_open(entry_date):
+        return {"error": f"Cannot post to closed period: {entry_date[:7]}", "journal_entry": None}
+    
+    # Check accounting start date
+    settings = await get_accounting_settings()
+    start_date = settings.get("accounting_start_date", "2026-01-01")
+    if entry_date < start_date:
+        return {"error": f"Date {entry_date} is before accounting start date {start_date}", "journal_entry": None}
+    
+    # Validate and enrich lines
+    enriched_lines = []
+    for i, line in enumerate(lines):
+        account = await get_account_by_code(line["account_code"])
+        if not account:
+            return {"error": f"Account {line['account_code']} not found", "journal_entry": None}
+        
+        enriched_lines.append({
+            "line_no": i + 1,
+            "account_code": line["account_code"],
+            "account_name": account["account_name"],
+            "account_type": account["account_type"],
+            "debit": round_money(line.get("debit", 0)),
+            "credit": round_money(line.get("credit", 0)),
+            "memo": line.get("memo", "")
+        })
+    
+    # Calculate totals
+    total_debit = round_money(sum(line["debit"] for line in enriched_lines))
+    total_credit = round_money(sum(line["credit"] for line in enriched_lines))
+    
+    # Validate balanced
+    if abs(total_debit - total_credit) > 0.01:
+        return {"error": f"Unbalanced entry: DR {total_debit} != CR {total_credit}", "journal_entry": None}
+    
+    # Generate journal number
+    journal_no = await get_next_journal_number(entry_date)
+    
+    now = get_malaysia_time().isoformat()
+    journal_entry = {
+        "id": str(uuid.uuid4()),
+        "journal_no": journal_no,
+        "date": entry_date,
+        "description": description,
+        "source_module": source_module,
+        "source_id": source_id,
+        "source_reference": source_reference,
+        "status": "posted",  # Auto-posted
+        "lines": enriched_lines,
+        "total_debit": total_debit,
+        "total_credit": total_credit,
+        "is_balanced": True,
+        "created_by": created_by_id,
+        "created_by_name": created_by_name,
+        "posted_by": "system",
+        "posted_by_name": "System Auto-Post",
+        "posted_at": now,
+        "voided_by": None,
+        "voided_at": None,
+        "void_reason": None,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.journal_entries.insert_one(journal_entry)
+    
+    # Log the action
+    await log_accounting_action(
+        action="journal_auto_posted",
+        entity_type="journal_entry",
+        entity_id=journal_entry["id"],
+        performed_by_id=created_by_id,
+        performed_by_name=created_by_name,
+        after_value={
+            "journal_no": journal_no, 
+            "source_module": source_module,
+            "source_reference": source_reference,
+            "total_debit": total_debit
+        }
+    )
+    
+    journal_entry.pop("_id", None)
+    return {"message": "Journal entry auto-posted", "journal_entry": journal_entry, "is_duplicate": False}
+
+
+async def log_accounting_action(
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    performed_by_id: str = None,
+    performed_by_name: str = None,
+    performed_by: "User" = None,
+    before_value: dict = None,
+    after_value: dict = None,
+    reason: str = None
+):
+    """Log accounting actions for audit trail - supports both User object and ID/name"""
+    if performed_by:
+        performed_by_id = performed_by.id
+        performed_by_name = performed_by.full_name
+    
+    log_entry = {
+        "id": str(uuid.uuid4()),
+        "action": action,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "before_value": before_value,
+        "after_value": after_value,
+        "performed_by": performed_by_id or "system",
+        "performed_by_name": performed_by_name or "System",
+        "reason": reason,
+        "timestamp": get_malaysia_time().isoformat()
+    }
+    await db.accounting_audit_log.insert_one(log_entry)
+    return log_entry
+
+
+# ============ AUTO-POSTING: INVOICE ISSUED ============
+
+async def post_invoice_issued(
+    invoice: dict,
+    session: dict = None,
+    user_id: str = "system",
+    user_name: str = "System"
+) -> dict:
+    """
+    Create journal entry when invoice is issued.
+    
+    Revenue Recognition Rules:
+    - If session.completion_status == "completed": Post to Revenue
+    - If session not completed: Post to Deferred Revenue
+    
+    Journal Entry:
+    DR 1100 Accounts Receivable     [total_amount]
+    CR 4000 Training Revenue        [total_amount - tax_amount] (if completed)
+    CR 2300 Deferred Revenue        [total_amount - tax_amount] (if not completed)
+    CR 2200 SST Payable             [tax_amount]
+    """
+    settings = await get_accounting_settings()
+    if not settings.get("auto_post_invoices", True):
+        return {"message": "Auto-posting invoices is disabled", "journal_entry": None}
+    
+    invoice_id = invoice.get("id")
+    invoice_number = invoice.get("invoice_number", "Unknown")
+    total_amount = round_money(float(invoice.get("total_amount", 0)))
+    tax_amount = round_money(float(invoice.get("tax_amount") or invoice.get("sst_amount") or 0))
+    revenue_amount = round_money(total_amount - tax_amount)
+    
+    # Determine invoice date
+    invoice_date = invoice.get("invoice_date") or invoice.get("created_at", "")[:10]
+    if not invoice_date or len(invoice_date) < 10:
+        invoice_date = get_malaysia_time().strftime("%Y-%m-%d")
+    
+    # Get session completion status for revenue recognition
+    is_completed = True  # Default to completed if no session
+    if session:
+        completion_status = session.get("completion_status", "completed")
+        is_completed = completion_status == "completed"
+    elif invoice.get("session_id"):
+        # Fetch session if not provided
+        session = await db.sessions.find_one({"id": invoice.get("session_id")}, {"_id": 0, "completion_status": 1})
+        if session:
+            is_completed = session.get("completion_status", "completed") == "completed"
+    
+    # Determine revenue account based on completion status
+    if is_completed:
+        revenue_account = settings.get("default_revenue_account", "4000")
+        revenue_description = "Training Revenue"
+    else:
+        revenue_account = settings.get("default_deferred_revenue_account", "2300")
+        revenue_description = "Deferred Revenue (Pending Session Completion)"
+    
+    # Get client/company name for memo
+    company_name = invoice.get("bill_to_name") or invoice.get("company_name") or "Unknown Client"
+    
+    # Build journal lines
+    lines = [
+        {
+            "account_code": settings.get("default_ar_account", "1100"),
+            "debit": total_amount,
+            "credit": 0,
+            "memo": f"AR - {company_name}"
+        },
+        {
+            "account_code": revenue_account,
+            "debit": 0,
+            "credit": revenue_amount,
+            "memo": revenue_description
+        }
+    ]
+    
+    # Add SST line if applicable
+    if tax_amount > 0:
+        lines.append({
+            "account_code": settings.get("default_sst_account", "2200"),
+            "debit": 0,
+            "credit": tax_amount,
+            "memo": "SST Payable (6%)"
+        })
+    
+    result = await create_auto_journal_entry(
+        entry_date=invoice_date,
+        description=f"Invoice {invoice_number} issued to {company_name}",
+        source_module="invoice",
+        source_id=invoice_id,
+        source_reference=invoice_number,
+        lines=lines,
+        created_by_id=user_id,
+        created_by_name=user_name
+    )
+    
+    # Store deferred revenue flag on invoice for later recognition
+    if not is_completed and result.get("journal_entry"):
+        await db.invoices.update_one(
+            {"id": invoice_id},
+            {"$set": {"has_deferred_revenue": True, "deferred_revenue_amount": revenue_amount}}
+        )
+    
+    return result
+
+
+# ============ AUTO-POSTING: SESSION COMPLETED (Revenue Recognition) ============
+
+async def post_session_completed_revenue(
+    session_id: str,
+    user_id: str = "system",
+    user_name: str = "System"
+) -> list:
+    """
+    Recognize deferred revenue when session is completed.
+    
+    Finds all invoices with deferred revenue and creates journal entries:
+    DR 2300 Deferred Revenue        [deferred_amount]
+    CR 4000 Training Revenue        [deferred_amount]
+    """
+    settings = await get_accounting_settings()
+    
+    # Find invoices with deferred revenue for this session
+    invoices = await db.invoices.find({
+        "session_id": session_id,
+        "has_deferred_revenue": True,
+        "status": {"$in": ["issued", "partial", "paid"]}
+    }, {"_id": 0}).to_list(100)
+    
+    if not invoices:
+        return []
+    
+    results = []
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0, "name": 1, "start_date": 1})
+    session_name = session.get("name", "Unknown") if session else "Unknown"
+    recognition_date = get_malaysia_time().strftime("%Y-%m-%d")
+    
+    for invoice in invoices:
+        deferred_amount = round_money(float(invoice.get("deferred_revenue_amount", 0)))
+        if deferred_amount <= 0:
+            continue
+        
+        invoice_number = invoice.get("invoice_number", "Unknown")
+        
+        lines = [
+            {
+                "account_code": settings.get("default_deferred_revenue_account", "2300"),
+                "debit": deferred_amount,
+                "credit": 0,
+                "memo": f"Deferred Revenue recognized - {invoice_number}"
+            },
+            {
+                "account_code": settings.get("default_revenue_account", "4000"),
+                "debit": 0,
+                "credit": deferred_amount,
+                "memo": f"Training Revenue - Session {session_name}"
+            }
+        ]
+        
+        result = await create_auto_journal_entry(
+            entry_date=recognition_date,
+            description=f"Revenue recognition for {invoice_number} - Session completed: {session_name}",
+            source_module="revenue_recognition",
+            source_id=f"{invoice.get('id')}_recognition",
+            source_reference=f"RR-{invoice_number}",
+            lines=lines,
+            created_by_id=user_id,
+            created_by_name=user_name
+        )
+        
+        if result.get("journal_entry") and not result.get("is_duplicate"):
+            # Mark invoice as revenue recognized
+            await db.invoices.update_one(
+                {"id": invoice.get("id")},
+                {"$set": {"has_deferred_revenue": False, "revenue_recognized_at": recognition_date}}
+            )
+        
+        results.append(result)
+    
+    return results
+
+
+# ============ AUTO-POSTING: PAYMENT RECEIVED ============
+
+async def post_payment_received(
+    payment: dict,
+    invoice: dict = None,
+    user_id: str = "system",
+    user_name: str = "System"
+) -> dict:
+    """
+    Create journal entry when payment is received.
+    
+    Journal Entry:
+    DR 1000 Cash at Bank            [amount]
+    CR 1100 Accounts Receivable     [amount]
+    """
+    settings = await get_accounting_settings()
+    if not settings.get("auto_post_payments", True):
+        return {"message": "Auto-posting payments is disabled", "journal_entry": None}
+    
+    payment_id = payment.get("id")
+    payment_reference = payment.get("reference_number") or payment.get("id", "")[:8]
+    amount = round_money(float(payment.get("amount", 0)))
+    
+    # Get payment date
+    payment_date = payment.get("payment_date") or payment.get("created_at", "")[:10]
+    if not payment_date or len(payment_date) < 10:
+        payment_date = get_malaysia_time().strftime("%Y-%m-%d")
+    
+    # Get invoice details if not provided
+    if not invoice and payment.get("invoice_id"):
+        invoice = await db.invoices.find_one({"id": payment.get("invoice_id")}, {"_id": 0})
+    
+    invoice_number = invoice.get("invoice_number", "Unknown") if invoice else "Unknown"
+    company_name = invoice.get("bill_to_name", "Unknown") if invoice else "Unknown"
+    
+    lines = [
+        {
+            "account_code": settings.get("default_bank_account", "1000"),
+            "debit": amount,
+            "credit": 0,
+            "memo": f"Payment received - {payment_reference}"
+        },
+        {
+            "account_code": settings.get("default_ar_account", "1100"),
+            "debit": 0,
+            "credit": amount,
+            "memo": f"AR reduction - {invoice_number}"
+        }
+    ]
+    
+    result = await create_auto_journal_entry(
+        entry_date=payment_date,
+        description=f"Payment received for {invoice_number} from {company_name}",
+        source_module="payment",
+        source_id=payment_id,
+        source_reference=f"PMT-{payment_reference}",
+        lines=lines,
+        created_by_id=user_id,
+        created_by_name=user_name
+    )
+    
+    return result
+
+
+# ============ AUTO-POSTING: CREDIT NOTE ISSUED ============
+
+async def post_credit_note_issued(
+    credit_note: dict,
+    user_id: str = "system",
+    user_name: str = "System"
+) -> dict:
+    """
+    Create journal entry when credit note is issued.
+    
+    Journal Entry (reverses invoice):
+    DR 4000 Training Revenue        [amount - tax]
+    DR 2200 SST Payable             [tax]
+    CR 1100 Accounts Receivable     [amount]
+    """
+    settings = await get_accounting_settings()
+    
+    cn_id = credit_note.get("id")
+    cn_number = credit_note.get("credit_note_number", "Unknown")
+    amount = round_money(float(credit_note.get("amount", 0)))
+    tax_amount = round_money(float(credit_note.get("tax_amount") or 0))
+    revenue_amount = round_money(amount - tax_amount)
+    
+    # Get CN date
+    cn_date = credit_note.get("date") or credit_note.get("created_at", "")[:10]
+    if not cn_date or len(cn_date) < 10:
+        cn_date = get_malaysia_time().strftime("%Y-%m-%d")
+    
+    company_name = credit_note.get("company_name", "Unknown")
+    reason = credit_note.get("reason", "")
+    
+    lines = [
+        {
+            "account_code": settings.get("default_revenue_account", "4000"),
+            "debit": revenue_amount,
+            "credit": 0,
+            "memo": f"Revenue reversal - {reason}"
+        },
+        {
+            "account_code": settings.get("default_ar_account", "1100"),
+            "debit": 0,
+            "credit": amount,
+            "memo": f"AR reduction - CN to {company_name}"
+        }
+    ]
+    
+    # Add SST reversal if applicable
+    if tax_amount > 0:
+        lines.insert(1, {
+            "account_code": settings.get("default_sst_account", "2200"),
+            "debit": tax_amount,
+            "credit": 0,
+            "memo": "SST reversal"
+        })
+    
+    result = await create_auto_journal_entry(
+        entry_date=cn_date,
+        description=f"Credit Note {cn_number} issued to {company_name} - {reason}",
+        source_module="credit_note",
+        source_id=cn_id,
+        source_reference=cn_number,
+        lines=lines,
+        created_by_id=user_id,
+        created_by_name=user_name
+    )
+    
+    return result
+
+
+# ============ AUTO-POSTING: EXPENSE RECORDED ============
+
+async def post_expense_recorded(
+    expense: dict,
+    expense_type: str = "session",  # session, petty_cash, manual
+    user_id: str = "system",
+    user_name: str = "System"
+) -> dict:
+    """
+    Create journal entry when expense is recorded.
+    
+    Journal Entry:
+    DR 5xxx Expense Account         [amount]
+    CR 1000 Cash at Bank            [amount] (if paid)
+    CR 2100 Accounts Payable        [amount] (if not paid)
+    """
+    settings = await get_accounting_settings()
+    if not settings.get("auto_post_expenses", True):
+        return {"message": "Auto-posting expenses is disabled", "journal_entry": None}
+    
+    expense_id = expense.get("id")
+    amount = round_money(float(expense.get("actual_amount") or expense.get("amount") or 0))
+    
+    if amount <= 0:
+        return {"message": "No amount to post", "journal_entry": None}
+    
+    # Get expense date
+    expense_date = expense.get("date") or expense.get("created_at", "")[:10]
+    if not expense_date or len(expense_date) < 10:
+        expense_date = get_malaysia_time().strftime("%Y-%m-%d")
+    
+    # Determine expense account based on type/category
+    expense_category = expense.get("category", "").lower()
+    expense_account = "6400"  # Default: Office Expenses
+    
+    category_mapping = {
+        "trainer": "5000",
+        "coordinator": "5100",
+        "marketing": "5200",
+        "materials": "5300",
+        "training materials": "5300",
+        "venue": "5400",
+        "logistics": "5400",
+        "transport": "5500",
+        "transportation": "5500",
+        "salary": "6000",
+        "wages": "6000",
+        "office": "6400",
+        "utilities": "6500",
+        "petty cash": "6600",
+    }
+    
+    for key, code in category_mapping.items():
+        if key in expense_category:
+            expense_account = code
+            break
+    
+    # Determine if paid (use bank) or unpaid (use AP)
+    is_paid = expense.get("status") == "paid" or expense.get("is_paid", True)
+    credit_account = settings.get("default_bank_account", "1000") if is_paid else settings.get("default_ap_account", "2100")
+    credit_memo = "Cash payment" if is_paid else "Accounts Payable"
+    
+    description_text = expense.get("description") or expense.get("name") or "Expense"
+    
+    lines = [
+        {
+            "account_code": expense_account,
+            "debit": amount,
+            "credit": 0,
+            "memo": description_text[:100]
+        },
+        {
+            "account_code": credit_account,
+            "debit": 0,
+            "credit": amount,
+            "memo": credit_memo
+        }
+    ]
+    
+    # Build source reference
+    if expense_type == "petty_cash":
+        source_ref = f"PC-{expense_id[:8]}"
+    else:
+        source_ref = f"EXP-{expense_id[:8]}"
+    
+    result = await create_auto_journal_entry(
+        entry_date=expense_date,
+        description=f"Expense: {description_text[:50]}",
+        source_module=f"expense_{expense_type}",
+        source_id=expense_id,
+        source_reference=source_ref,
+        lines=lines,
+        created_by_id=user_id,
+        created_by_name=user_name
+    )
+    
+    return result
+
+
+# ============ AUTO-POSTING: TRAINER FEE RECORDED ============
+
+async def post_trainer_fee(
+    trainer_fee: dict,
+    session: dict = None,
+    user_id: str = "system",
+    user_name: str = "System"
+) -> dict:
+    """
+    Create journal entry when trainer fee is recorded.
+    
+    Journal Entry:
+    DR 5000 Trainer Fees            [amount]
+    CR 2100 Accounts Payable        [amount]
+    """
+    settings = await get_accounting_settings()
+    
+    fee_id = trainer_fee.get("id")
+    amount = round_money(float(trainer_fee.get("fee_amount") or 0))
+    
+    if amount <= 0:
+        return {"message": "No amount to post", "journal_entry": None}
+    
+    # Get session date
+    if session:
+        fee_date = session.get("start_date", "")[:10]
+    elif trainer_fee.get("session_id"):
+        session = await db.sessions.find_one({"id": trainer_fee.get("session_id")}, {"_id": 0, "start_date": 1, "name": 1})
+        fee_date = session.get("start_date", "")[:10] if session else get_malaysia_time().strftime("%Y-%m-%d")
+    else:
+        fee_date = get_malaysia_time().strftime("%Y-%m-%d")
+    
+    trainer_name = trainer_fee.get("trainer_name", "Unknown Trainer")
+    session_name = session.get("name", "Unknown Session") if session else "Unknown Session"
+    
+    lines = [
+        {
+            "account_code": "5000",  # Trainer Fees
+            "debit": amount,
+            "credit": 0,
+            "memo": f"Trainer: {trainer_name}"
+        },
+        {
+            "account_code": settings.get("default_ap_account", "2100"),
+            "debit": 0,
+            "credit": amount,
+            "memo": f"Payable to {trainer_name}"
+        }
+    ]
+    
+    result = await create_auto_journal_entry(
+        entry_date=fee_date,
+        description=f"Trainer fee - {trainer_name} for {session_name}",
+        source_module="trainer_fee",
+        source_id=fee_id,
+        source_reference=f"TF-{fee_id[:8]}",
+        lines=lines,
+        created_by_id=user_id,
+        created_by_name=user_name
+    )
+    
+    return result
+
+
+# ============ AUTO-POSTING: COORDINATOR FEE RECORDED ============
+
+async def post_coordinator_fee(
+    coordinator_fee: dict,
+    session: dict = None,
+    user_id: str = "system",
+    user_name: str = "System"
+) -> dict:
+    """
+    Create journal entry when coordinator fee is recorded.
+    
+    Journal Entry:
+    DR 5100 Coordinator Fees        [amount]
+    CR 2100 Accounts Payable        [amount]
+    """
+    settings = await get_accounting_settings()
+    
+    fee_id = coordinator_fee.get("id")
+    amount = round_money(float(coordinator_fee.get("total_fee") or 0))
+    
+    if amount <= 0:
+        return {"message": "No amount to post", "journal_entry": None}
+    
+    # Get session date
+    if session:
+        fee_date = session.get("start_date", "")[:10]
+    elif coordinator_fee.get("session_id"):
+        session = await db.sessions.find_one({"id": coordinator_fee.get("session_id")}, {"_id": 0, "start_date": 1, "name": 1})
+        fee_date = session.get("start_date", "")[:10] if session else get_malaysia_time().strftime("%Y-%m-%d")
+    else:
+        fee_date = get_malaysia_time().strftime("%Y-%m-%d")
+    
+    coordinator_name = coordinator_fee.get("coordinator_name", "Unknown Coordinator")
+    session_name = session.get("name", "Unknown Session") if session else "Unknown Session"
+    
+    lines = [
+        {
+            "account_code": "5100",  # Coordinator Fees
+            "debit": amount,
+            "credit": 0,
+            "memo": f"Coordinator: {coordinator_name}"
+        },
+        {
+            "account_code": settings.get("default_ap_account", "2100"),
+            "debit": 0,
+            "credit": amount,
+            "memo": f"Payable to {coordinator_name}"
+        }
+    ]
+    
+    result = await create_auto_journal_entry(
+        entry_date=fee_date,
+        description=f"Coordinator fee - {coordinator_name} for {session_name}",
+        source_module="coordinator_fee",
+        source_id=fee_id,
+        source_reference=f"CF-{fee_id[:8]}",
+        lines=lines,
+        created_by_id=user_id,
+        created_by_name=user_name
+    )
+    
+    return result
+
+
+# ============ AUTO-POSTING: MARKETING COMMISSION ============
+
+async def post_marketing_commission(
+    commission: dict,
+    session: dict = None,
+    user_id: str = "system",
+    user_name: str = "System"
+) -> dict:
+    """
+    Create journal entry when marketing commission is recorded/approved.
+    
+    Journal Entry:
+    DR 5200 Marketing Commission    [amount]
+    CR 2100 Accounts Payable        [amount]
+    """
+    settings = await get_accounting_settings()
+    
+    comm_id = commission.get("id")
+    amount = round_money(float(commission.get("calculated_amount") or commission.get("amount") or 0))
+    
+    if amount <= 0:
+        return {"message": "No amount to post", "journal_entry": None}
+    
+    # Get session date
+    if session:
+        comm_date = session.get("start_date", "")[:10]
+    elif commission.get("session_id"):
+        session = await db.sessions.find_one({"id": commission.get("session_id")}, {"_id": 0, "start_date": 1, "name": 1})
+        comm_date = session.get("start_date", "")[:10] if session else get_malaysia_time().strftime("%Y-%m-%d")
+    else:
+        comm_date = get_malaysia_time().strftime("%Y-%m-%d")
+    
+    marketer_name = commission.get("marketing_user_name", "Unknown Marketer")
+    session_name = session.get("name", "Unknown Session") if session else "Unknown Session"
+    
+    lines = [
+        {
+            "account_code": "5200",  # Marketing Commission
+            "debit": amount,
+            "credit": 0,
+            "memo": f"Commission: {marketer_name}"
+        },
+        {
+            "account_code": settings.get("default_ap_account", "2100"),
+            "debit": 0,
+            "credit": amount,
+            "memo": f"Payable to {marketer_name}"
+        }
+    ]
+    
+    result = await create_auto_journal_entry(
+        entry_date=comm_date,
+        description=f"Marketing commission - {marketer_name} for {session_name}",
+        source_module="marketing_commission",
+        source_id=comm_id,
+        source_reference=f"MC-{comm_id[:8]}",
+        lines=lines,
+        created_by_id=user_id,
+        created_by_name=user_name
+    )
+    
+    return result
+
+
+# ============ AUTO-POSTING: PAYROLL ============
+
+async def post_payroll(
+    payslip: dict,
+    user_id: str = "system",
+    user_name: str = "System"
+) -> dict:
+    """
+    Create journal entry when payroll is processed.
+    
+    Journal Entry:
+    DR 6000 Salary & Wages          [gross_salary]
+    DR 6100 EPF Employer            [epf_employer]
+    DR 6200 SOCSO Employer          [socso_employer]
+    DR 6300 EIS Employer            [eis_employer]
+    CR 2400 EPF Payable             [epf_employee + epf_employer]
+    CR 2450 SOCSO Payable           [socso_employee + socso_employer]
+    CR 2460 EIS Payable             [eis_employee + eis_employer]
+    CR 2470 PCB Payable             [pcb]
+    CR 1000 Cash at Bank            [net_pay]
+    """
+    settings = await get_accounting_settings()
+    if not settings.get("auto_post_payroll", True):
+        return {"message": "Auto-posting payroll is disabled", "journal_entry": None}
+    
+    payslip_id = payslip.get("id")
+    
+    # Get payslip amounts
+    gross_salary = round_money(float(payslip.get("gross_salary") or payslip.get("basic_salary") or 0))
+    net_pay = round_money(float(payslip.get("net_pay") or 0))
+    
+    epf_employee = round_money(float(payslip.get("epf_employee") or 0))
+    epf_employer = round_money(float(payslip.get("epf_employer") or 0))
+    socso_employee = round_money(float(payslip.get("socso_employee") or 0))
+    socso_employer = round_money(float(payslip.get("socso_employer") or 0))
+    eis_employee = round_money(float(payslip.get("eis_employee") or 0))
+    eis_employer = round_money(float(payslip.get("eis_employer") or 0))
+    pcb = round_money(float(payslip.get("pcb") or payslip.get("mtd") or 0))
+    
+    if gross_salary <= 0:
+        return {"message": "No salary to post", "journal_entry": None}
+    
+    # Get payroll date (use payment date or month-end)
+    year = payslip.get("year", 2026)
+    month = payslip.get("month", 1)
+    payroll_date = f"{year}-{str(month).zfill(2)}-28"  # Use 28th as standard payroll date
+    
+    employee_name = payslip.get("employee_name", "Unknown Employee")
+    
+    lines = []
+    
+    # Debit: Expenses
+    lines.append({
+        "account_code": "6000",  # Salary & Wages
+        "debit": gross_salary,
+        "credit": 0,
+        "memo": f"Gross salary - {employee_name}"
+    })
+    
+    if epf_employer > 0:
+        lines.append({
+            "account_code": "6100",  # EPF Employer
+            "debit": epf_employer,
+            "credit": 0,
+            "memo": "EPF employer contribution"
+        })
+    
+    if socso_employer > 0:
+        lines.append({
+            "account_code": "6200",  # SOCSO Employer
+            "debit": socso_employer,
+            "credit": 0,
+            "memo": "SOCSO employer contribution"
+        })
+    
+    if eis_employer > 0:
+        lines.append({
+            "account_code": "6300",  # EIS Employer
+            "debit": eis_employer,
+            "credit": 0,
+            "memo": "EIS employer contribution"
+        })
+    
+    # Credit: Liabilities
+    total_epf = round_money(epf_employee + epf_employer)
+    if total_epf > 0:
+        lines.append({
+            "account_code": "2400",  # EPF Payable
+            "debit": 0,
+            "credit": total_epf,
+            "memo": "EPF payable (employee + employer)"
+        })
+    
+    total_socso = round_money(socso_employee + socso_employer)
+    if total_socso > 0:
+        lines.append({
+            "account_code": "2450",  # SOCSO Payable
+            "debit": 0,
+            "credit": total_socso,
+            "memo": "SOCSO payable (employee + employer)"
+        })
+    
+    total_eis = round_money(eis_employee + eis_employer)
+    if total_eis > 0:
+        lines.append({
+            "account_code": "2460",  # EIS Payable
+            "debit": 0,
+            "credit": total_eis,
+            "memo": "EIS payable (employee + employer)"
+        })
+    
+    if pcb > 0:
+        lines.append({
+            "account_code": "2470",  # PCB Payable
+            "debit": 0,
+            "credit": pcb,
+            "memo": "PCB/MTD payable"
+        })
+    
+    # Credit: Bank (net pay)
+    lines.append({
+        "account_code": settings.get("default_bank_account", "1000"),
+        "debit": 0,
+        "credit": net_pay,
+        "memo": f"Net pay to {employee_name}"
+    })
+    
+    result = await create_auto_journal_entry(
+        entry_date=payroll_date,
+        description=f"Payroll - {employee_name} for {month}/{year}",
+        source_module="payroll",
+        source_id=payslip_id,
+        source_reference=f"PAY-{year}{str(month).zfill(2)}-{payslip_id[:6]}",
+        lines=lines,
+        created_by_id=user_id,
+        created_by_name=user_name
+    )
+    
+    return result
+
+
+# ============ END PHASE 2 AUTO-POSTING FUNCTIONS ============
+
+
 # ============ INITIALIZATION ============
 
 async def initialize_accounting_system():
