@@ -136,13 +136,13 @@ const LeadPipelineTab = ({
   };
 
   const handleDelete = async (leadId) => {
-    if (!confirm("Delete this lead?")) return;
+    if (!confirm("Archive this lead? (It will be hidden from your view but Admin can restore it)")) return;
     try {
       await axiosInstance.delete(`/marketing/leads/${leadId}`);
-      toast.success("Lead deleted");
+      toast.success("Lead archived");
       onRefresh();
     } catch (error) {
-      toast.error("Failed to delete lead");
+      toast.error(error.response?.data?.detail || "Failed to archive lead");
     }
   };
 
