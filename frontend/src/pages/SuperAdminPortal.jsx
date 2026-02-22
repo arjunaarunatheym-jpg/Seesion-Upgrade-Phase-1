@@ -344,6 +344,111 @@ const SuperAdminPortal = () => {
     }
   };
 
+  // Session Data Entry Functions
+  const loadSessionData = async (sessionId) => {
+    setLoading(true);
+    try {
+      // Load session with participants
+      const sessionRes = await axiosInstance.get(`/sessions/${sessionId}`);
+      setSelectedSessionForData(sessionRes.data);
+      
+      // Load participants for this session
+      const participantsRes = await axiosInstance.get(`/sessions/${sessionId}/participants`);
+      setSessionParticipants(participantsRes.data.participants || participantsRes.data || []);
+      
+      // Load tests for this session's program
+      if (sessionRes.data.program_id) {
+        try {
+          const testsRes = await axiosInstance.get(`/tests/program/${sessionRes.data.program_id}`);
+          setSessionTests(testsRes.data || []);
+        } catch {
+          setSessionTests([]);
+        }
+      }
+      
+      // Initialize attendance data from existing
+      const attData = {};
+      (participantsRes.data.participants || participantsRes.data || []).forEach(p => {
+        attData[p.id] = {
+          present: p.attendance?.present ?? true,
+          day1: p.attendance?.day1 ?? true,
+          day2: p.attendance?.day2 ?? true
+        };
+      });
+      setAttendanceData(attData);
+      
+      // Initialize test results data
+      const testData = {};
+      (participantsRes.data.participants || participantsRes.data || []).forEach(p => {
+        testData[p.id] = {
+          pre_test_score: p.pre_test_score || p.test_results?.find(t => t.test_type === 'pre')?.score || '',
+          post_test_score: p.post_test_score || p.test_results?.find(t => t.test_type === 'post')?.score || ''
+        };
+      });
+      setTestResultsData(testData);
+      
+      toast.success('Session data loaded');
+    } catch (error) {
+      toast.error('Failed to load session data');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveAttendance = async (participantId) => {
+    try {
+      const data = attendanceData[participantId];
+      await axiosInstance.post(`/sessions/${selectedSessionForData.id}/participants/${participantId}/attendance`, data);
+      toast.success('Attendance saved');
+    } catch (error) {
+      toast.error('Failed to save attendance');
+    }
+  };
+
+  const saveTestResult = async (participantId, testType) => {
+    const score = parseFloat(testResultsData[participantId]?.[`${testType}_test_score`]);
+    if (isNaN(score) || score < 0 || score > 100) {
+      toast.error('Score must be between 0 and 100');
+      return;
+    }
+    
+    try {
+      // Get test for this program and type
+      const test = sessionTests.find(t => t.test_type === testType || t.test_type === `${testType}_test`);
+      if (!test) {
+        toast.error(`No ${testType} test found for this program`);
+        return;
+      }
+      
+      // Use super admin submit endpoint
+      await axiosInstance.post('/tests/super-admin-submit', {
+        test_id: test.id,
+        session_id: selectedSessionForData.id,
+        participant_id: participantId,
+        score: score,
+        passed: score >= 70
+      });
+      toast.success(`${testType.toUpperCase()} test result saved`);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save test result');
+    }
+  };
+
+  const saveBulkAttendance = async () => {
+    setLoading(true);
+    try {
+      for (const participantId of Object.keys(attendanceData)) {
+        await axiosInstance.post(`/sessions/${selectedSessionForData.id}/participants/${participantId}/attendance`, attendanceData[participantId]);
+      }
+      toast.success('All attendance saved');
+    } catch (error) {
+      toast.error('Failed to save attendance');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatMoney = (amount) => {
     return new Intl.NumberFormat('en-MY', { style: 'currency', currency: 'MYR' }).format(amount || 0);
   };
