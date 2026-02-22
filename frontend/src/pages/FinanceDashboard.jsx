@@ -1793,6 +1793,10 @@ const FinanceDashboard = ({ user, onLogout }) => {
               HR & Payroll
             </TabsTrigger>
             <TabsTrigger value="audit" className="text-xs sm:text-sm">Audit Log</TabsTrigger>
+            <TabsTrigger value="accounting" className="text-xs sm:text-sm">
+              <BookOpen className="w-3 h-3 mr-1" />
+              Accounting
+            </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs sm:text-sm">
               <Settings className="w-4 h-4 mr-1 hidden sm:inline" />
               Settings
