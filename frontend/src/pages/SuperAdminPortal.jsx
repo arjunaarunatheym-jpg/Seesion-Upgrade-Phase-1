@@ -577,13 +577,18 @@ const SuperAdminPortal = () => {
                       <TableCell>{session.invoice_number || '-'}</TableCell>
                       <TableCell>
                         <Select 
-                          value="" 
-                          onValueChange={(value) => handleFixSessionStatus(session.id, value)}
+                          value="select_action" 
+                          onValueChange={(value) => {
+                            if (value !== "select_action") {
+                              handleFixSessionStatus(session.id, value);
+                            }
+                          }}
                         >
                           <SelectTrigger className="w-32">
                             <SelectValue placeholder="Fix Status" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="select_action">Fix Status</SelectItem>
                             <SelectItem value="ongoing">Set Ongoing</SelectItem>
                             <SelectItem value="completed">Set Completed</SelectItem>
                             <SelectItem value="archived">Set Archived</SelectItem>
