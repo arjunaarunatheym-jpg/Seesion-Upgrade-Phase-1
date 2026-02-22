@@ -967,17 +967,17 @@ async def recalculate_marketing_commissions(
 async def get_expense_categories(current_user: User = Depends(get_current_user)):
     """Get list of expense categories with their calculation types and rates"""
     return [
-        {"id": "fnb", "name": "F&B", "type": "per_pax", "rate": 25, "description": "RM 25 per pax (auto-calculated)"},
-        {"id": "hrdc_levy", "name": "HRDCorp Levy", "type": "percentage", "rate": 4, "description": "4% of invoice"},
-        {"id": "wear_tear", "name": "Wear and Tear", "type": "percentage", "rate": 2, "description": "2% of invoice"},
-        {"id": "printing", "name": "Printing", "type": "percentage", "rate": 1, "description": "1% of invoice"},
-        {"id": "accommodation", "name": "Accommodation", "type": "fixed", "rate": 0, "description": "Fixed amount"},
-        {"id": "allowance", "name": "Allowance", "type": "fixed", "rate": 0, "description": "Fixed amount"},
-        {"id": "petrol", "name": "Petrol", "type": "fixed", "rate": 0, "description": "Fixed amount"},
-        {"id": "toll", "name": "Toll / Touch N Go", "type": "fixed", "rate": 0, "description": "Fixed amount"},
-        {"id": "sst", "name": "SST", "type": "percentage", "rate": 0, "description": "Custom percentage"},
-        {"id": "muafakat", "name": "Muafakat", "type": "percentage", "rate": 0, "description": "Custom percentage"},
-        {"id": "other", "name": "Other Expenses", "type": "fixed", "rate": 0, "description": "Fixed amount"}
+        {"id": "fnb", "name": "F&B", "type": "per_pax", "rate": 25, "description": "Food & Beverages - RM 25 per participant"},
+        {"id": "hrdc_levy", "name": "HRDCorp Levy", "type": "percentage", "rate": 4, "description": "HRDCorp Levy Deduction - 4% of invoice total"},
+        {"id": "wear_tear", "name": "Wear and Tear", "type": "percentage", "rate": 2, "description": "Vehicle Wear & Tear - 2% of invoice total"},
+        {"id": "printing", "name": "Printing", "type": "percentage", "rate": 1, "description": "Training Materials Printing - 1% of invoice total"},
+        {"id": "accommodation", "name": "Accommodation", "type": "fixed", "rate": 0, "description": "Trainer/Coordinator Accommodation"},
+        {"id": "allowance", "name": "Allowance", "type": "fixed", "rate": 0, "description": "Staff Daily Allowance"},
+        {"id": "petrol", "name": "Petrol", "type": "fixed", "rate": 0, "description": "Vehicle Fuel/Petrol"},
+        {"id": "toll", "name": "Toll / Touch N Go", "type": "fixed", "rate": 0, "description": "Highway Toll Charges"},
+        {"id": "sst", "name": "SST", "type": "percentage", "rate": 0, "description": "Sales & Service Tax"},
+        {"id": "muafakat", "name": "Muafakat", "type": "percentage", "rate": 0, "description": "Muafakat Fee"},
+        {"id": "other", "name": "Other Expenses", "type": "fixed", "rate": 0, "description": "Miscellaneous Expenses"}
     ]
 
 
