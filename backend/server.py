@@ -2426,6 +2426,23 @@ async def create_session(session_data: SessionCreate, current_user: User = Depen
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can create sessions")
     
+    # ============ DUPLICATE SESSION PREVENTION (Improvement 2) ============
+    # Check for duplicate session based on: same company + program + start_date + name
+    # This prevents accidental double-clicks or duplicate submissions
+    duplicate_check = await db.sessions.find_one({
+        "company_id": session_data.company_id,
+        "program_id": session_data.program_id,
+        "start_date": session_data.start_date,
+        "name": session_data.name
+    }, {"_id": 0, "id": 1, "name": 1, "invoice_number": 1})
+    
+    if duplicate_check:
+        raise HTTPException(
+            status_code=409,  # 409 Conflict
+            detail=f"A session with the same name, company, program and start date already exists (Invoice: {duplicate_check.get('invoice_number', 'N/A')}). Please modify session details or use the existing session."
+        )
+    # ============ END DUPLICATE PREVENTION ============
+    
     # Process new participants (find or create)
     processed_participant_ids = list(session_data.participant_ids)  # Start with existing IDs
     participant_results = []
