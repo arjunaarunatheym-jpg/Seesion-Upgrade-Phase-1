@@ -855,6 +855,28 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
     
     await db.quotations.update_one({"id": quotation_id}, {"$set": update_data})
     
+    # Audit log: Discount applied (Improvement 2)
+    await log_marketing_action(
+        action="discount_applied",
+        entity_type="quotation",
+        entity_id=quotation_id,
+        changed_by=current_user,
+        before_value={
+            "quotation_number": quotation.get("quotation_number"),
+            "discount_amount": quotation.get("discount_amount", 0),
+            "total_amount": quotation.get("total_amount", 0),
+            "status": quotation.get("status")
+        },
+        after_value={
+            "quotation_number": new_quotation_number,
+            "discount_amount": round(discount_amount, 2),
+            "total_amount": round(new_total, 2),
+            "status": "pending_approval"
+        },
+        reason=discount_data.get("reason", ""),
+        details=f"Discount of RM {discount_amount:.2f} ({discount_percentage:.2f}%) applied. Revision {new_revision}"
+    )
+    
     # Send email notification for discount approval
     try:
         client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
