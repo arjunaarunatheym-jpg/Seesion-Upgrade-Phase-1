@@ -891,6 +891,242 @@ const SuperAdminPortal = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit User Dialog */}
+      <Dialog open={editUserDialog.open} onOpenChange={(open) => setEditUserDialog({ open, user: open ? editUserDialog.user : null })}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-red-600" />
+              Edit User (God Mode)
+            </DialogTitle>
+            <DialogDescription>
+              Full edit access. Changes are logged in audit trail.
+            </DialogDescription>
+          </DialogHeader>
+          {editUserDialog.user && (
+            <div className="space-y-4">
+              <div>
+                <Label>Full Name</Label>
+                <Input 
+                  value={editUserDialog.user.full_name || ''} 
+                  onChange={(e) => setEditUserDialog(prev => ({ ...prev, user: { ...prev.user, full_name: e.target.value }}))}
+                />
+              </div>
+              <div>
+                <Label>Email</Label>
+                <Input 
+                  value={editUserDialog.user.email || ''} 
+                  onChange={(e) => setEditUserDialog(prev => ({ ...prev, user: { ...prev.user, email: e.target.value }}))}
+                />
+              </div>
+              <div>
+                <Label>Role</Label>
+                <Select 
+                  value={editUserDialog.user.role || ''} 
+                  onValueChange={(value) => setEditUserDialog(prev => ({ ...prev, user: { ...prev.user, role: value }}))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map(role => (
+                      <SelectItem key={role} value={role}>{role}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input 
+                  value={editUserDialog.user.phone || ''} 
+                  onChange={(e) => setEditUserDialog(prev => ({ ...prev, user: { ...prev.user, phone: e.target.value }}))}
+                />
+              </div>
+              <div>
+                <Label>IC Number</Label>
+                <Input 
+                  value={editUserDialog.user.ic_number || ''} 
+                  onChange={(e) => setEditUserDialog(prev => ({ ...prev, user: { ...prev.user, ic_number: e.target.value }}))}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditUserDialog({ open: false, user: null })}>Cancel</Button>
+            <Button onClick={handleSaveUser} className="bg-red-600 hover:bg-red-700">
+              <CheckCircle className="w-4 h-4 mr-1" /> Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Session Dialog */}
+      <Dialog open={editSessionDialog.open} onOpenChange={(open) => setEditSessionDialog({ open, session: open ? editSessionDialog.session : null })}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-red-600" />
+              Edit Session (God Mode)
+            </DialogTitle>
+            <DialogDescription>
+              Full edit access. Changes are logged in audit trail.
+            </DialogDescription>
+          </DialogHeader>
+          {editSessionDialog.session && (
+            <div className="space-y-4">
+              <div>
+                <Label>Session Name</Label>
+                <Input 
+                  value={editSessionDialog.session.name || ''} 
+                  onChange={(e) => setEditSessionDialog(prev => ({ ...prev, session: { ...prev.session, name: e.target.value }}))}
+                />
+              </div>
+              <div>
+                <Label>Status</Label>
+                <Select 
+                  value={editSessionDialog.session.status || ''} 
+                  onValueChange={(value) => setEditSessionDialog(prev => ({ ...prev, session: { ...prev.session, status: value }}))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ongoing">Ongoing</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Start Date</Label>
+                <Input 
+                  type="date"
+                  value={editSessionDialog.session.start_date?.split('T')[0] || ''} 
+                  onChange={(e) => setEditSessionDialog(prev => ({ ...prev, session: { ...prev.session, start_date: e.target.value }}))}
+                />
+              </div>
+              <div>
+                <Label>Total Pax</Label>
+                <Input 
+                  type="number"
+                  value={editSessionDialog.session.total_pax || ''} 
+                  onChange={(e) => setEditSessionDialog(prev => ({ ...prev, session: { ...prev.session, total_pax: parseInt(e.target.value) || 0 }}))}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditSessionDialog({ open: false, session: null })}>Cancel</Button>
+            <Button onClick={handleSaveSession} className="bg-red-600 hover:bg-red-700">
+              <CheckCircle className="w-4 h-4 mr-1" /> Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Invoice Dialog */}
+      <Dialog open={editInvoiceDialog.open} onOpenChange={(open) => setEditInvoiceDialog({ open, invoice: open ? editInvoiceDialog.invoice : null })}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-red-600" />
+              Edit Invoice (God Mode)
+            </DialogTitle>
+            <DialogDescription>
+              Full edit access. Changes are logged in audit trail.
+            </DialogDescription>
+          </DialogHeader>
+          {editInvoiceDialog.invoice && (
+            <div className="space-y-4">
+              <div>
+                <Label>Invoice Number</Label>
+                <Input 
+                  value={editInvoiceDialog.invoice.invoice_number || ''} 
+                  onChange={(e) => setEditInvoiceDialog(prev => ({ ...prev, invoice: { ...prev.invoice, invoice_number: e.target.value }}))}
+                />
+              </div>
+              <div>
+                <Label>Bill To Name</Label>
+                <Input 
+                  value={editInvoiceDialog.invoice.bill_to_name || ''} 
+                  onChange={(e) => setEditInvoiceDialog(prev => ({ ...prev, invoice: { ...prev.invoice, bill_to_name: e.target.value }}))}
+                />
+              </div>
+              <div>
+                <Label>Status</Label>
+                <Select 
+                  value={editInvoiceDialog.invoice.status || ''} 
+                  onValueChange={(value) => setEditInvoiceDialog(prev => ({ ...prev, invoice: { ...prev.invoice, status: value }}))}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto_draft">Draft</SelectItem>
+                    <SelectItem value="issued">Issued</SelectItem>
+                    <SelectItem value="partial">Partial</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="voided">Voided</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Total Amount (RM)</Label>
+                <Input 
+                  type="number"
+                  step="0.01"
+                  value={editInvoiceDialog.invoice.total_amount || ''} 
+                  onChange={(e) => setEditInvoiceDialog(prev => ({ ...prev, invoice: { ...prev.invoice, total_amount: parseFloat(e.target.value) || 0 }}))}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditInvoiceDialog({ open: false, invoice: null })}>Cancel</Button>
+            <Button onClick={handleSaveInvoice} className="bg-red-600 hover:bg-red-700">
+              <CheckCircle className="w-4 h-4 mr-1" /> Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Journal Entry Dialog */}
+      <Dialog open={editJournalDialog.open} onOpenChange={(open) => setEditJournalDialog({ open, entry: open ? editJournalDialog.entry : null })}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-red-600" />
+              Fix Journal Entry Description
+            </DialogTitle>
+            <DialogDescription>
+              Fix "Unknown" or incorrect descriptions in journal entries.
+            </DialogDescription>
+          </DialogHeader>
+          {editJournalDialog.entry && (
+            <div className="space-y-4">
+              <div>
+                <Label>Journal Number</Label>
+                <Input value={editJournalDialog.entry.journal_no || ''} disabled />
+              </div>
+              <div>
+                <Label>Description</Label>
+                <Textarea 
+                  value={editJournalDialog.entry.description || ''} 
+                  onChange={(e) => setEditJournalDialog(prev => ({ ...prev, entry: { ...prev.entry, description: e.target.value }}))}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditJournalDialog({ open: false, entry: null })}>Cancel</Button>
+            <Button onClick={handleFixJournalEntry} className="bg-red-600 hover:bg-red-700">
+              <CheckCircle className="w-4 h-4 mr-1" /> Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </main>
     </div>
   );
