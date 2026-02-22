@@ -1711,7 +1711,7 @@ async def reopen_period(
 # ============ SETTINGS ============
 
 @router.get("/settings")
-async def get_accounting_settings(current_user: User = Depends(get_current_user)):
+async def get_accounting_settings_endpoint(current_user: User = Depends(get_current_user)):
     """Get accounting settings"""
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
