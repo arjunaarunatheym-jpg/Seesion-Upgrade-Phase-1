@@ -850,6 +850,64 @@ const LeadPipelineTab = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Archived Leads Dialog (Admin Only) */}
+      <Dialog open={showArchivedDialog} onOpenChange={setShowArchivedDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-700">
+              <Archive className="w-5 h-5" />
+              Archived Leads ({archivedLeads.length})
+            </DialogTitle>
+          </DialogHeader>
+          
+          {archivedLeads.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Archive className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+              <p>No archived leads</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {archivedLeads.map(lead => (
+                <div key={lead.id} className="p-3 border rounded-lg bg-gray-50">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium">{lead.company_name}</p>
+                      <p className="text-sm text-gray-600">{lead.contact_person}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Archived by {lead.archived_by_name} on {lead.archived_at?.split('T')[0]}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={STAGES.find(s => s.id === lead.stage)?.color || 'bg-gray-100'}>
+                        {STAGES.find(s => s.id === lead.stage)?.label || lead.stage}
+                      </Badge>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleRestoreLead(lead.id)}
+                        className="text-green-600 border-green-300 hover:bg-green-50"
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                        Restore
+                      </Button>
+                    </div>
+                  </div>
+                  {lead.expected_value > 0 && (
+                    <p className="text-sm text-green-600 mt-1">
+                      Expected: {formatCurrency(lead.expected_value)}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowArchivedDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
