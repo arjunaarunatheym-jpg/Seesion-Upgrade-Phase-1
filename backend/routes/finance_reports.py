@@ -92,13 +92,13 @@ async def get_profit_loss_report(
     
     session_date_map = {}
     session_completion_map = {}  # Track completion status
-    invoice_session_map = {}
+    # ========== MULTI-INVOICE SUPPORT (Improvement) ==========
+    # Build session lookup by ID - invoices will be mapped via invoice.session_id
     for s in sessions:
         session_date_map[s.get("id")] = s.get("start_date", "")
         # Backward compatibility: missing completion_status is treated as eligible (completed)
         session_completion_map[s.get("id")] = s.get("completion_status", "completed")
-        if s.get("invoice_id"):
-            invoice_session_map[s.get("invoice_id")] = s.get("id")
+    # ========== END MULTI-INVOICE SUPPORT ==========
     
     # Get all data sources
     invoices = await db.invoices.find({}, {"_id": 0}).to_list(10000)
