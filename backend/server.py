@@ -8580,13 +8580,6 @@ async def get_template(filename: str):
         raise HTTPException(status_code=404, detail="Template not found")
     return FileResponse(file_path)
 
-@api_router.get("/static/certificate_assets/{filename}")
-async def get_certificate_asset(filename: str):
-    file_path = ROOT_DIR / "static" / "certificate_assets" / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Asset not found")
-    return FileResponse(file_path)
-
 @api_router.post("/checklist-photos/upload")
 async def upload_checklist_photo(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
     if current_user.role != "trainer":
