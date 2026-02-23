@@ -734,7 +734,6 @@ async def record_client_response(quotation_id: str, response_data: dict, current
     
     # If accepted, create a draft session
     if response == "accepted":
-    if response == "accepted":
         # Get client info
         client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
         
