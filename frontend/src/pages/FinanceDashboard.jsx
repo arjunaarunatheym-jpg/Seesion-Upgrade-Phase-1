@@ -1076,7 +1076,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
       </head>
       <body>
         <div class="header">
-          ${logoUrl ? `<img src="${logoUrl}" class="logo-img" alt="Logo" />` : ''}
+          ${logoUrl ? `<img src="${logoUrl.startsWith('/') ? API_URL + logoUrl : logoUrl}" class="logo-img" alt="Logo" />` : ''}
           <div>
             <div class="company-name">${settings.company_name || 'MDDRC SDN BHD'}</div>
             <div class="company-info">${settings.address_line1 || ''} ${settings.city || ''} ${settings.postcode || ''}</div>
