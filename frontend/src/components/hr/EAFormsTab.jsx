@@ -77,7 +77,7 @@ const EAFormsTab = ({ staff, companySettings }) => {
       </head>
       <body>
         <div class="header">
-          ${logoUrl ? `<img src="${logoUrl}" class="logo-img" alt="Logo" />` : ''}
+          ${logoUrl ? `<img src="${logoUrl.startsWith('/') ? API_URL + logoUrl : logoUrl}" class="logo-img" alt="Logo" />` : ''}
           <div class="company-name">${companyName}</div>
           <div>Penyata Pendapatan Tahunan / Annual Remuneration Statement</div>
         </div>
