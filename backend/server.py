@@ -11007,7 +11007,12 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
 
 @api_router.get("/finance/session/{session_id}/costing")
 async def get_session_costing(session_id: str, current_user: User = Depends(get_current_user)):
-    """Get complete costing breakdown for a session"""
+    """Get complete costing breakdown for a session
+    
+    MULTI-INVOICE SUPPORT (Improvement):
+    - Sums all invoices for session_id with status in ["issued", "partial", "paid"]
+    - Supports sessions with multiple invoices (e.g., split billing, supplements)
+    """
     if current_user.role not in ["admin", "super_admin", "finance", "coordinator"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -11015,10 +11020,19 @@ async def get_session_costing(session_id: str, current_user: User = Depends(get_
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Get invoice
-    invoice = await db.invoices.find_one({"session_id": session_id}, {"_id": 0})
-    invoice_total = invoice.get("total_amount", 0) if invoice else 0
-    tax_amount = invoice.get("tax_amount", 0) if invoice else 0
+    # ========== MULTI-INVOICE SUPPORT (Improvement) ==========
+    # Get ALL invoices for this session with eligible statuses
+    ELIGIBLE_STATUSES = ["issued", "partial", "paid"]
+    invoices = await db.invoices.find({
+        "session_id": session_id,
+        "status": {"$in": ELIGIBLE_STATUSES}
+    }, {"_id": 0}).to_list(100)
+    
+    # Sum totals from all invoices
+    invoice_total = sum(float(inv.get("total_amount", 0)) for inv in invoices)
+    tax_amount = sum(float(inv.get("tax_amount", 0)) for inv in invoices)
+    invoice_count = len(invoices)
+    # ========== END MULTI-INVOICE SUPPORT ==========
     
     # Get trainer fees (from saved fees or from session assignments)
     trainer_fees = await db.trainer_fees.find({"session_id": session_id}, {"_id": 0}).to_list(100)
