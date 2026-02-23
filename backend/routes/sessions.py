@@ -81,10 +81,11 @@ async def get_sessions(
         if isinstance(session.get('created_at'), str):
             session['created_at'] = datetime.fromisoformat(session['created_at'])
         
-        if session.get("company_id"):
+        # Only lookup company_name if not already stored on session (allows overrides)
+        if not session.get("company_name") and session.get("company_id"):
             company = await db.companies.find_one({"id": session["company_id"]}, {"_id": 0})
             session["company_name"] = company.get("name", "Unknown") if company else "Unknown"
-        else:
+        elif not session.get("company_name"):
             session["company_name"] = "Unknown"
         
         if session.get("program_id"):
