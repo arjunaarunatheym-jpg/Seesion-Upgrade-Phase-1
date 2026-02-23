@@ -656,9 +656,30 @@ async def record_client_response(quotation_id: str, response_data: dict, current
     if not quotation:
         raise HTTPException(status_code=404, detail="Quotation not found")
     
+    # ========== STATUS GATE (Improvement) ==========
+    # Only allow accept/decline if quotation is in "sent" status
+    if quotation.get("status") != "sent":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot record response: quotation must be in 'sent' status (current: {quotation.get('status')})"
+        )
+    # ========== END STATUS GATE ==========
+    
     response = response_data.get("response")  # accepted or declined
     if response not in ["accepted", "declined"]:
         raise HTTPException(status_code=400, detail="Response must be 'accepted' or 'declined'")
+    
+    # ========== IDEMPOTENCY CHECK (Improvement) ==========
+    # If session already exists for this quotation, return it instead of creating duplicate
+    if response == "accepted":
+        existing_session = await db.sessions.find_one({"quotation_id": quotation_id}, {"_id": 0})
+        if existing_session:
+            return {
+                "message": "Session already exists for this quotation",
+                "session_id": existing_session.get("id"),
+                "existing": True
+            }
+    # ========== END IDEMPOTENCY CHECK ==========
     
     now = get_malaysia_time()
     
@@ -679,6 +700,7 @@ async def record_client_response(quotation_id: str, response_data: dict, current
     result = {"message": f"Quotation marked as {response}"}
     
     # If accepted, create a draft session
+    if response == "accepted":
     if response == "accepted":
         # Get client info
         client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
