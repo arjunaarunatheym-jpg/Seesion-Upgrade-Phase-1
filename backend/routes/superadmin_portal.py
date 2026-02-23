@@ -302,6 +302,13 @@ async def get_all_sessions(
         query["start_date"] = {"$gte": f"{year}-01-01", "$lte": f"{year}-12-31"}
     
     sessions = await db.sessions.find(query, {"_id": 0}).sort("start_date", -1).to_list(limit)
+    
+    # Enrich with company_name if not present on session document
+    for session in sessions:
+        if not session.get("company_name") and session.get("company_id"):
+            company = await db.companies.find_one({"id": session["company_id"]}, {"_id": 0, "name": 1})
+            session["company_name"] = company.get("name", "Unknown") if company else "Unknown"
+    
     return {"sessions": sessions, "count": len(sessions)}
 
 
