@@ -129,14 +129,17 @@ async def get_profit_loss_report(
     REVENUE_INVOICE_STATUSES = ["issued", "partial", "paid"]
     
     # Process invoices (income) - with revenue recognition rules
+    # ========== MULTI-INVOICE SUPPORT (Improvement) ==========
+    # Use invoice.session_id directly instead of legacy invoice_session_map
+    # This properly supports sessions with multiple invoices
     for inv in invoices:
         try:
             # REVENUE RECOGNITION: Only count invoices in eligible statuses
             if inv.get("status") not in REVENUE_INVOICE_STATUSES:
                 continue
             
-            inv_id = inv.get("id")
-            session_id = invoice_session_map.get(inv_id)
+            # Use session_id directly from invoice (multi-invoice support)
+            session_id = inv.get("session_id")
             
             # REVENUE RECOGNITION: Session must be completed (or missing status for backward compat)
             if session_id:
@@ -149,18 +152,21 @@ async def get_profit_loss_report(
             tax_amount = float(inv.get("tax_amount") or inv.get("sst_amount") or 0)
             gross_revenue = total_amount - tax_amount
             
+            # Attribute to month based on session start_date or invoice created_at
             if session_id and session_id in session_date_map:
                 session_date = session_date_map[session_id]
                 if session_date.startswith(str(year)):
                     inv_month = int(session_date[5:7])
                     monthly_data[inv_month]["income"]["invoices"] += gross_revenue
             else:
+                # Fallback to invoice created_at for non-session invoices
                 inv_date = inv.get("created_at", "")[:10]
                 if inv_date.startswith(str(year)):
                     inv_month = int(inv_date[5:7]) if len(inv_date) >= 7 else 1
                     monthly_data[inv_month]["income"]["invoices"] += gross_revenue
         except:
             pass
+    # ========== END MULTI-INVOICE SUPPORT ==========
     
     # Process manual income
     for inc in manual_income:
