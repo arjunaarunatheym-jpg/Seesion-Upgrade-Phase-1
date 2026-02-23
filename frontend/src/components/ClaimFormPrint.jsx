@@ -4,6 +4,8 @@ import { Button } from './ui/button';
 import { Printer, X, Loader2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+
 // Expense category display names
 const EXPENSE_CATEGORY_NAMES = {
   'fnb': 'F&B',
