@@ -258,8 +258,8 @@ async def get_session(session_id: str, current_user = Depends(get_current_user))
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Enrich
-    if session.get("company_id"):
+    # Only enrich company_name if not already stored on session (allows overrides)
+    if not session.get("company_name") and session.get("company_id"):
         company = await db.companies.find_one({"id": session["company_id"]}, {"_id": 0})
         session["company_name"] = company.get("name") if company else "Unknown"
     
