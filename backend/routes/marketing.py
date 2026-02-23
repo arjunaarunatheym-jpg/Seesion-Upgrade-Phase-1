@@ -1,16 +1,20 @@
 """
 Marketing Module routes - Client management, quotations, and PDF generation
-Endpoints: 26
+Endpoints: 27
 """
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
+from pathlib import Path
 import uuid
 import csv
+import re
+import os
 
-from core import db, get_current_user, get_malaysia_time
+from fpdf import FPDF
+from core import db, get_current_user, get_malaysia_time, ROOT_DIR
 from models import User
 from utils.email_notifications import (
     notify_new_lead,
@@ -27,6 +31,64 @@ from utils.email_notifications import (
 
 from pydantic import BaseModel, Field, ConfigDict
 from pymongo import ReturnDocument
+
+
+# ============ PDF TEXT SANITIZATION ============
+def sanitize_text_for_pdf(text):
+    """Sanitize text for PDF - remove problematic characters"""
+    if text is None:
+        return ""
+    text = str(text)
+    # Replace problematic characters
+    replacements = {
+        '\u2013': '-',  # en-dash
+        '\u2014': '-',  # em-dash
+        '\u2018': "'",  # left single quote
+        '\u2019': "'",  # right single quote
+        '\u201c': '"',  # left double quote
+        '\u201d': '"',  # right double quote
+        '\u2022': '*',  # bullet
+        '\u2026': '...',  # ellipsis
+        '\u00a0': ' ',  # non-breaking space
+        '\r\n': '\n',   # Windows line ending
+        '\r': '\n',     # Old Mac line ending
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    # Remove any remaining non-ASCII characters that might cause issues
+    text = ''.join(char if ord(char) < 128 or char in 'ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ' else '?' for char in text)
+    return text
+
+
+# ============ QUOTATION PDF CLASS ============
+class QuotationPDF(FPDF):
+    """Custom PDF class for quotation document generation"""
+    
+    def __init__(self, company_settings=None, primary_color_rgb=None):
+        super().__init__()
+        self.company_settings = company_settings or {}
+        self.set_auto_page_break(auto=True, margin=30)
+        self.primary_color = primary_color_rgb if primary_color_rgb else (26, 54, 93)
+        self.secondary_color = (68, 114, 196)
+        try:
+            self.add_font('DejaVu', '', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', uni=True)
+            self.add_font('DejaVu', 'B', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', uni=True)
+            self.add_font('DejaVu', 'I', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf', uni=True)
+            self.unicode_font = True
+        except Exception:
+            self.unicode_font = False
+    
+    def set_font_safe(self, style='', size=10):
+        if self.unicode_font:
+            self.set_font('DejaVu', style, size)
+        else:
+            self.set_font('Helvetica', style, size)
+    
+    def cell_safe(self, w, h, txt, **kwargs):
+        self.cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
+    
+    def multi_cell_safe(self, w, h, txt, **kwargs):
+        self.multi_cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
 
 
 # ============ ATOMIC QUOTATION NUMBER GENERATOR (Improvement 2) ============
