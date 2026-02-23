@@ -11122,8 +11122,9 @@ async def get_session_costing(session_id: str, current_user: User = Depends(get_
         "coordinator_count": coordinator_count,
         "total_headcount": total_headcount,
         
-        # Revenue
+        # Revenue (multi-invoice support)
         "invoice_total": invoice_total,
+        "invoice_count": invoice_count,  # Number of invoices summed
         "less_tax": tax_amount,
         "gross_revenue": gross_revenue,
         
