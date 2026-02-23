@@ -1271,6 +1271,14 @@ const SuperAdminPortal = () => {
           {editSessionDialog.session && (
             <div className="space-y-4">
               <div>
+                <Label>Company Name</Label>
+                <Input 
+                  value={editSessionDialog.session.company_name || ''} 
+                  onChange={(e) => setEditSessionDialog(prev => ({ ...prev, session: { ...prev.session, company_name: e.target.value }}))}
+                  placeholder="Company name shown in header"
+                />
+              </div>
+              <div>
                 <Label>Session Name</Label>
                 <Input 
                   value={editSessionDialog.session.name || ''} 
