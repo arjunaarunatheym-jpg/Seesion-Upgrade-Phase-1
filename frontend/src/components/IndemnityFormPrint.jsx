@@ -2,6 +2,8 @@ import React, { useRef } from 'react';
 import { Button } from './ui/button';
 import { X, Download, CheckCircle, XCircle } from 'lucide-react';
 
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+
 const IndemnityFormPrint = ({ record, sessionInfo, companySettings, onClose }) => {
   const printRef = useRef(null);
 
