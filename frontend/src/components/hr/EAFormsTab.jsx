@@ -11,6 +11,8 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { FileText, Search, Printer, Loader2 } from 'lucide-react';
 
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+
 const EAFormsTab = ({ staff, companySettings }) => {
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
