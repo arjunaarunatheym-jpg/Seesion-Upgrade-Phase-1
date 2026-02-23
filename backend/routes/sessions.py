@@ -81,6 +81,10 @@ async def get_sessions(
         if isinstance(session.get('created_at'), str):
             session['created_at'] = datetime.fromisoformat(session['created_at'])
         
+        # DEBUG: Log company_name before enrichment
+        stored_company_name = session.get("company_name")
+        print(f"DEBUG: Session {session.get('name')[:30]} has company_name={stored_company_name}")
+        
         # Only lookup company_name if not already stored on session (allows overrides)
         if not session.get("company_name") and session.get("company_id"):
             company = await db.companies.find_one({"id": session["company_id"]}, {"_id": 0})
