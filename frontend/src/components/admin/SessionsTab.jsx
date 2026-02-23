@@ -1090,6 +1090,14 @@ const SessionsTab = ({
           {editingSession && (
             <div className="space-y-4">
               <div>
+                <Label>Company Name</Label>
+                <Input
+                  value={editingSession.company_name || ""}
+                  onChange={(e) => setEditingSession({ ...editingSession, company_name: e.target.value })}
+                  placeholder="Company name shown in header"
+                />
+              </div>
+              <div>
                 <Label>Session Name</Label>
                 <Input
                   value={editingSession.name || ""}
