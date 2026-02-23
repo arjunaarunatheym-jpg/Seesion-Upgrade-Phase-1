@@ -234,12 +234,12 @@ async def get_past_training(
     
     sessions = await db.sessions.find(query, {"_id": 0}).to_list(1000)
     
-    # Enrich
+    # Enrich - only lookup company_name if not already stored on session
     for session in sessions:
-        if session.get("company_id"):
+        if not session.get("company_name") and session.get("company_id"):
             company = await db.companies.find_one({"id": session["company_id"]}, {"_id": 0})
             session["company_name"] = company.get("name") if company else "Unknown"
-        else:
+        elif not session.get("company_name"):
             session["company_name"] = "Unknown"
         
         if session.get("program_id"):
