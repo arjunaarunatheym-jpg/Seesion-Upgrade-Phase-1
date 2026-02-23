@@ -312,7 +312,7 @@ async def update_session(
     reason: str = Query(..., min_length=5),
     current_user: User = Depends(get_current_user)
 ):
-    """Update session details"""
+    """Update session details with cascade to invoices and leads"""
     if not check_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Super Admin access required")
     
@@ -330,7 +330,39 @@ async def update_session(
     update_fields["updated_at"] = get_malaysia_time().isoformat()
     before_value = {k: session.get(k) for k in update_fields.keys() if k != "updated_at"}
     
+    # Update the session
     await db.sessions.update_one({"id": session_id}, {"$set": update_fields})
+    
+    # CASCADE: If company_name is being updated, propagate to related records
+    cascaded_updates = []
+    if "company_name" in update_fields:
+        new_company_name = update_fields["company_name"]
+        
+        # 1. Update all invoices linked to this session
+        invoice_result = await db.invoices.update_many(
+            {"session_id": session_id},
+            {"$set": {"company_name": new_company_name, "bill_to_name": new_company_name}}
+        )
+        if invoice_result.modified_count > 0:
+            cascaded_updates.append(f"{invoice_result.modified_count} invoice(s)")
+        
+        # 2. Update the original lead record if lead_id exists
+        lead_id = session.get("lead_id")
+        if lead_id:
+            lead_result = await db.leads.update_one(
+                {"id": lead_id},
+                {"$set": {"company_name": new_company_name}}
+            )
+            if lead_result.modified_count > 0:
+                cascaded_updates.append("1 lead")
+        
+        # 3. Update quotations linked to this session
+        quotation_result = await db.quotations.update_many(
+            {"session_id": session_id},
+            {"$set": {"client_name": new_company_name}}
+        )
+        if quotation_result.modified_count > 0:
+            cascaded_updates.append(f"{quotation_result.modified_count} quotation(s)")
     
     await log_super_admin_action(
         action="session_updated",
@@ -339,10 +371,14 @@ async def update_session(
         performed_by=current_user,
         before_value=before_value,
         after_value=update_fields,
-        reason=reason
+        reason=reason + (f" [Cascaded to: {', '.join(cascaded_updates)}]" if cascaded_updates else "")
     )
     
-    return {"message": "Session updated", "updated_fields": list(update_fields.keys())}
+    return {
+        "message": "Session updated", 
+        "updated_fields": list(update_fields.keys()),
+        "cascaded_to": cascaded_updates
+    }
 
 
 @router.post("/sessions/{session_id}/fix-status")
