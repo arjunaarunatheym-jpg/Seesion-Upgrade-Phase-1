@@ -23,6 +23,8 @@ import { QuotationsTab } from '../components/marketing/QuotationsTab';
 import { LeadPipelineTab } from '../components/marketing/LeadPipelineTab';
 import { PipelineStatsCard } from '../components/marketing/PipelineStatsCard';
 
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+
 const MarketingDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
