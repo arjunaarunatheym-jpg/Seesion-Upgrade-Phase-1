@@ -7860,6 +7860,136 @@ async def save_feedback_questions(questions: List[dict], current_user: User = De
     
     return {"message": f"Saved {len(questions)} feedback questions"}
 
+# ==================== CERTIFICATE TEMPLATE DESIGNER ====================
+
+@api_router.get("/settings/certificate-templates")
+async def get_certificate_templates(current_user: User = Depends(get_current_user)):
+    """Get all saved certificate templates"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can access certificate templates")
+    
+    templates = await db.certificate_templates.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return templates
+
+@api_router.get("/settings/certificate-templates/{template_id}")
+async def get_certificate_template(template_id: str, current_user: User = Depends(get_current_user)):
+    """Get a specific certificate template"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can access certificate templates")
+    
+    template = await db.certificate_templates.find_one({"id": template_id}, {"_id": 0})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return template
+
+@api_router.post("/settings/certificate-templates")
+async def save_certificate_template(template_data: dict, current_user: User = Depends(get_current_user)):
+    """Save a new certificate template"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can save certificate templates")
+    
+    template = {
+        "id": str(uuid.uuid4()),
+        "name": template_data.get("name", "Untitled Template"),
+        "background": template_data.get("background"),
+        "backgroundColor": template_data.get("backgroundColor"),
+        "borderStyle": template_data.get("borderStyle"),
+        "elements": template_data.get("elements", []),
+        "is_default": template_data.get("is_default", False),
+        "created_by": current_user.id,
+        "created_at": get_malaysia_time().isoformat(),
+        "updated_at": get_malaysia_time().isoformat()
+    }
+    
+    # If this is set as default, unset other defaults
+    if template["is_default"]:
+        await db.certificate_templates.update_many(
+            {"is_default": True},
+            {"$set": {"is_default": False}}
+        )
+    
+    await db.certificate_templates.insert_one(template)
+    template.pop("_id", None)
+    
+    return {"message": "Template saved", "template": template}
+
+@api_router.put("/settings/certificate-templates/{template_id}")
+async def update_certificate_template(template_id: str, template_data: dict, current_user: User = Depends(get_current_user)):
+    """Update an existing certificate template"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can update certificate templates")
+    
+    existing = await db.certificate_templates.find_one({"id": template_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    update_fields = {
+        "name": template_data.get("name", existing.get("name")),
+        "background": template_data.get("background", existing.get("background")),
+        "backgroundColor": template_data.get("backgroundColor", existing.get("backgroundColor")),
+        "borderStyle": template_data.get("borderStyle", existing.get("borderStyle")),
+        "elements": template_data.get("elements", existing.get("elements")),
+        "is_default": template_data.get("is_default", existing.get("is_default")),
+        "updated_at": get_malaysia_time().isoformat()
+    }
+    
+    # If this is set as default, unset other defaults
+    if update_fields["is_default"]:
+        await db.certificate_templates.update_many(
+            {"is_default": True, "id": {"$ne": template_id}},
+            {"$set": {"is_default": False}}
+        )
+    
+    await db.certificate_templates.update_one({"id": template_id}, {"$set": update_fields})
+    
+    return {"message": "Template updated"}
+
+@api_router.delete("/settings/certificate-templates/{template_id}")
+async def delete_certificate_template(template_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a certificate template"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can delete certificate templates")
+    
+    result = await db.certificate_templates.delete_one({"id": template_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return {"message": "Template deleted"}
+
+@api_router.post("/settings/certificate-assets")
+async def upload_certificate_asset(
+    file: UploadFile = File(...), 
+    type: str = Form("logo"),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload logo or signature image for certificate template"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can upload certificate assets")
+    
+    # Validate file type
+    allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only images allowed.")
+    
+    # Create directory if not exists
+    asset_dir = Path("static/certificate_assets")
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate unique filename
+    ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
+    filename = f"{type}_{uuid.uuid4().hex[:8]}.{ext}"
+    file_path = asset_dir / filename
+    
+    # Save file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    url = f"/api/static/certificate_assets/{filename}"
+    
+    return {"url": url, "filename": filename}
+
+# ==================== END CERTIFICATE TEMPLATE DESIGNER ====================
+
 # Excel Export for Session Feedback Report
 @api_router.get("/sessions/{session_id}/export-feedback-excel")
 async def export_session_feedback_excel(session_id: str, current_user: User = Depends(get_current_user)):
