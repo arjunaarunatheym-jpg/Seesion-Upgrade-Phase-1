@@ -706,6 +706,9 @@ const Settings = () => {
         </CardContent>
       </Card>
 
+      {/* Certificate Template Designer */}
+      <CertificateDesigner />
+
       {/* Save Button */}
       <div className="flex justify-end">
         <Button
