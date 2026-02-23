@@ -115,6 +115,13 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 ### In Progress
 - None
 
+### Recently Fixed (Feb 23, 2026)
+- ✅ **Session Company Name Cascade Update** (P0)
+  - Fixed: Editing company_name in Super Admin Portal now cascades to related records
+  - Changes propagate to: invoices (company_name, bill_to_name), leads (company_name), quotations (client_name)
+  - GET /superadmin/sessions now enriches company_name from company_id if not stored on session
+  - PUT /superadmin/sessions now returns `cascaded_to` array showing which related records were updated
+
 ### Recently Fixed (Feb 2026)
 - ✅ Admin Quotations Tab UI Improvements (Feb 19, 2026)
   - Quotations: Filter by Year + Month dropdowns (default: current year)
