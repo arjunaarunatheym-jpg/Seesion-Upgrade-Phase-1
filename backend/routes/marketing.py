@@ -1295,6 +1295,36 @@ async def update_lead(lead_id: str, lead_data: LeadUpdate, current_user: User = 
                 {"$set": client_sync_fields}
             )
     
+    # CASCADE: If company_name changed, update linked quotations and sessions
+    if "company_name" in update_data:
+        new_company_name = update_data["company_name"]
+        
+        # Update linked quotation(s)
+        if lead.get("quotation_id"):
+            await db.quotations.update_one(
+                {"id": lead["quotation_id"]},
+                {"$set": {"client_name": new_company_name}}
+            )
+        # Also update any quotation that references this lead
+        await db.quotations.update_many(
+            {"lead_id": lead_id},
+            {"$set": {"client_name": new_company_name}}
+        )
+        
+        # Update linked session(s)
+        await db.sessions.update_many(
+            {"lead_id": lead_id},
+            {"$set": {"company_name": new_company_name}}
+        )
+        
+        # Update invoices linked to sessions from this lead
+        sessions_from_lead = await db.sessions.find({"lead_id": lead_id}, {"_id": 0, "id": 1}).to_list(100)
+        for session in sessions_from_lead:
+            await db.invoices.update_many(
+                {"session_id": session["id"]},
+                {"$set": {"company_name": new_company_name, "bill_to_name": new_company_name}}
+            )
+    
     updated_lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
     return updated_lead
 
