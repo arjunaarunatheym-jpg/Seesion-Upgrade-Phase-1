@@ -384,6 +384,10 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
     
     Uses atomic counter to prevent duplicate quotation numbers (Improvement 2).
     Format: QUO/MDDRC/YYYY/MM/XXXXX - counter resets monthly.
+    
+    BACKEND RECALCULATION (Improvement):
+    - Ignores frontend totals (subtotal, discount_amount, sst_amount, total_amount)
+    - Recalculates all amounts server-side from items[] to prevent tampering
     """
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
@@ -399,6 +403,35 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
     validity_days = quotation_data.get("validity_days", 30)
     valid_until = (now + timedelta(days=validity_days)).strftime("%Y-%m-%d")
     
+    # ============ BACKEND RECALCULATION (Improvement) ============
+    # Ignore frontend totals; recalculate from items to prevent tampering
+    items = quotation_data.get("items", [])
+    pricing_type = quotation_data.get("pricing_type", "per_pax")
+    num_participants = quotation_data.get("num_participants", 1)
+    rate_per_pax = float(quotation_data.get("rate_per_pax", 0))
+    group_price = float(quotation_data.get("group_price", 0))
+    discount_percentage = float(quotation_data.get("discount_percentage", 0))
+    sst_percentage = float(quotation_data.get("sst_percentage", 0))
+    
+    # Calculate subtotal from items or pricing type
+    if items:
+        subtotal = sum(float(item.get("amount", 0)) for item in items)
+    elif pricing_type == "per_pax":
+        subtotal = rate_per_pax * num_participants
+    else:
+        subtotal = group_price
+    
+    # Calculate discount
+    discount_amount = subtotal * (discount_percentage / 100) if discount_percentage > 0 else 0
+    after_discount = subtotal - discount_amount
+    
+    # Calculate SST
+    sst_amount = after_discount * (sst_percentage / 100) if sst_percentage > 0 else 0
+    
+    # Calculate total
+    total_amount = after_discount + sst_amount
+    # ============ END BACKEND RECALCULATION ============
+    
     quotation = {
         "id": str(uuid.uuid4()),
         "quotation_number": quotation_number,
@@ -406,17 +439,17 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
         "client_id": quotation_data.get("client_id"),
         "programme_id": quotation_data.get("programme_id"),
         "programme_name": quotation_data.get("programme_name"),
-        "pricing_type": quotation_data.get("pricing_type", "per_pax"),
-        "num_participants": quotation_data.get("num_participants", 1),
-        "rate_per_pax": quotation_data.get("rate_per_pax", 0),
-        "group_price": quotation_data.get("group_price", 0),
-        "items": quotation_data.get("items", []),
-        "subtotal": quotation_data.get("subtotal", 0),
-        "discount_percentage": quotation_data.get("discount_percentage", 0),
-        "discount_amount": quotation_data.get("discount_amount", 0),
-        "sst_percentage": quotation_data.get("sst_percentage", 0),
-        "sst_amount": quotation_data.get("sst_amount", 0),
-        "total_amount": quotation_data.get("total_amount", 0),
+        "pricing_type": pricing_type,
+        "num_participants": num_participants,
+        "rate_per_pax": rate_per_pax,
+        "group_price": group_price,
+        "items": items,
+        "subtotal": subtotal,  # Server-calculated
+        "discount_percentage": discount_percentage,
+        "discount_amount": discount_amount,  # Server-calculated
+        "sst_percentage": sst_percentage,
+        "sst_amount": sst_amount,  # Server-calculated
+        "total_amount": total_amount,  # Server-calculated
         "validity_days": validity_days,
         "valid_until": valid_until,
         "selected_items": quotation_data.get("selected_items", []),  # Inclusions/exclusions
@@ -438,7 +471,7 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
         entity_type="quotation",
         entity_id=quotation["id"],
         changed_by=current_user,
-        after_value={"quotation_number": quotation_number, "total_amount": quotation.get("total_amount", 0)},
+        after_value={"quotation_number": quotation_number, "total_amount": total_amount},
         details=f"New quotation created: {quotation_number}"
     )
     
