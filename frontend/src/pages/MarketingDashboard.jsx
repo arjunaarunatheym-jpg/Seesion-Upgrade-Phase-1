@@ -494,7 +494,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
 <body>
   <div class="header">
     <div class="logo-section">
-      ${companySettings?.logo_url ? `<img src="${companySettings.logo_url}" class="logo" />` : ''}
+      ${companySettings?.logo_url ? `<img src="${companySettings.logo_url.startsWith('/') ? API_URL + companySettings.logo_url : companySettings.logo_url}" class="logo" />` : ''}
       <div class="company-name">${companySettings?.company_name || 'Malaysian Defensive Driving and Riding Centre Sdn Bhd'}</div>
     </div>
     <div class="company-info">
