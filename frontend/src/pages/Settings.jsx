@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Upload, Save, Image as ImageIcon, Palette, FileText, FileSignature, Plus, Trash2, GripVertical, ChevronUp, ChevronDown, MessageSquare } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import CertificateDesigner from "../components/admin/CertificateDesigner";
 
 const Settings = () => {
   const [settings, setSettings] = useState(null);
