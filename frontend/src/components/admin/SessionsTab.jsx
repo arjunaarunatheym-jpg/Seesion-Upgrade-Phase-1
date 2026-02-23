@@ -336,6 +336,7 @@ const SessionsTab = ({
     try {
       await axiosInstance.put(`/sessions/${editingSession.id}`, {
         name: editingSession.name,
+        company_name: editingSession.company_name,  // Include company_name
         program_id: editingSession.program_id,
         company_id: editingSession.company_id,
         location: editingSession.location,
@@ -349,6 +350,17 @@ const SessionsTab = ({
         commission_rate: editingSession.commission_rate ? parseFloat(editingSession.commission_rate) : null,
         commission_fixed_amount: editingSession.commission_fixed_amount ? parseFloat(editingSession.commission_fixed_amount) : null,
       });
+      
+      // Also update the lead if company_name changed
+      if (editingSession.lead_id && editingSession.company_name) {
+        try {
+          await axiosInstance.put(`/marketing/leads/${editingSession.lead_id}`, {
+            company_name: editingSession.company_name
+          });
+        } catch (e) {
+          console.log('Could not update lead company name:', e);
+        }
+      }
       
       toast.success("Session updated successfully");
       setEditSessionDialogOpen(false);
