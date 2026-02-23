@@ -137,7 +137,7 @@ const IndemnityFormPrint = ({ record, sessionInfo, companySettings, onClose }) =
           {/* Header */}
           <div className="header">
             {companySettings?.logo_url && (
-              <img src={companySettings.logo_url} alt="Logo" className="logo" style={{ margin: '0 auto', display: 'block' }} />
+              <img src={companySettings.logo_url.startsWith('/') ? `${API_URL}${companySettings.logo_url}` : companySettings.logo_url} alt="Logo" className="logo" style={{ margin: '0 auto', display: 'block' }} />
             )}
             <div className="company-name">{companySettings?.company_name || 'MDDRC SDN BHD'}</div>
             <div className="form-title">PARTICIPANT INDEMNITY & DECLARATION</div>
