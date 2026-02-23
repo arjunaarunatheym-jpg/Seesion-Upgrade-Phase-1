@@ -27,6 +27,8 @@ import { AuditLogTab } from '../components/finance/AuditLogTab';
 import { SettingsTab } from '../components/finance/SettingsTab';
 import AccountingTab from '../components/finance/AccountingTab';
 
+const API_URL = process.env.REACT_APP_BACKEND_URL || '';
+
 const FinanceDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dashboard, setDashboard] = useState(null);
