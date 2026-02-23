@@ -292,7 +292,7 @@ const ClaimFormPrint = ({ session, onClose }) => {
           {/* Header - Logo + Company Name centered */}
           <div className="header">
             {companySettings?.logo_url && (
-              <img src={companySettings.logo_url} alt="Logo" className="logo" />
+              <img src={companySettings.logo_url.startsWith('/') ? `${API_URL}${companySettings.logo_url}` : companySettings.logo_url} alt="Logo" className="logo" />
             )}
             <div className="header-text">
               <div className="company-name">
