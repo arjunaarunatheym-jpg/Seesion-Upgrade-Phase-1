@@ -3257,10 +3257,34 @@ async def update_session(session_id: str, session_data: dict, current_user: User
     new_participant_ids = set(session_data.get("participant_ids", []))
     newly_added_participants = new_participant_ids - old_participant_ids
     
+    # Check if company_name changed - cascade update to invoices
+    new_company_name = session_data.get("company_name")
+    old_company_name = session.get("company_name")
+    
     result = await db.sessions.update_one(
         {"id": session_id},
         {"$set": session_data}
     )
+    
+    # Cascade company_name update to related invoices and quotations
+    if new_company_name and new_company_name != old_company_name:
+        # Update invoices
+        await db.invoices.update_many(
+            {"session_id": session_id},
+            {"$set": {"company_name": new_company_name, "bill_to_name": new_company_name}}
+        )
+        # Update quotations
+        if session.get("quotation_id"):
+            await db.quotations.update_one(
+                {"id": session.get("quotation_id")},
+                {"$set": {"client_name": new_company_name, "company_name": new_company_name}}
+            )
+        # Update lead
+        if session.get("lead_id"):
+            await db.leads.update_one(
+                {"id": session.get("lead_id")},
+                {"$set": {"company_name": new_company_name}}
+            )
     
     # Return the updated session
     updated_session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
