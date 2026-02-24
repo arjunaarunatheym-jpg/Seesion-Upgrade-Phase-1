@@ -23,6 +23,9 @@ const PWAInstallPrompt = () => {
     const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     setIsIOS(iOS);
 
+    // For testing: clear the dismissal flag
+    // localStorage.removeItem('pwa-prompt-dismissed');
+
     // Check if prompt was dismissed recently
     const dismissed = localStorage.getItem('pwa-prompt-dismissed');
     if (dismissed) {
@@ -42,17 +45,28 @@ const PWAInstallPrompt = () => {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // Show iOS-specific prompt after a delay
+    // Show iOS-specific prompt after a short delay
     if (iOS && !standalone) {
       setTimeout(() => {
         setShowPrompt(true);
+      }, 2000);
+    }
+    
+    // For Android/Chrome - show prompt after detecting PWA support
+    // Even if beforeinstallprompt hasn't fired yet, show manual instructions
+    if (!iOS && !standalone && 'serviceWorker' in navigator) {
+      setTimeout(() => {
+        // If no install prompt was captured, still show the banner with manual instructions
+        if (!deferredPrompt) {
+          setShowPrompt(true);
+        }
       }, 3000);
     }
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
-  }, []);
+  }, [deferredPrompt]);
 
   const handleInstall = async () => {
     if (deferredPrompt) {
