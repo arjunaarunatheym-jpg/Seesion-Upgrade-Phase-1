@@ -309,6 +309,7 @@ function App() {
           </Routes>
         </BrowserRouter>
         <Toaster position="top-right" />
+        <PWAInstallPrompt />
       </div>
     </ThemeProvider>
   );
