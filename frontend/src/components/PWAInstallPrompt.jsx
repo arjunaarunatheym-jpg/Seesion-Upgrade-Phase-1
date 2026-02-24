@@ -115,7 +115,7 @@ const PWAInstallPrompt = () => {
                   <li>Scroll down and tap <span className="font-medium">"Add to Home Screen"</span></li>
                 </ol>
               </div>
-            ) : (
+            ) : deferredPrompt ? (
               <>
                 <p className="text-sm text-blue-100 mb-3">
                   Get quick access from your home screen. Works offline!
@@ -128,6 +128,14 @@ const PWAInstallPrompt = () => {
                   Install App
                 </Button>
               </>
+            ) : (
+              <div className="text-sm text-blue-100">
+                <p className="mb-2">Install this app on your device:</p>
+                <ol className="list-decimal list-inside space-y-1 text-xs">
+                  <li>Tap the <span className="inline-block px-1 bg-white/20 rounded">⋮</span> menu (top right)</li>
+                  <li>Tap <span className="font-medium">"Install app"</span> or <span className="font-medium">"Add to Home Screen"</span></li>
+                </ol>
+              </div>
             )}
           </div>
         </div>
