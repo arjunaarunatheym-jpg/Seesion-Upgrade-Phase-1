@@ -22,6 +22,7 @@ import ResultsSummary from "./pages/ResultsSummary";
 import FeedbackForm from "./pages/FeedbackForm";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "./context/ThemeContext";
+import PWAInstallPrompt from "./components/PWAInstallPrompt";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
