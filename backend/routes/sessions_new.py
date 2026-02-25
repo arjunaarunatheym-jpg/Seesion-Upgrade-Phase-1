@@ -689,7 +689,7 @@ async def add_participants_to_session(
 
 @router.put("/{session_id}")
 async def update_session(session_id: str, session_data: dict, current_user: User = Depends(get_current_user)):
-    """Update session details"""
+    """Update session details with cascade to invoices"""
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -697,13 +697,73 @@ async def update_session(session_id: str, session_data: dict, current_user: User
     if current_user.role == "coordinator":
         if session.get("coordinator_id") != current_user.id:
             raise HTTPException(status_code=403, detail="You can only update sessions assigned to you")
-    elif current_user.role != "admin":
+    elif current_user.role not in ["admin", "assistant_admin"]:
         raise HTTPException(status_code=403, detail="Only admins and coordinators can update sessions")
+    
+    # Capture old values before update
+    old_start_date = session.get("start_date")
+    old_end_date = session.get("end_date")
+    old_company_name = session.get("company_name")
+    old_location = session.get("location")
+    old_program_id = session.get("program_id")
+    
+    # Check if participant_ids changed (new participants added)
+    old_participant_ids = set(session.get("participant_ids", []))
+    new_participant_ids = set(session_data.get("participant_ids", []))
     
     result = await db.sessions.update_one(
         {"id": session_id},
         {"$set": session_data}
     )
+    
+    # Cascade company_name update to related invoices and quotations
+    new_company_name = session_data.get("company_name")
+    if new_company_name and new_company_name != old_company_name:
+        await db.invoices.update_many(
+            {"session_id": session_id},
+            {"$set": {"company_name": new_company_name, "bill_to_name": new_company_name}}
+        )
+        if session.get("quotation_id"):
+            await db.quotations.update_one(
+                {"id": session.get("quotation_id")},
+                {"$set": {"client_name": new_company_name, "company_name": new_company_name}}
+            )
+        if session.get("lead_id"):
+            await db.leads.update_one(
+                {"id": session.get("lead_id")},
+                {"$set": {"company_name": new_company_name}}
+            )
+    
+    # Cascade date changes to related invoices
+    new_start_date = session_data.get("start_date")
+    new_end_date = session_data.get("end_date")
+    if (new_start_date and new_start_date != old_start_date) or (new_end_date and new_end_date != old_end_date):
+        final_start = new_start_date or old_start_date
+        final_end = new_end_date or old_end_date
+        if final_start and final_end:
+            new_training_dates = f"{final_start} to {final_end}"
+            await db.invoices.update_many(
+                {"session_id": session_id},
+                {"$set": {"training_dates": new_training_dates}}
+            )
+    
+    # Cascade venue/location changes to related invoices
+    new_location = session_data.get("location")
+    if new_location and new_location != old_location:
+        await db.invoices.update_many(
+            {"session_id": session_id},
+            {"$set": {"venue": new_location}}
+        )
+    
+    # Cascade programme changes to related invoices
+    new_program_id = session_data.get("program_id")
+    if new_program_id and new_program_id != old_program_id:
+        programme = await db.programs.find_one({"id": new_program_id}, {"_id": 0})
+        if programme:
+            await db.invoices.update_many(
+                {"session_id": session_id},
+                {"$set": {"programme_name": programme.get("name")}}
+            )
     
     updated_session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     return updated_session
