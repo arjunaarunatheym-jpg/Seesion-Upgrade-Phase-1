@@ -115,6 +115,19 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 ### In Progress
 - None
 
+### Recently Completed (Feb 25, 2026)
+- ✅ **Certificate Template Designer** (P1) — Fully functional
+  - Pre-built Templates tab: Classic Gold, Modern Minimal, Corporate Blue
+  - Custom Designer with drag-and-drop positioning
+  - Elements: Logo, Text, Signature, Line with full property editing
+  - Background color and border style customization
+  - Live preview with placeholder substitution
+  - Save/Load/Delete templates via API
+  - Image upload for logos and signatures
+  - Available placeholders: {Participant Name}, {Program Name}, {Date}, {Certificate Number}, {Company Name}
+  - Backend: CRUD endpoints in routes/settings.py, asset upload endpoint
+  - Testing: 9/9 backend, all UI tests passed
+
 ### Recently Fixed (Feb 25, 2026)
 - ✅ **Session-to-Invoice Full Cascade Update** (P0)
   - Fixed: Editing session dates now cascades to ALL related invoices (training_dates field)
