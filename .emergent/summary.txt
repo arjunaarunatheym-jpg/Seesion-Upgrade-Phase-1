@@ -1,186 +1,202 @@
 <analysis>**original_problem_statement:**
-The user's primary goal is to enhance and fix their training management platform. Initially, this involved fixing financial calculation bugs, but has since expanded to include significant UI/UX improvements, new features, and bug fixes across the application.
+The user's primary goal is to enhance their training management platform. Initially, this involved fixing a critical UI bug where session company name edits didn't reflect on the frontend. This led to the discovery of deeper architectural issues, including duplicate endpoints and a monolithic  file.
 
-**Key features and fixes implemented in this session:**
-*   **Inclusions/Exclusions System**: A full-featured system allowing Admins to manage a master list of items (e.g., JPJ Trainers, Venue Rental) and for Marketers to select these items with quantities when creating quotations. These selections are now rendered on the final PDF.
-*   **Email Notifications**: Integrated the Resend email service to send real-time notifications to the admin () for critical events, including: new leads, lead stage changes (Contacted, Won, Lost), and various quotation statuses (Sent for Approval, Discount Request, Accepted by Client, Rejected by Client).
-*   **Won Lead → Draft Session Workflow**: Fixed a critical bug where accepting a quotation marked a lead as won but failed to create a corresponding draft session. The system now automatically creates a draft session when a quotation is accepted. The agent also retroactively created 3 missing draft sessions for previously won leads.
-*   **Admin UI/UX Overhaul**:
-    *   Improved the  tab by replacing a single large table with dropdowns to filter quotations by year/month and group clients alphabetically.
-    *   Added an auto-refresh (30-second polling) to the Admin Dashboard to prevent stale data.
-*   **Critical Bug Fixes**:
-    *   Resolved a Method Not Allowed error when the admin tried to approve a quotation.
-    - Added the Inclusions/Exclusions details to the admin's quotation preview dialog.
-    *   Fixed a persistent admin login failure by creating the correct user account () and repairing an invalid database entry.
-
-**PRODUCT REQUIREMENTS from User in this session:**
-1.  Fix the logo positioning in the PDF header. (DONE)
-2.  Implement the Inclusions/Exclusions system. (DONE)
-3.  Fix the Won Lead to Draft Session workflow. (IN PROGRESS)
-4.  Add email notifications for lead and quotation status changes. (DONE)
-5.  Improve Admin Quotation tab UI with filters and grouping. (DONE)
-6.  Fix quotation approval error and add inclusions/exclusions to the preview. (DONE)
-7.  Add auto-refresh to the admin dashboard to prevent stale data views. (DONE)
-8.  Add an option to assign trainers to draft sessions. (IN PROGRESS)
-9.  Fix admin login credentials. (DONE)
-10. Add more email notifications for won/lost/rejected statuses. (DONE)
+The scope expanded to include:
+1.  **Bug Fixes:**
+    *   Fix the stale UI data issue for session company names in the Admin Dashboard.
+    *   Ensure company name changes cascade from leads to quotations and sessions.
+    *   Fix a broken logo issue in all PDF generation contexts.
+2.  **Backend Hardening:** Implement five specific improvements for data integrity in quotations and financial calculations.
+3.  **New Features:**
+    *   Build a Certificate Designer in the admin settings, allowing for custom certificate creation with drag-and-drop, multiple logos, and pre-built templates.
+    *   Convert the web application into a Progressive Web App (PWA) for mobile compatibility.
+4.  **Refactoring:** Address significant technical debt by refactoring the monolithic  file, moving duplicated and misplaced endpoints into their correct modular route files.
+5.  **Testing Support:** Clear all transactional data for the year 2026 to allow the user to perform fresh end-to-end testing.
+6.  **Feature Planning:** Provide advice and implementation plans for a post-training evaluation system, automated certificate generation workflows, and application monetization strategies.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a full-stack training management platform (React/FastAPI/MongoDB) with role-based access. Key functionalities include a marketing pipeline (lead to quotation to session), backend PDF generation for quotations (), and admin dashboards for management. The recent session added a complete Inclusions/Exclusions feature, integrated Resend for comprehensive email notifications, and implemented significant UI/UX improvements on the Admin dashboard, including new filters and auto-refresh capabilities.
+The application is a full-stack training management platform. Several critical bugs and features were addressed in this session:
+-   The stale UI data issue for the session's  was fixed by identifying and correcting a duplicate endpoint in  that was overriding the modular route.
+-   The backend logic was enhanced to cascade  updates from a lead to its associated quotations and sessions.
+-   A widespread bug with broken logos in PDF previews was fixed by ensuring absolute URLs were used.
+-   Five user-requested backend hardening improvements for quotations and finance were implemented.
+-   The application was converted into a Progressive Web App (PWA), with a manifest, service worker, and an install prompt.
+-   A major refactoring of the monolithic  file was initiated. The agent admitted to mistakenly adding new code to this file and began correcting it by moving ~900 lines of certificate and marketing-related code to the appropriate route files.
+-   All transactional data for the year 2026 was cleared from the database at the user's request to facilitate testing.
+-   The session ended abruptly after the user reported the preview environment was no longer starting up.
 
 **Last working item**:
--   **Last item agent was working**: Fixing the Edit Session dialog in the Admin portal. The user reported that after a draft session is created from a won lead, the Edit Session dialog does not show the Trainer Assignments section, making it impossible to add trainers. The user provided a screenshot confirming the UI was broken.
+-   **Last item agent was working**: Investigating why the preview environment is not starting up. The user reported the issue (my preview is not starting up) immediately after the agent finished implementing the PWA feature.
 -   **Status**: IN PROGRESS
 -   **Agent Testing Done**: N
--   **Which testing method agent to use?** Frontend testing agent. The test should verify that when an admin edits a draft session, the dialog correctly displays the Trainer Assignments section, allowing a trainer to be added and saved.
--   **User Testing Done**: Y (User tested and confirmed the feature is broken).
+-   **Which testing method agent to use?** Backend testing agent. The agent needs to investigate the service logs to diagnose the startup failure. The primary commands will be backend                          RUNNING   pid 49, uptime 0:00:13
+code-server                      STOPPED   Not started
+frontend                         STOPPING  
+mongo-express                    FATAL     can't find command 'mongo-express'
+mongodb                          RUNNING   pid 51, uptime 0:00:13
+nginx-app-proxy                  FATAL     Exited too quickly (process log may have details)
+nginx-code-proxy                 RUNNING   pid 47, uptime 0:00:13 to check which service is failing (likely , , or ) and  to read the error messages.
+-   **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
--   Issue 1: Edit Session dialog is missing the Trainer Assignments section. (P0)
--   Issue 2: Recurring PDF data integrity issues ( date missing, System Administrator name appearing). (P0)
--   Issue 3: Payables tab Excel export is not working. (P1)
--   Issue 4: Original request for a collapsible UI (grouping by company/month) was replaced with dropdowns. The original request is still pending. (P1)
+-   Issue 1: The application preview environment is down and not starting. (P0 - BLOCKER)
+-   Issue 2: Massive technical debt in  with thousands of lines of misplaced/duplicate code. (P1)
+-   Issue 3: Journal entry descriptions show Unknown for some historical payments. (P2)
+-   Issue 4: Expense description 1% of invoice is too generic in journal entries. (P2)
+-   Issue 5: Payables Excel export functionality is pending user verification. (P2)
+-   Issue 6: Recurring PDF data integrity issues (e.g., missing dates). (P2)
+-   Issue 7: User's original request for a collapsible table UI in the Admin Dashboard was never implemented. (P3)
 
 **Issues Detail:**
--   **Issue 1: Edit Session dialog missing Trainer Assignments**
-    -   **Attempted fixes**: The agent added the JSX for trainer assignments to the  component and suggested a hard refresh, which did not solve the problem.
+-   **Issue 1: The application preview environment is down and not starting.**
+    -   **Attempted fixes**: None. The issue was reported at the very end of the session.
     -   **Next debug checklist**:
-        1.  In , thoroughly inspect the  for the Edit Session modal.
-        2.  Check for conditional rendering logic that might be incorrectly hiding the Trainer Assignments section.
-        3.  Investigate if a different edit dialog is being rendered for draft sessions versus active sessions. The user's screenshot showed a dialog title the agent did not expect.
-        4.  Use browser developer tools to inspect the rendered DOM and  state variables to debug visibility.
-    -   **Why fix this issue and what will be achieved with the fix?** This is a blocker for the user's operational workflow. Admins need to assign trainers to draft sessions for planning and costing.
+        1.  Run backend                          RUNNING   pid 49, uptime 0:00:13
+code-server                      STOPPED   Not started
+frontend                         STOPPED   Feb 25 04:14 AM
+mongo-express                    FATAL     can't find command 'mongo-express'
+mongodb                          RUNNING   pid 51, uptime 0:00:13
+nginx-app-proxy                  FATAL     Exited too quickly (process log may have details)
+nginx-code-proxy                 RUNNING   pid 47, uptime 0:00:13 to identify which service (, , ) is in a  or error state.
+        2.  Based on the failing service, check the relevant logs: .
+        3.  The issue occurred after PWA files were created and  was modified. The  service is a likely suspect. Also, the  has crashed before and is a candidate.
+    -   **Why fix this issue and what will be achieved with the fix?** This is a critical blocker. The user cannot test or use the application until the environment is running.
+    -   **Status**: IN PROGRESS
+    -   **Is recurring issue?** Y (The  service has crashed in previous sessions).
+    -   **Should Test frontend/backend/both after fix?** Both (to ensure the entire app is accessible and functional).
+
+-   **Issue 2: Massive technical debt in .**
+    -   **Attempted fixes**: The agent audited  and found ~10,000+ lines of misplaced code. A partial fix was implemented, moving ~905 lines of certificate and marketing endpoints to their correct route files ( and ).
+    -   **Next debug checklist**:
+        1.  Continue the audit of  to identify duplicate endpoints for Finance and Sessions.
+        2.  Surgically remove duplicated routes from  that are confirmed to exist and be functional in their respective modular route files (, , etc.).
+        3.  Move any unique (non-duplicated) logic from  into the appropriate route files.
+        4.  Test extensively after each module (e.g., Finance) is refactored to prevent regressions.
+    -   **Why fix this issue and what will be achieved with the fix?** To resolve significant technical debt, improve maintainability, prevent conflicting endpoint bugs, and adhere to the user's desired architecture. This was a major point of frustration for the user.
     -   **Status**: IN PROGRESS
     -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** Frontend
-    -   **Blocked on other issue:** None
-
--   **Issue 2: Recurring PDF Data Integrity Issues**
-    -   **Attempted fixes**: Agent added fallback logic for  date. The root cause (stale data in the DB) has been identified but not systematically fixed.
-    -   **Next debug checklist**:
-        1.  Create a one-time script or a temporary admin UI utility to scan the  collection and correct all records with  or .
-        2.  In , add defensive logging to trace the quotation object being rendered to ensure dates are parsed correctly before formatting.
-    -   **Why fix this issue and what will be achieved with the fix?** Ensures professionalism and legal validity of company documents.
-    -   **Status**: IN PROGRESS
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** Backend
-
--   **Issue 3: Payables Excel Export Bug**
-    -   **Attempted fixes**: The backend endpoint was created in a previous session, but no further work has been done.
-    -   **Next debug checklist**:
-        1.  Connect the frontend button in  to the  endpoint.
-        2.  Ensure the frontend code correctly handles the blob response to trigger a file download.
-    -   **Why fix this issue and what will be achieved with the fix?** Restores a critical financial reporting feature for the user.
-    -   **Status**: NOT STARTED
-    -   **Is recurring issue?** N
     -   **Should Test frontend/backend/both after fix?** Both
 
 **In progress Task List**:
--   **Task 1: Finalize Won Lead → Draft Session Workflow (P0)**
-    -   **Where to resume**: The immediate blocker is fixing the Edit Session dialog (Issue #1). Once fixed, the entire workflow (mark won -> create draft -> edit draft to add trainer -> activate session) needs end-to-end testing.
-    -   **What will be achieved with this?** A fully streamlined and functional handover process from the sales team to the operations team.
+-   **Task 1: Complete Certificate Designer Feature (P1)**
+    -   **Where to resume**: The foundational files (, backend endpoints in ) have been created. The next step is to build out the UI in  with the two tabs (Custom Designer and Pre-built Templates), implement the drag-and-drop functionality (e.g., using ), and connect the UI to the backend for saving/loading templates.
+    -   **What will be achieved with this?** This will deliver the certificate template editor that the user prioritized, giving them the freedom to design certificates.
     -   **Status**: IN PROGRESS
     -   **Should Test frontend/backend/both after fix?** Both
+    -   **Blocked on something**: Issue 1 (App is down).
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks:**
-    -   (P0) **Excel Finance Module Integration**: Analyze the user's multi-tabbed Excel file and architect a plan to replicate its logic within the application.
-    -   (P1) **Enhance PDF Template Editor**: Replace the current markup-based editor with a user-friendly WYSIWYG editor.
-    -   (P1) **Implement Admin Dashboard Analytics**: Add visual charts for key business metrics.
-    -   (P1) **Finalize Collapsible UI**: Implement the original request for collapsible table row groups (by company/month) instead of the current dropdown filters.
+    -   (P1) Implement SaaS Monetization: Integrate Stripe to add tiered subscription plans as discussed.
+    -   (P1) Post-Training Evaluation System: Implement the phased plan for sending automated evaluation forms to participants 3 and 6 months after training.
+    -   (P1) Automated Certificate Generation Workflow: Build the progress tracking system to automatically issue certificates once a participant completes all requirements (attendance, tests, etc.).
 -   **Future Tasks:**
-    -   (P2) Implement a Post-Training Evaluation System.
+    -   (P2) Client Portal for customers to view their own training history and invoices.
+    -   (P2) Trainer Portal for trainers to manage schedules and submit claims.
     -   (P2) Enhance Data Management tables with better search and pagination.
-    -   (P2) Add a formal Accountant P&L view.
+    -   (P2) Implement a WYSIWYG editor for PDF templates.
 
 **Completed work in this session**
--   **Feature**: Implemented the complete Inclusions/Exclusions system from backend to frontend and PDF rendering.
--   **Feature**: Integrated Resend for comprehensive email notifications on lead and quotation status changes.
--   **Feature**: Implemented auto-refresh on the Admin Dashboard via 30-second polling.
--   **UI/UX**: Revamped the Admin Quotations tab with Year/Month dropdown filters and alphabetical client grouping.
--   **Bug Fix**: Resolved the Won Lead - Session creation failure when a quotation is marked Accepted.
--   **Bug Fix**: Fixed a Method Not Allowed error on quotation approval and added inclusion/exclusion details to the preview dialog.
--   **Bug Fix**: Corrected the admin login failure by creating the  user account and fixing the database record.
--   **Bug Fix**: Adjusted the company logo position in the PDF header.
+-   **Bug Fix**: Fixed stale UI data issue for session  by resolving a duplicate endpoint conflict between  and .
+-   **Feature**: Enhanced backend to cascade  changes from a Lead to its associated Quotations and Sessions.
+-   **Bug Fix**: Fixed broken logo images in all PDF generation components by enforcing the use of absolute URLs.
+-   **Feature**: Implemented 5 backend hardening improvements related to quotation status gates, idempotency, and server-side financial recalculations.
+-   **Refactoring**: Partially refactored , removing ~905 lines of misplaced marketing and certificate code and moving it to the correct route files.
+-   **Feature**: Implemented a Progressive Web App (PWA) by adding a manifest, service worker, and install prompt, making the app mobile-friendly.
+-   **Admin**: Cleared all 2026 transactional data from the database to facilitate user testing.
+
+**Earlier issues found/mentioned but not fixed**
+-   **Issue 1: PDF data integrity issues.** A recurring problem where generated PDFs have incorrect or missing data. Status: NOT STARTED.
+-   **Issue 2: Original collapsible UI request.** The user's initial request for a collapsible table UI in the Admin Dashboard remains unimplemented. Status: NOT STARTED.
+
+**Known issue recurrence from previous fork**
+-   **Issue recurrence in previous fork**: The  service crashed again, requiring the same fix of recreating its config file. This indicates a potential fragility in the environment setup. The agent also repeated the anti-pattern of adding new code to the monolithic  file instead of modular routes, a major source of user frustration and technical debt.
+-   **Recurrence count**: 2+
+-   **Status**: BLOCKED (The  issue is IN PROGRESS).
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Endpoint Shadowing in FastAPI**: A critical architectural flaw was discovered where routes defined in  were overriding duplicate routes in . The agent correctly diagnosed this and applied fixes to the correct files in the  directory.
--   **Duplicate Database Collections**: The agent found two collections ( and ) holding similar data, a major source of inconsistency. The code was patched to use the correct collection, but the underlying issue remains.
--   **Third-Party Integration (Resend)**: The agent successfully integrated the Resend API for email notifications, managing credentials in  and creating a reusable email utility.
+-   **Monolith Refactoring**: The session's primary challenge was dealing with a massive  file and beginning the process of moving its ~18,000 lines of code into a proper modular route structure.
+-   **Duplicate Endpoint Overriding**: Discovered that FastAPI was prioritizing routes defined directly in  over identical routes in modular routers included with a prefix, causing bug fixes in route files to be ignored.
+-   **Progressive Web App (PWA)**: Implemented using a  file, a  for caching, and a custom React component to handle the installation prompt across different browsers and operating systems.
+-   **Relative vs. Absolute URLs**: Fixed a widespread UI bug where images with relative URLs were failing to load in contexts like  or print previews.
 
 **key DB schema**
--   **users**: The  field was discovered to be a required field for user creation.
--   **quotations**:  (stores selected inclusions/exclusions with quantities) and  fields are now actively used.
--   **sessions**:  of draft is used for sessions created automatically from won leads.
--   **description_items**: This is the correct collection for inclusions/exclusions, containing  and  fields.  is a duplicate and should be removed.
+- No new collections were fully implemented, but schemas were designed for: , , , , and .
 
 **All files of reference**
--    (For fixing the Edit Session dialog)
--    (Source of truth for most marketing, lead, and quotation logic)
--    (Contains legacy/shadowed code that needs refactoring)
--    (For all PDF-related bugs)
--    (Reference for new filter UI)
--    (Email notification logic)
+-   : The primary file for the ongoing, critical refactoring task.
+-   : The target for marketing-related endpoints moved from .
+-   : The correct location for the new certificate designer endpoints.
+-   : The entry point for the next major feature implementation.
+-   : PWA configuration file.
+-   : PWA service worker file.
 
 **Areas that need refactoring**:
--   **CRITICAL: Consolidate Duplicate Endpoints**: The shadowed API endpoints in  must be removed. All logic should live within the  directory files (, etc.) to eliminate confusion and prevent future bugs.
--   **CRITICAL: Consolidate Duplicate Collections**: A data migration script should be written to move any valid data from  to , and then the former collection should be dropped. All code must be updated to reference  only.
+-   ** is the highest priority.** It still contains over 17,000 lines, with an estimated 10,000+ lines of finance, session, and accounting logic that must be moved to their respective modular route files (). The user is acutely aware of this issue and expects it to be resolved.
 
 **key api endpoints**
--   All active marketing, lead, and quotation endpoints are now served from the router in . The identically named endpoints in  are inactive and should be ignored/removed.
--   : Creates a draft session when .
--   : Correct endpoint for an admin to approve a quotation.
+-   : Created to fetch certificate templates.
+-   : Created to save a new certificate template.
 
 **Critical Info for New Agent**
--   **CODEBASE HAS DUPLICATE LOGIC**: The most important thing to know is that the codebase contains shadowed API endpoints. Logic for marketing/leads/quotations in  is **dead code**. The real, active logic is in . Always start debugging there. This has caused numerous data inconsistency bugs.
--   **DATA IS INCONSISTENT**: As a result of the duplicate logic, there are two database collections for description items:  and . The agent's fixes now point to , but be aware of this discrepancy when querying the database.
--   **EMAIL INTEGRATION**: Email notifications are handled by Resend. The API key is in . Emails are sent to the admin's Gmail () because the primary domain () is not yet verified with Resend.
+-   **TOP PRIORITY: FIX THE PREVIEW ENVIRONMENT.** The app is down. Nothing else matters until this is resolved. Check backend                          RUNNING   pid 49, uptime 0:00:14
+code-server                      STOPPED   Not started
+frontend                         STOPPED   Feb 25 04:14 AM
+mongo-express                    FATAL     can't find command 'mongo-express'
+mongodb                          RUNNING   pid 51, uptime 0:00:14
+nginx-app-proxy                  FATAL     Exited too quickly (process log may have details)
+nginx-code-proxy                 RUNNING   pid 47, uptime 0:00:14 and the service logs immediately.
+-   **DO NOT add any new code to **. The user is extremely frustrated with this anti-pattern. All new backend code MUST go into the appropriate file within .
+-   **Continue the Refactoring:** The user expects the cleanup of  to continue. After fixing the server, this is the next highest priority. Be systematic and communicate progress clearly.
+-   **User is Testing:** The user has cleared 2026 data and intends to hard test the entire application flow. Be prepared for bug reports and feedback.
+-   **PWA Prompt:** The PWA install prompt was modified to appear more aggressively for testing. This logic in  may need to be reverted to standard browser behavior before finishing the feature.
 
 **documents and test reports created in this job**
--    was updated.
+-   : A one-off script to clear test data.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User**: draft session created but i still dont see an option to add trainers in edit session - (User reports bug, provides screenshot).
-2.  **User**: not getting email when quotation is won or rejected - (Bug report, now fixed).
-3.  **User**: still showing log in failed... - (User reports login issue, now fixed).
-4.  **User**: i cannot seem to log in my id arjuna@mddrc.com.my... - (User reports login issue, now fixed).
-5.  **User**: i must be able to add trainers to include in my costing - (Clarifying requirement for draft sessions).
-6.  **User**: ...i dont see an email for discount approval and sent quotation. need for won and lost also with reason - (Feature request, now implemented).
-7.  **User**: ...approve in preview can... also preview now not showing inclusive and exclusion - (Bug reports, now fixed).
-8.  **User**: Provides Resend API Key. (Provided).
-9.  **User**: resend is asking me this - (Asks for guidance on Resend domain verification).
-10. **User**: im not so sure which is the easiest and guide me to set it up. you can proceed with UI changes - (Approves UI work and asks for email guidance).
+1.  **User**: Asks for advice on implementing a post-training evaluation system. (Agent provided a detailed plan).
+2.  **User**: Asks for advice on an automated certificate generation workflow. (Agent provided a detailed plan).
+3.  **User**: Decides to proceed with building the Certificate Designer part of the plan first. (Agent started implementation).
+4.  **User**: Asks about mobile app creation and astutely questions why new code is going into . (Agent acknowledged the mistake).
+5.  **User**: Expresses frustration about the refactoring negligence and demands to know the extent of the problem. (Agent performed an audit).
+6.  **User**: Demands the refactoring be fixed at no charge. (Agent agreed and began the work).
+7.  **User**: Decides to pause the refactoring to hard test the preview, and requests all 2026 data be cleared. (Agent complied).
+8.  **User**: Asks for a repeat explanation of mobile app creation options. (Agent provided a detailed breakdown).
+9.  **User**: Approves the implementation of the PWA. (Agent implemented it).
+10. **User**: Asks about monetization strategies and reports the PWA install prompt is not visible. (Agent provided advice and a fix).
+11. **User (PENDING)**: **my preview is not starting up**. This is the last and most critical message. The app is down.
 
 **Project Health Check:**
 -   **Broken**:
-    -   The Edit Session dialog is missing the trainer assignment section, a crucial part of the user's workflow.
-    -   PDF generation still suffers from recurring data integrity bugs (, admin name).
+    -   The entire preview environment is non-functional.
+    -   The backend architecture is severely compromised by the monolithic  file, leading to bugs and maintenance issues.
 -   **Mocked**:
     -   N/A
 
 **3rd Party Integrations**
--   **Resend**: For sending email notifications. Uses a User API Key (). The agent used  to get the integration details.
 -    (Backend PDF Generation)
 -    (Backend Excel Export)
 -    (Password Hashing)
 -    (Icons)
 -    (Frontend PDF Generation for Invoices)
+-    (Email)
 
 **Testing status**
 -   **Testing agent used after significant changes**: NO
 -   **Troubleshoot agent used after agent stuck in loop**: NO
 -   **Test files created**: None
--   **Known regressions**: The  and admin name PDF bugs are recurring issues that have not been permanently solved.
+-   **Known regressions**: The entire application is down.
 
 **Credentials to test flow:**
--   **Admin**:  (password: )
+-   **Admin/Super Admin**:  (password: )
 -   **Marketing/Coordinator**:  (password: )
 
 **What agent forgot to execute**
--   The agent did not perform a systematic cleanup of the duplicate API endpoints and database collections. While the immediate bugs were patched by pointing to the correct code/collection, the root cause of the architectural fragility remains, posing a high risk for future development.
--   The original user request to make table rows collapsible (expand/collapse groups) was not implemented; the agent implemented dropdown filters instead.</analysis>
+-   The agent repeated the critical mistake of adding new code to  after the codebase had already been modularized, ignoring the user's architectural intent and causing significant user frustration.
+-   The full refactoring of  was started but is far from complete. Thousands of lines of finance and session-related code are still misplaced.</analysis>
