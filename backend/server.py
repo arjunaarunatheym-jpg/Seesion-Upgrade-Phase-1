@@ -3286,6 +3286,43 @@ async def update_session(session_id: str, session_data: dict, current_user: User
                 {"$set": {"company_name": new_company_name}}
             )
     
+    # Cascade date changes to related invoices
+    new_start_date = session_data.get("start_date")
+    new_end_date = session_data.get("end_date")
+    old_start_date = session.get("start_date")
+    old_end_date = session.get("end_date")
+    
+    if (new_start_date and new_start_date != old_start_date) or (new_end_date and new_end_date != old_end_date):
+        # Use updated values, fallback to old values if not changed
+        final_start = new_start_date or old_start_date
+        final_end = new_end_date or old_end_date
+        if final_start and final_end:
+            new_training_dates = f"{final_start} to {final_end}"
+            await db.invoices.update_many(
+                {"session_id": session_id},
+                {"$set": {"training_dates": new_training_dates}}
+            )
+    
+    # Cascade venue/location changes to related invoices
+    new_location = session_data.get("location")
+    old_location = session.get("location")
+    if new_location and new_location != old_location:
+        await db.invoices.update_many(
+            {"session_id": session_id},
+            {"$set": {"venue": new_location}}
+        )
+    
+    # Cascade programme changes to related invoices
+    new_program_id = session_data.get("program_id")
+    old_program_id = session.get("program_id")
+    if new_program_id and new_program_id != old_program_id:
+        programme = await db.programs.find_one({"id": new_program_id}, {"_id": 0})
+        if programme:
+            await db.invoices.update_many(
+                {"session_id": session_id},
+                {"$set": {"programme_name": programme.get("name")}}
+            )
+    
     # Return the updated session
     updated_session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     return updated_session
