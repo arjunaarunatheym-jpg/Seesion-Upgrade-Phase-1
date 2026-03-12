@@ -62,6 +62,7 @@ const DataManagement = ({ user }) => {
   const [overrideDialog, setOverrideDialog] = useState({ open: false, invoice: null });
   const [editPaidDialog, setEditPaidDialog] = useState({ open: false, invoice: null });
   const [deleteInvoiceDialog, setDeleteInvoiceDialog] = useState({ open: false, invoice: null });
+  const [revertDialog, setRevertDialog] = useState({ open: false, invoice: null });
 
   // Payment Management State
   const [payments, setPayments] = useState([]);
@@ -91,6 +92,7 @@ const DataManagement = ({ user }) => {
   const [editPaidForm, setEditPaidForm] = useState({ billToName: "", billToAddress: "", totalAmount: 0, reason: "" });
   const [deletePaymentForm, setDeletePaymentForm] = useState({ reason: "" });
   const [deleteInvoiceForm, setDeleteInvoiceForm] = useState({ reason: "", reuseNumber: true });
+  const [revertForm, setRevertForm] = useState({ targetStatus: "auto_draft", reason: "" });
 
   // Credit Note Form states
   const [editCnForm, setEditCnForm] = useState({ companyName: "", reason: "", description: "", amount: 0, percentage: 4, editReason: "" });
@@ -292,6 +294,20 @@ const DataManagement = ({ user }) => {
       loadInvoices();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to delete invoice");
+    }
+  };
+
+  const handleRevertInvoice = async () => {
+    try {
+      await axiosInstance.post(`/finance/invoices/${revertDialog.invoice.id}/revert-status`, null, {
+        params: { target_status: revertForm.targetStatus, reason: revertForm.reason }
+      });
+      toast.success(`Invoice ${revertDialog.invoice.invoice_number} reverted to ${revertForm.targetStatus.replace('_', ' ')}`);
+      setRevertDialog({ open: false, invoice: null });
+      setRevertForm({ targetStatus: "auto_draft", reason: "" });
+      loadInvoices();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to revert invoice");
     }
   };
 
@@ -1234,6 +1250,8 @@ const DataManagement = ({ user }) => {
                 setVoidDialog={setVoidDialog}
                 setDeleteForm={setDeleteInvoiceForm}
                 setDeleteDialog={setDeleteInvoiceDialog}
+                setRevertForm={setRevertForm}
+                setRevertDialog={setRevertDialog}
               />
             </TabsContent>
             <TabsContent value="creditnote-management">
@@ -1400,6 +1418,58 @@ const DataManagement = ({ user }) => {
               disabled={!deleteInvoiceForm.reason}
             >
               Delete Invoice
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Revert Invoice Status Dialog */}
+      <Dialog open={revertDialog.open} onOpenChange={(open) => setRevertDialog({ ...revertDialog, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <RefreshCw className="w-5 h-5" />
+              Revert Invoice Status
+            </DialogTitle>
+            <DialogDescription>
+              Revert invoice <strong>{revertDialog.invoice?.invoice_number}</strong> from <strong>{revertDialog.invoice?.status?.replace('_', ' ')}</strong> back to draft.
+              <br />
+              Company: {revertDialog.invoice?.company_name}
+              <br />
+              Amount: RM {revertDialog.invoice?.total_amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Revert To</Label>
+              <Select value={revertForm.targetStatus} onValueChange={(v) => setRevertForm({ ...revertForm, targetStatus: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto_draft">Auto Draft</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="finance_review">Finance Review</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Reason for Reverting *</Label>
+              <Textarea
+                placeholder="Explain why this invoice needs to be reverted..."
+                value={revertForm.reason}
+                onChange={(e) => setRevertForm({ ...revertForm, reason: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRevertDialog({ open: false, invoice: null })}>Cancel</Button>
+            <Button 
+              onClick={handleRevertInvoice} 
+              disabled={!revertForm.reason}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              Revert to {revertForm.targetStatus.replace('_', ' ')}
             </Button>
           </DialogFooter>
         </DialogContent>

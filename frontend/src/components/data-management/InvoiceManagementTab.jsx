@@ -7,7 +7,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { FileText, Hash, Calendar, Edit, Ban, RefreshCw, Trash2 } from "lucide-react";
+import { FileText, Hash, Calendar, Edit, Ban, RefreshCw, Trash2, Undo2 } from "lucide-react";
 
 const InvoiceManagementTab = ({
   invoices,
@@ -30,6 +30,8 @@ const InvoiceManagementTab = ({
   setVoidDialog,
   setDeleteForm,
   setDeleteDialog,
+  setRevertForm,
+  setRevertDialog,
 }) => {
   return (
     <div className="space-y-4">
@@ -60,6 +62,7 @@ const InvoiceManagementTab = ({
                   <SelectItem value="approved">Approved</SelectItem>
                   <SelectItem value="issued">Issued</SelectItem>
                   <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
                   <SelectItem value="voided">Voided</SelectItem>
                 </SelectContent>
               </Select>
@@ -152,7 +155,7 @@ const InvoiceManagementTab = ({
                             <FileText className="h-4 w-4 text-blue-500" />
                           </Button>
                         )}
-                        {invoice.status !== "voided" && (
+                        {invoice.status !== "voided" && invoice.status !== "cancelled" && (
                           <Button
                             size="sm"
                             variant="ghost"
@@ -163,6 +166,20 @@ const InvoiceManagementTab = ({
                             }}
                           >
                             <Ban className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                        {(invoice.status === "cancelled" || invoice.status === "voided") && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            title="Revert to Draft"
+                            data-testid={`revert-invoice-${invoice.id}`}
+                            onClick={() => {
+                              setRevertForm({ targetStatus: "auto_draft", reason: "" });
+                              setRevertDialog({ open: true, invoice });
+                            }}
+                          >
+                            <Undo2 className="h-4 w-4 text-amber-600" />
                           </Button>
                         )}
                         <Button

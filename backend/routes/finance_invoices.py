@@ -421,7 +421,7 @@ async def cancel_invoice(invoice_id: str, reason: str = "", current_user: User =
     return {"message": "Invoice cancelled successfully"}
 
 @router.post("/invoices/{invoice_id}/revert-status")
-async def revert_invoice_status(invoice_id: str, target_status: str = "auto_draft", current_user: User = Depends(get_current_user)):
+async def revert_invoice_status(invoice_id: str, target_status: str = "auto_draft", reason: str = "", current_user: User = Depends(get_current_user)):
     """Revert invoice status (Admin only) - used to undo cancellations"""
     if current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Only admins can revert invoice status")
@@ -439,7 +439,10 @@ async def revert_invoice_status(invoice_id: str, target_status: str = "auto_draf
         {"id": invoice_id},
         {"$set": {
             "status": target_status,
-            "updated_at": get_malaysia_time().isoformat()
+            "updated_at": get_malaysia_time().isoformat(),
+            "revert_reason": reason,
+            "reverted_by": current_user.id,
+            "reverted_at": get_malaysia_time().isoformat()
         },
         "$unset": {
             "cancelled_by": "",
@@ -450,7 +453,7 @@ async def revert_invoice_status(invoice_id: str, target_status: str = "auto_draf
     
     await db.sessions.update_one({"invoice_id": invoice_id}, {"$set": {"invoice_status": target_status}})
     await log_finance_action("invoice", invoice_id, "status_reverted", current_user.id,
-                            {"status": old_status}, {"status": target_status})
+                            {"status": old_status}, {"status": target_status, "reason": reason})
     
     return {"message": f"Invoice {invoice.get('invoice_number')} reverted from '{old_status}' to '{target_status}'"}
 
