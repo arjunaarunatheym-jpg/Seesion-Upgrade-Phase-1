@@ -420,6 +420,76 @@ async def cancel_invoice(invoice_id: str, reason: str = "", current_user: User =
     
     return {"message": "Invoice cancelled successfully"}
 
+@router.post("/invoices/{invoice_id}/revert-status")
+async def revert_invoice_status(invoice_id: str, target_status: str = "auto_draft", current_user: User = Depends(get_current_user)):
+    """Revert invoice status (Admin only) - used to undo cancellations"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can revert invoice status")
+    
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    allowed_targets = ["auto_draft", "draft", "finance_review"]
+    if target_status not in allowed_targets:
+        raise HTTPException(status_code=400, detail=f"Target status must be one of: {allowed_targets}")
+    
+    old_status = invoice.get("status")
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {
+            "status": target_status,
+            "updated_at": get_malaysia_time().isoformat()
+        },
+        "$unset": {
+            "cancelled_by": "",
+            "cancelled_at": "",
+            "cancellation_reason": ""
+        }}
+    )
+    
+    await db.sessions.update_one({"invoice_id": invoice_id}, {"$set": {"invoice_status": target_status}})
+    await log_finance_action("invoice", invoice_id, "status_reverted", current_user.id,
+                            {"status": old_status}, {"status": target_status})
+    
+    return {"message": f"Invoice {invoice.get('invoice_number')} reverted from '{old_status}' to '{target_status}'"}
+
+
+@router.post("/invoices/revert-batch")
+async def revert_invoices_batch(data: dict, current_user: User = Depends(get_current_user)):
+    """Revert multiple invoices by invoice_number (Admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can revert invoice status")
+    
+    invoice_numbers = data.get("invoice_numbers", [])
+    target_status = data.get("target_status", "auto_draft")
+    
+    allowed_targets = ["auto_draft", "draft", "finance_review"]
+    if target_status not in allowed_targets:
+        raise HTTPException(status_code=400, detail=f"Target status must be one of: {allowed_targets}")
+    
+    results = []
+    for inv_num in invoice_numbers:
+        invoice = await db.invoices.find_one({"invoice_number": inv_num}, {"_id": 0})
+        if not invoice:
+            results.append({"invoice_number": inv_num, "status": "not_found"})
+            continue
+        
+        old_status = invoice.get("status")
+        await db.invoices.update_one(
+            {"id": invoice["id"]},
+            {"$set": {"status": target_status, "updated_at": get_malaysia_time().isoformat()},
+             "$unset": {"cancelled_by": "", "cancelled_at": "", "cancellation_reason": ""}}
+        )
+        await db.sessions.update_one({"invoice_id": invoice["id"]}, {"$set": {"invoice_status": target_status}})
+        await log_finance_action("invoice", invoice["id"], "status_reverted", current_user.id,
+                                {"status": old_status}, {"status": target_status})
+        results.append({"invoice_number": inv_num, "old_status": old_status, "new_status": target_status})
+    
+    return {"results": results}
+
+
+
 
 @router.post("/invoices/{invoice_id}/create-replacement")
 async def create_replacement_invoice(
