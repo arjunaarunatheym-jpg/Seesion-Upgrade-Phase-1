@@ -113,30 +113,32 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
   - Compare active, won, lost, conversion rate, won value by staff
 
 ### In Progress
+
+### Recently Completed (Mar 14, 2026)
+- ✅ **Admin Session Mark Complete** — Data Management > Session Mgmt tab
+  - Admin can mark sessions as completed (bypasses coordinator workflow)
+  - Revert completed sessions back to ongoing
+  - Mandatory reason field for audit trail
+  - Completing session triggers P&L revenue recognition
+- ✅ **Excel Import/Export for Sessions** — Available in both Data Management AND Coordinator Portal
+  - Download pre-populated Excel template with 3 sheets: Test Scores, Attendance, Instructions
+  - Upload filled Excel to bulk-import pre/post test scores and attendance records
+  - Matches participants by IC number
+  - Handles updates to existing records (upsert)
+- ✅ **Invoice Revert Status** — Data Management > Invoices tab
+  - Revert cancelled/voided invoices to Draft/Finance Review
+  - Amber undo button with mandatory reason field
+  - Batch revert API for bulk operations
+- ✅ **Receipt Generation** — Fixed missing printReceipt utility
+- ✅ **Credit Notes Month/Year Grouping** — Collapsible sections matching Invoices pattern
+
 - None
 
 ### Recently Completed (Feb 25, 2026)
 - ✅ **Certificate Template Designer** (P1) — Fully functional
-  - Pre-built Templates tab: Classic Gold, Modern Minimal, Corporate Blue
-  - Custom Designer with drag-and-drop positioning
-  - Elements: Logo, Text, Signature, Line with full property editing
-  - Background color and border style customization
-  - Live preview with placeholder substitution
-  - Save/Load/Delete templates via API
-  - Image upload for logos and signatures
-  - Available placeholders: {Participant Name}, {Program Name}, {Date}, {Certificate Number}, {Company Name}
-  - Backend: CRUD endpoints in routes/settings.py, asset upload endpoint
-  - Testing: 9/9 backend, all UI tests passed
 
 ### Recently Fixed (Feb 25, 2026)
 - ✅ **Session-to-Invoice Full Cascade Update** (P0)
-  - Fixed: Editing session dates now cascades to ALL related invoices (training_dates field)
-  - Fixed: Editing session venue/location now cascades to ALL related invoices
-  - Fixed: Editing session programme now cascades to ALL related invoices
-  - Fixed: Company name cascade still works for invoices, quotations, leads
-  - Fixed in `routes/sessions_new.py` (the active PUT handler) and `server.py` backup
-  - Covers multi-invoice sessions (additional invoices under same session_id)
-- ✅ **nginx-app-proxy stability** - Recreated missing config file
 
 ### Recently Fixed (Feb 23, 2026)
 - ✅ **Session Company Name Cascade Update** (P0)

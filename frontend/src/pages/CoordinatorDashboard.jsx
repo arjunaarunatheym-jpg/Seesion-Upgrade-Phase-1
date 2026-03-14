@@ -1161,6 +1161,56 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                               </div>
                             </div>
                           </div>
+                          <div className="mt-3 pt-2 border-t flex gap-2">
+                            <Button size="sm" variant="outline" className="flex-1 text-xs h-7"
+                              title="Download Excel Template"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                (async () => {
+                                  try {
+                                    const response = await axiosInstance.get(`/sessions/${session.id}/export-template`, { responseType: 'blob' });
+                                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                                    const link = document.createElement('a');
+                                    link.href = url;
+                                    link.download = `MDDRC_Template_${(session.company_name || "session").replace(/\s+/g, "_").substring(0,30)}_${session.start_date}.xlsx`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    link.remove();
+                                    window.URL.revokeObjectURL(url);
+                                    toast.success("Template downloaded");
+                                  } catch { toast.error("Download failed"); }
+                                })();
+                              }}>
+                              <Download className="w-3 h-3 mr-1" /> Template
+                            </Button>
+                            <label className="flex-1">
+                              <Button size="sm" variant="outline" className="w-full text-xs h-7 text-purple-600 border-purple-300"
+                                title="Upload Excel Data"
+                                onClick={(e) => e.stopPropagation()}>
+                                <Upload className="w-3 h-3 mr-1" /> Import
+                              </Button>
+                              <input type="file" accept=".xlsx,.xls" className="hidden"
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  (async () => {
+                                    try {
+                                      const formData = new FormData();
+                                      formData.append('file', file);
+                                      const res = await axiosInstance.post(`/sessions/${session.id}/import-data`, formData, {
+                                        headers: { 'Content-Type': 'multipart/form-data' }
+                                      });
+                                      const data = res.data;
+                                      toast.success(`Imported: ${data.test_scores_imported} test scores, ${data.attendance_imported} attendance`);
+                                      if (data.errors?.length > 0) toast.warning(`${data.errors.length} errors`);
+                                    } catch { toast.error("Import failed"); }
+                                    e.target.value = '';
+                                  })();
+                                }}
+                              />
+                            </label>
+                          </div>
                         </button>
                       );
                     })}

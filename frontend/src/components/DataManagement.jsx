@@ -12,10 +12,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Search, Edit, Trash2, Filter, Database, History, FileText, CreditCard, Settings, Download, Ban, Calendar, Hash, RefreshCw } from "lucide-react";
+import { Search, Edit, Trash2, Filter, Database, History, FileText, CreditCard, Settings, Download, Ban, Calendar, Hash, RefreshCw, CheckCircle } from "lucide-react";
 import SuperAdminPanel from "./SuperAdminPanel";
 import { InvoiceManagementTab } from "./data-management/InvoiceManagementTab";
 import { CreditNoteManagementTab } from "./data-management/CreditNoteManagementTab";
+import { SessionManagementTab } from "./data-management/SessionManagementTab";
 
 const DataManagement = ({ user }) => {
   const [activeMainTab, setActiveMainTab] = useState("sessions-data");
@@ -113,6 +114,8 @@ const DataManagement = ({ user }) => {
       loadCreditNotes();
     } else if (activeMainTab === "audit-trail" && hasFinanceAccess) {
       loadAuditTrail();
+    } else if (activeMainTab === "session-management") {
+      loadFiltersData();
     }
   }, [activeMainTab]);
 
@@ -1191,6 +1194,11 @@ const DataManagement = ({ user }) => {
             <span className="hidden sm:inline">Sessions Data</span>
             <span className="sm:hidden">Data</span>
           </TabsTrigger>
+          <TabsTrigger value="session-management" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2">
+            <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
+            <span className="hidden sm:inline">Session Mgmt</span>
+            <span className="sm:hidden">Sess</span>
+          </TabsTrigger>
           {hasFinanceAccess && (
             <>
               <TabsTrigger value="invoice-management" className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2">
@@ -1224,6 +1232,10 @@ const DataManagement = ({ user }) => {
 
         <TabsContent value="sessions-data">
           {isSuperAdmin ? <SuperAdminPanel /> : <SessionsDataTab />}
+        </TabsContent>
+
+        <TabsContent value="session-management">
+          <SessionManagementTab sessions={sessions} loading={loading} onRefresh={loadFiltersData} />
         </TabsContent>
 
         {hasFinanceAccess && (

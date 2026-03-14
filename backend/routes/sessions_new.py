@@ -926,3 +926,420 @@ async def mark_session_completed(session_id: str, current_user: User = Depends(g
         "session_archived": True,
         "report_pushed_to_supervisors": True
     }
+
+
+# ============================================================
+# Admin Session Complete + Excel Import/Export
+# ============================================================
+
+@router.post("/{session_id}/admin-complete")
+async def admin_mark_session_complete(session_id: str, data: dict, current_user: User = Depends(get_current_user)):
+    """Admin marks session as completed (bypasses coordinator workflow)"""
+    if current_user.role not in ["admin", "super_admin", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can force-complete sessions")
+    
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    reason = data.get("reason", "Admin override")
+    
+    await db.sessions.update_one(
+        {"id": session_id},
+        {"$set": {
+            "completion_status": "completed",
+            "completed_by_coordinator": True,
+            "completed_date": get_malaysia_time().isoformat(),
+            "admin_completed": True,
+            "admin_complete_reason": reason,
+            "admin_completed_by": current_user.id,
+            "is_archived": True
+        }}
+    )
+    
+    return {
+        "message": f"Session marked as completed by admin",
+        "session_id": session_id,
+        "reason": reason
+    }
+
+
+@router.post("/{session_id}/admin-revert-complete")
+async def admin_revert_session_complete(session_id: str, data: dict, current_user: User = Depends(get_current_user)):
+    """Admin reverts a completed session back to ongoing"""
+    if current_user.role not in ["admin", "super_admin", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can revert session completion")
+    
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    reason = data.get("reason", "Admin revert")
+    
+    await db.sessions.update_one(
+        {"id": session_id},
+        {"$set": {
+            "completion_status": "ongoing",
+            "completed_by_coordinator": False,
+            "is_archived": False,
+            "revert_reason": reason,
+            "reverted_by": current_user.id,
+            "reverted_at": get_malaysia_time().isoformat()
+        },
+        "$unset": {
+            "completed_date": "",
+            "admin_completed": "",
+            "admin_complete_reason": "",
+            "admin_completed_by": ""
+        }}
+    )
+    
+    return {"message": "Session reverted to ongoing", "session_id": session_id}
+
+
+@router.get("/{session_id}/export-template")
+async def export_session_template(session_id: str, current_user: User = Depends(get_current_user)):
+    """Export Excel template pre-populated with session participants"""
+    if current_user.role not in ["admin", "super_admin", "assistant_admin", "coordinator", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from io import BytesIO
+    
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Get participants
+    participant_ids = session.get("participant_ids", [])
+    participants = []
+    for pid in participant_ids:
+        user = await db.users.find_one({"id": pid}, {"_id": 0, "id": 1, "name": 1, "ic_number": 1, "email": 1, "phone": 1})
+        if user:
+            participants.append(user)
+    
+    # Get existing data
+    existing_attendance = await db.attendance.find({"session_id": session_id}, {"_id": 0}).to_list(1000)
+    existing_tests = await db.test_results.find({"session_id": session_id}, {"_id": 0}).to_list(1000)
+    
+    att_map = {}
+    for a in existing_attendance:
+        key = a.get("participant_id")
+        if key not in att_map:
+            att_map[key] = []
+        att_map[key].append(a)
+    
+    test_map = {}
+    for t in existing_tests:
+        key = (t.get("participant_id"), t.get("test_type"))
+        test_map[key] = t
+    
+    # Get session dates for attendance columns
+    start = session.get("start_date", "")
+    end = session.get("end_date", start)
+    
+    wb = Workbook()
+    
+    # === Sheet 1: Test Scores ===
+    ws1 = wb.active
+    ws1.title = "Test Scores"
+    
+    header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+    
+    # Info rows
+    ws1.merge_cells('A1:F1')
+    ws1['A1'] = f"Session: {session.get('company_name', 'N/A')} - {session.get('program_name', 'N/A')}"
+    ws1['A1'].font = Font(bold=True, size=14)
+    ws1.merge_cells('A2:F2')
+    ws1['A2'] = f"Dates: {start} to {end} | Session ID: {session_id}"
+    ws1['A2'].font = Font(size=11, italic=True)
+    
+    headers = ["No", "Participant Name", "IC Number", "Pre-Test Score (%)", "Post-Test Score (%)", "Remarks"]
+    for col, h in enumerate(headers, 1):
+        cell = ws1.cell(row=4, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = thin_border
+    
+    for i, p in enumerate(participants, 1):
+        row = i + 4
+        ws1.cell(row=row, column=1, value=i).border = thin_border
+        ws1.cell(row=row, column=2, value=p.get("name", "")).border = thin_border
+        ws1.cell(row=row, column=3, value=p.get("ic_number", "")).border = thin_border
+        
+        pre = test_map.get((p["id"], "pre"))
+        post = test_map.get((p["id"], "post"))
+        pre_cell = ws1.cell(row=row, column=4, value=pre.get("score") if pre else None)
+        pre_cell.border = thin_border
+        post_cell = ws1.cell(row=row, column=5, value=post.get("score") if post else None)
+        post_cell.border = thin_border
+        ws1.cell(row=row, column=6, value="").border = thin_border
+    
+    ws1.column_dimensions['A'].width = 6
+    ws1.column_dimensions['B'].width = 30
+    ws1.column_dimensions['C'].width = 18
+    ws1.column_dimensions['D'].width = 20
+    ws1.column_dimensions['E'].width = 20
+    ws1.column_dimensions['F'].width = 25
+    
+    # === Sheet 2: Attendance ===
+    ws2 = wb.create_sheet("Attendance")
+    ws2.merge_cells('A1:F1')
+    ws2['A1'] = f"Attendance Record - {session.get('company_name', 'N/A')}"
+    ws2['A1'].font = Font(bold=True, size=14)
+    ws2.merge_cells('A2:F2')
+    ws2['A2'] = f"Enter 'P' for Present, 'A' for Absent, 'L' for Late"
+    ws2['A2'].font = Font(size=11, italic=True, color="666666")
+    
+    att_headers = ["No", "Participant Name", "IC Number"]
+    # Generate day columns
+    from datetime import date as dt_date, timedelta
+    day_dates = []
+    if start:
+        try:
+            s_date = dt_date.fromisoformat(start)
+            e_date = dt_date.fromisoformat(end) if end else s_date
+            current = s_date
+            while current <= e_date:
+                day_dates.append(current.isoformat())
+                att_headers.append(f"Day {len(day_dates)} ({current.strftime('%d/%m')})")
+                current += timedelta(days=1)
+        except:
+            att_headers.append("Day 1")
+            day_dates.append(start)
+    
+    for col, h in enumerate(att_headers, 1):
+        cell = ws2.cell(row=4, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = thin_border
+    
+    for i, p in enumerate(participants, 1):
+        row = i + 4
+        ws2.cell(row=row, column=1, value=i).border = thin_border
+        ws2.cell(row=row, column=2, value=p.get("name", "")).border = thin_border
+        ws2.cell(row=row, column=3, value=p.get("ic_number", "")).border = thin_border
+        
+        p_att = att_map.get(p["id"], [])
+        for d_idx, d_date in enumerate(day_dates):
+            day_att = next((a for a in p_att if a.get("date") == d_date), None)
+            val = "P" if day_att and day_att.get("clock_in") else ""
+            ws2.cell(row=row, column=4 + d_idx, value=val).border = thin_border
+    
+    ws2.column_dimensions['A'].width = 6
+    ws2.column_dimensions['B'].width = 30
+    ws2.column_dimensions['C'].width = 18
+    for d_idx in range(len(day_dates)):
+        ws2.column_dimensions[chr(68 + d_idx)].width = 16
+    
+    # === Sheet 3: Instructions ===
+    ws3 = wb.create_sheet("Instructions")
+    instructions = [
+        ("MDDRC Session Data Import Template", Font(bold=True, size=16)),
+        ("", None),
+        ("Sheet 1: Test Scores", Font(bold=True, size=12)),
+        ("- Fill in Pre-Test Score and Post-Test Score as percentages (0-100)", None),
+        ("- Do NOT modify the IC Number column - it's used for matching", None),
+        ("- Leave blank if no score available", None),
+        ("", None),
+        ("Sheet 2: Attendance", Font(bold=True, size=12)),
+        ("- Enter 'P' for Present, 'A' for Absent, 'L' for Late", None),
+        ("- Each Day column corresponds to the session date shown in the header", None),
+        ("- Leave blank if no data", None),
+        ("", None),
+        ("IMPORTANT:", Font(bold=True, size=12, color="FF0000")),
+        ("- Do NOT add/remove rows or change the order of participants", None),
+        ("- Do NOT modify IC Numbers - they are used to match participants", None),
+        ("- Save as .xlsx format before uploading", None),
+    ]
+    for i, (text, font) in enumerate(instructions, 1):
+        cell = ws3.cell(row=i, column=1, value=text)
+        if font:
+            cell.font = font
+    ws3.column_dimensions['A'].width = 70
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    company = (session.get("company_name") or "session").replace(" ", "_")[:30]
+    filename = f"MDDRC_Template_{company}_{start}.xlsx"
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@router.post("/{session_id}/import-data")
+async def import_session_data(session_id: str, file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+    """Import session data (test scores, attendance) from Excel"""
+    if current_user.role not in ["admin", "super_admin", "assistant_admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    from openpyxl import load_workbook
+    from io import BytesIO
+    
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    content = await file.read()
+    wb = load_workbook(BytesIO(content), read_only=True)
+    
+    results = {"test_scores_imported": 0, "attendance_imported": 0, "errors": [], "skipped": []}
+    
+    # Build participant lookup by IC number
+    participant_ids = session.get("participant_ids", [])
+    ic_to_participant = {}
+    for pid in participant_ids:
+        user = await db.users.find_one({"id": pid}, {"_id": 0, "id": 1, "name": 1, "ic_number": 1})
+        if user and user.get("ic_number"):
+            ic_to_participant[str(user["ic_number"]).strip()] = user
+    
+    # === Process Test Scores (Sheet 1) ===
+    if "Test Scores" in wb.sheetnames:
+        ws = wb["Test Scores"]
+        for row in ws.iter_rows(min_row=5, values_only=False):
+            try:
+                ic = str(row[2].value or "").strip()
+                if not ic or ic not in ic_to_participant:
+                    continue
+                
+                participant = ic_to_participant[ic]
+                pid = participant["id"]
+                pre_score = row[3].value
+                post_score = row[4].value
+                
+                # Import pre-test score
+                if pre_score is not None and str(pre_score).strip() != "":
+                    score_val = float(pre_score)
+                    existing = await db.test_results.find_one({"session_id": session_id, "participant_id": pid, "test_type": "pre"})
+                    if existing:
+                        await db.test_results.update_one(
+                            {"session_id": session_id, "participant_id": pid, "test_type": "pre"},
+                            {"$set": {"score": score_val, "passed": score_val >= 50, "imported": True, "imported_at": get_malaysia_time().isoformat()}}
+                        )
+                    else:
+                        await db.test_results.insert_one({
+                            "id": str(uuid.uuid4()),
+                            "test_id": f"import-pre-{session_id}",
+                            "participant_id": pid,
+                            "session_id": session_id,
+                            "test_type": "pre",
+                            "answers": [],
+                            "score": score_val,
+                            "total_questions": 0,
+                            "correct_answers": 0,
+                            "passed": score_val >= 50,
+                            "imported": True,
+                            "imported_at": get_malaysia_time().isoformat(),
+                            "submitted_at": get_malaysia_time().isoformat()
+                        })
+                    results["test_scores_imported"] += 1
+                
+                # Import post-test score
+                if post_score is not None and str(post_score).strip() != "":
+                    score_val = float(post_score)
+                    existing = await db.test_results.find_one({"session_id": session_id, "participant_id": pid, "test_type": "post"})
+                    if existing:
+                        await db.test_results.update_one(
+                            {"session_id": session_id, "participant_id": pid, "test_type": "post"},
+                            {"$set": {"score": score_val, "passed": score_val >= 50, "imported": True, "imported_at": get_malaysia_time().isoformat()}}
+                        )
+                    else:
+                        await db.test_results.insert_one({
+                            "id": str(uuid.uuid4()),
+                            "test_id": f"import-post-{session_id}",
+                            "participant_id": pid,
+                            "session_id": session_id,
+                            "test_type": "post",
+                            "answers": [],
+                            "score": score_val,
+                            "total_questions": 0,
+                            "correct_answers": 0,
+                            "passed": score_val >= 50,
+                            "imported": True,
+                            "imported_at": get_malaysia_time().isoformat(),
+                            "submitted_at": get_malaysia_time().isoformat()
+                        })
+                    results["test_scores_imported"] += 1
+                    
+            except Exception as e:
+                results["errors"].append(f"Row error: {str(e)}")
+    
+    # === Process Attendance (Sheet 2) ===
+    if "Attendance" in wb.sheetnames:
+        ws = wb["Attendance"]
+        
+        # Parse day dates from headers
+        day_dates = []
+        header_row = list(ws.iter_rows(min_row=4, max_row=4, values_only=True))[0]
+        from datetime import date as dt_date, timedelta
+        start = session.get("start_date", "")
+        end = session.get("end_date", start)
+        if start:
+            try:
+                s_date = dt_date.fromisoformat(start)
+                e_date = dt_date.fromisoformat(end) if end else s_date
+                current = s_date
+                while current <= e_date:
+                    day_dates.append(current.isoformat())
+                    current += timedelta(days=1)
+            except:
+                day_dates = [start]
+        
+        for row in ws.iter_rows(min_row=5, values_only=False):
+            try:
+                ic = str(row[2].value or "").strip()
+                if not ic or ic not in ic_to_participant:
+                    continue
+                
+                participant = ic_to_participant[ic]
+                pid = participant["id"]
+                
+                for d_idx, d_date in enumerate(day_dates):
+                    col_idx = 3 + d_idx
+                    if col_idx >= len(row):
+                        break
+                    val = str(row[col_idx].value or "").strip().upper()
+                    
+                    if val in ["P", "PRESENT", "L", "LATE"]:
+                        existing = await db.attendance.find_one({"session_id": session_id, "participant_id": pid, "date": d_date})
+                        clock_in = "09:00:00" if val != "L" else "09:30:00"
+                        if existing:
+                            await db.attendance.update_one(
+                                {"session_id": session_id, "participant_id": pid, "date": d_date},
+                                {"$set": {"clock_in": clock_in, "imported": True}}
+                            )
+                        else:
+                            await db.attendance.insert_one({
+                                "id": str(uuid.uuid4()),
+                                "participant_id": pid,
+                                "session_id": session_id,
+                                "date": d_date,
+                                "clock_in": clock_in,
+                                "clock_out": None,
+                                "imported": True,
+                                "created_at": get_malaysia_time().isoformat()
+                            })
+                        results["attendance_imported"] += 1
+                    elif val in ["A", "ABSENT"]:
+                        # Mark as absent by removing any existing attendance
+                        await db.attendance.delete_one({"session_id": session_id, "participant_id": pid, "date": d_date})
+                        
+            except Exception as e:
+                results["errors"].append(f"Attendance row error: {str(e)}")
+    
+    wb.close()
+    return results
