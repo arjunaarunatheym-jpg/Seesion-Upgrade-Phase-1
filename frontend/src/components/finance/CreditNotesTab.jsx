@@ -1,8 +1,9 @@
 /**
  * CreditNotesTab Component - Extracted from FinanceDashboard
  * Manages credit notes (HRDCorp deductions, etc.)
+ * Grouped by month/year with collapsible sections (same pattern as InvoicesTab)
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { axiosInstance } from "../../App";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -12,8 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
-import { FileX, RefreshCw, Check, FileText, Printer, Download, Plus } from "lucide-react";
+import { FileX, RefreshCw, Check, FileText, Printer, Download, Plus, ChevronDown, ChevronRight, Calendar } from "lucide-react";
 
 const CreditNotesTab = ({
   creditNotes,
@@ -22,6 +24,8 @@ const CreditNotesTab = ({
 }) => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [invoices, setInvoices] = useState([]);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [expandedMonths, setExpandedMonths] = useState({});
   const [newCN, setNewCN] = useState({
     invoice_id: "",
     reason: "HRDCorp Levy Deduction",
@@ -36,7 +40,6 @@ const CreditNotesTab = ({
     if (showCreateDialog) {
       axiosInstance.get("/finance/admin/invoices")
         .then(res => {
-          // Only show issued/paid invoices
           const validInvoices = res.data.filter(inv => 
             inv.status === 'issued' || inv.status === 'paid' || inv.status === 'partial'
           );
@@ -54,6 +57,35 @@ const CreditNotesTab = ({
     }
   }, [selectedInvoice, newCN.percentage]);
 
+  // Filter credit notes by status
+  const filteredCreditNotes = useMemo(() => {
+    if (statusFilter === "all") return creditNotes;
+    return creditNotes.filter(cn => cn.status === statusFilter);
+  }, [creditNotes, statusFilter]);
+
+  // Group credit notes by month/year
+  const groupedByMonth = useMemo(() => {
+    const groups = {};
+    filteredCreditNotes.forEach(cn => {
+      const dateStr = cn.cn_date || cn.created_at;
+      if (!dateStr) return;
+      const date = new Date(dateStr);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const label = date.toLocaleString('en', { month: 'long', year: 'numeric' });
+
+      if (!groups[key]) {
+        groups[key] = { key, label, items: [], total: 0 };
+      }
+      groups[key].items.push(cn);
+      groups[key].total += cn.amount || 0;
+    });
+    return Object.values(groups).sort((a, b) => b.key.localeCompare(a.key));
+  }, [filteredCreditNotes]);
+
+  const toggleMonth = (monthKey) => {
+    setExpandedMonths(prev => ({ ...prev, [monthKey]: !prev[monthKey] }));
+  };
+
   const handleInvoiceSelect = (invoiceId) => {
     const invoice = invoices.find(inv => inv.id === invoiceId);
     setSelectedInvoice(invoice);
@@ -61,25 +93,16 @@ const CreditNotesTab = ({
   };
 
   const handleCreateCN = async () => {
-    if (!newCN.invoice_id) {
-      toast.error("Please select an invoice");
-      return;
-    }
-    if (newCN.amount <= 0) {
-      toast.error("Amount must be greater than 0");
-      return;
-    }
-
+    if (!newCN.invoice_id) { toast.error("Please select an invoice"); return; }
+    if (newCN.amount <= 0) { toast.error("Amount must be greater than 0"); return; }
     try {
-      const payload = {
+      await axiosInstance.post("/finance/credit-notes", {
         invoice_id: newCN.invoice_id,
         reason: newCN.reason,
         description: newCN.description || `${newCN.percentage}% deduction`,
         percentage: newCN.percentage,
         amount: newCN.amount
-      };
-      
-      await axiosInstance.post("/finance/credit-notes", payload);
+      });
       toast.success("Credit note created");
       setShowCreateDialog(false);
       setNewCN({ invoice_id: "", reason: "HRDCorp Levy Deduction", description: "", percentage: 4, amount: 0 });
@@ -90,7 +113,6 @@ const CreditNotesTab = ({
     }
   };
 
-  // API Handlers
   const handleApproveCN = async (cnId) => {
     try {
       await axiosInstance.post(`/finance/credit-notes/${cnId}/approve`);
@@ -131,9 +153,20 @@ const CreditNotesTab = ({
               <FileX className="w-5 h-5 text-red-600" />
               Credit Notes
             </CardTitle>
-            <CardDescription>Track deductions like HRDCorp levy - Status: Draft → Approved → Issued</CardDescription>
+            <CardDescription>Track deductions like HRDCorp levy - Status: Draft &rarr; Approved &rarr; Issued</CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[140px]" data-testid="cn-status-filter">
+                <SelectValue placeholder="Filter status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="issued">Issued</SelectItem>
+              </SelectContent>
+            </Select>
             <Button variant="default" onClick={() => setShowCreateDialog(true)} data-testid="create-credit-note-btn">
               <Plus className="w-4 h-4 mr-2" />
               Create Credit Note
@@ -146,97 +179,103 @@ const CreditNotesTab = ({
         </div>
       </CardHeader>
       <CardContent>
-        {creditNotes.length === 0 ? (
+        {filteredCreditNotes.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <FileX className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-            <p>No credit notes yet</p>
+            <p>No credit notes found</p>
             <p className="text-sm">Credit notes are created when recording payments with deductions, or manually using the button above</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">CN Number</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Date</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Invoice</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Company</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Reason</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-500">Amount</th>
-                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Status</th>
-                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {creditNotes.map((cn) => (
-                  <tr key={cn.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium text-red-600">{cn.cn_number}</td>
-                    <td className="px-4 py-3 text-sm">{cn.created_at ? new Date(cn.created_at).toLocaleDateString('en-MY') : '-'}</td>
-                    <td className="px-4 py-3 text-sm">{cn.invoice_number || '-'}</td>
-                    <td className="px-4 py-3 text-sm">{cn.company_name || '-'}</td>
-                    <td className="px-4 py-3 text-sm">{cn.reason}</td>
-                    <td className="px-4 py-3 text-sm text-right font-medium text-red-600">- RM {cn.amount?.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-center">
-                      <Badge className={
-                        cn.status === 'issued' ? 'bg-green-500' : 
-                        cn.status === 'approved' ? 'bg-blue-500' : 
-                        'bg-yellow-500'
-                      }>
-                        {cn.status}
+          <div className="space-y-3">
+            {groupedByMonth.map((group) => (
+              <Collapsible
+                key={group.key}
+                open={expandedMonths[group.key] !== false}
+                onOpenChange={() => toggleMonth(group.key)}
+                className="border rounded-lg overflow-hidden"
+              >
+                <CollapsibleTrigger className="w-full">
+                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-red-50 to-orange-50 hover:from-red-100 hover:to-orange-100 transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="w-5 h-5 text-red-600" />
+                      <h3 className="text-lg font-semibold text-gray-700">{group.label}</h3>
+                      <Badge variant="outline" className="text-red-600 border-red-300">
+                        {group.items.length} credit note{group.items.length !== 1 ? 's' : ''}
                       </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {/* Approve Button - only for draft */}
-                        {cn.status === 'draft' && (
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="h-8 px-2 text-blue-600 border-blue-300 hover:bg-blue-50"
-                            onClick={() => handleApproveCN(cn.id)}
-                            title="Approve"
-                          >
-                            <Check className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {/* Issue Button - for draft or approved */}
-                        {(cn.status === 'draft' || cn.status === 'approved') && (
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="h-8 px-2 text-green-600 border-green-300 hover:bg-green-50"
-                            onClick={() => handleIssueCN(cn.id)}
-                            title="Issue"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {/* Print Button - always available */}
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="h-8 px-2"
-                          onClick={() => handlePrintCreditNote(cn)}
-                          title="Print"
-                        >
-                          <Printer className="w-4 h-4" />
-                        </Button>
-                        {/* Download/Export */}
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="h-8 px-2"
-                          onClick={() => handlePrintCreditNote(cn)}
-                          title="Download PDF"
-                        >
-                          <Download className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="font-bold text-red-700">
+                        - RM {group.total.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                      </span>
+                      {expandedMonths[group.key] !== false ? (
+                        <ChevronDown className="w-5 h-5 text-red-500" />
+                      ) : (
+                        <ChevronRight className="w-5 h-5 text-red-500" />
+                      )}
+                    </div>
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">CN Number</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Date</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Invoice</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Company</th>
+                          <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Reason</th>
+                          <th className="px-4 py-3 text-right text-sm font-medium text-gray-500">Amount</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Status</th>
+                          <th className="px-4 py-3 text-center text-sm font-medium text-gray-500">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {group.items.map((cn) => (
+                          <tr key={cn.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm font-medium text-red-600">{cn.cn_number}</td>
+                            <td className="px-4 py-3 text-sm">{cn.cn_date || cn.created_at ? new Date(cn.cn_date || cn.created_at).toLocaleDateString('en-MY') : '-'}</td>
+                            <td className="px-4 py-3 text-sm">{cn.invoice_number || '-'}</td>
+                            <td className="px-4 py-3 text-sm">{cn.company_name || '-'}</td>
+                            <td className="px-4 py-3 text-sm">{cn.reason}</td>
+                            <td className="px-4 py-3 text-sm text-right font-medium text-red-600">- RM {cn.amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                            <td className="px-4 py-3 text-center">
+                              <Badge className={
+                                cn.status === 'issued' ? 'bg-green-500' : 
+                                cn.status === 'approved' ? 'bg-blue-500' : 
+                                'bg-yellow-500'
+                              }>
+                                {cn.status}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {cn.status === 'draft' && (
+                                  <Button size="sm" variant="outline" className="h-8 px-2 text-blue-600 border-blue-300 hover:bg-blue-50" onClick={() => handleApproveCN(cn.id)} title="Approve">
+                                    <Check className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {(cn.status === 'draft' || cn.status === 'approved') && (
+                                  <Button size="sm" variant="outline" className="h-8 px-2 text-green-600 border-green-300 hover:bg-green-50" onClick={() => handleIssueCN(cn.id)} title="Issue">
+                                    <FileText className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => handlePrintCreditNote(cn)} title="Print">
+                                  <Printer className="w-4 h-4" />
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => handlePrintCreditNote(cn)} title="Download PDF">
+                                  <Download className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
           </div>
         )}
       </CardContent>
@@ -264,7 +303,6 @@ const CreditNotesTab = ({
               </SelectContent>
             </Select>
           </div>
-
           {selectedInvoice && (
             <div className="p-3 bg-gray-50 rounded text-sm">
               <p><strong>Invoice:</strong> {selectedInvoice.invoice_number}</p>
@@ -272,13 +310,10 @@ const CreditNotesTab = ({
               <p><strong>Amount:</strong> RM {selectedInvoice.total_amount?.toLocaleString()}</p>
             </div>
           )}
-
           <div>
             <Label>Reason</Label>
             <Select value={newCN.reason} onValueChange={(v) => setNewCN({...newCN, reason: v})}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="HRDCorp Levy Deduction">HRDCorp Levy Deduction</SelectItem>
                 <SelectItem value="Discount">Discount</SelectItem>
@@ -287,7 +322,6 @@ const CreditNotesTab = ({
               </SelectContent>
             </Select>
           </div>
-
           <div>
             <Label>Description (optional)</Label>
             <Textarea 
@@ -297,27 +331,21 @@ const CreditNotesTab = ({
               rows={2}
             />
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Percentage (%)</Label>
               <Input 
-                type="number"
-                value={newCN.percentage}
+                type="number" value={newCN.percentage}
                 onChange={(e) => setNewCN({...newCN, percentage: parseFloat(e.target.value) || 0})}
-                min="0"
-                max="100"
-                step="0.5"
+                min="0" max="100" step="0.5"
               />
             </div>
             <div>
               <Label>Amount (RM)</Label>
               <Input 
-                type="number"
-                value={newCN.amount}
+                type="number" value={newCN.amount}
                 onChange={(e) => setNewCN({...newCN, amount: parseFloat(e.target.value) || 0})}
-                min="0"
-                step="0.01"
+                min="0" step="0.01"
               />
             </div>
           </div>
