@@ -144,8 +144,11 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
     try {
       setLoading(true);
       const response = await axiosInstance.get('/sessions');
-      // Filter sessions where user is coordinator
-      const coordinatorSessions = response.data.filter(s => s.coordinator_id === user.id);
+      // Backend already filters for coordinator - but also check client-side as safety
+      const coordinatorSessions = response.data.filter(s => 
+        s.coordinator_id === user.id || 
+        (s.assistant_coordinator_ids || []).includes(user.id)
+      );
       setSessions(coordinatorSessions);
       
       // Load stats for all sessions

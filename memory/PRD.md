@@ -115,6 +115,12 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 ### In Progress
 
 ### Recently Completed (Mar 14, 2026)
+- ✅ **Coordinator Session Visibility Bug Fix** (P0)
+  - Moved `GET /sessions` from server.py to routes/sessions_new.py
+  - Coordinators now see ONLY their assigned sessions (server-side filter by coordinator_id)
+  - Also checks assistant_coordinator_ids for secondary coordinator assignments
+  - Admin sees all sessions, trainers see only their assigned sessions
+  - Frontend now also checks assistant_coordinator_ids as safety net
 - ✅ **Admin Session Mark Complete** — Data Management > Session Mgmt tab
   - Admin can mark sessions as completed (bypasses coordinator workflow)
   - Revert completed sessions back to ongoing

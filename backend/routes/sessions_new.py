@@ -15,6 +15,137 @@ from models import User, Session, SessionCreate
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
+@router.get("")
+async def get_sessions(
+    company_id: Optional[str] = None,
+    program_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get sessions filtered by user role - main sessions endpoint"""
+    from datetime import date as dt_date
+    current_date_str = dt_date.today().isoformat()
+    
+    if current_user.role == "admin":
+        # Admin sees all non-completed, non-archived sessions
+        query = {
+            "$and": [
+                {"is_archived": {"$ne": True}},
+                {
+                    "$or": [
+                        {"completion_status": {"$exists": False}},
+                        {"completion_status": "ongoing"},
+                        {"completion_status": {"$nin": ["completed", "archived"]}}
+                    ]
+                }
+            ]
+        }
+    elif current_user.role == "trainer":
+        # Trainer sees sessions they're assigned to (current/future, non-completed)
+        query = {
+            "$and": [
+                {"is_archived": {"$ne": True}},
+                {"end_date": {"$gte": current_date_str}},
+                {
+                    "$or": [
+                        {"completed_by_coordinator": {"$exists": False}},
+                        {"completed_by_coordinator": False},
+                        {"completion_status": {"$exists": False}},
+                        {"completion_status": "ongoing"}
+                    ]
+                },
+                {
+                    "$or": [
+                        {"trainer_assignments.trainer_id": current_user.id},
+                        {"assistant_coordinator_ids": current_user.id}
+                    ]
+                }
+            ]
+        }
+    elif current_user.role == "coordinator":
+        # Coordinator sees sessions they're assigned to as coordinator OR assistant coordinator
+        query = {
+            "$and": [
+                {"is_archived": {"$ne": True}},
+                {"status": "active"},
+                {
+                    "$or": [
+                        {"completion_status": {"$exists": False}},
+                        {"completion_status": "ongoing"},
+                        {"completion_status": {"$nin": ["completed", "archived"]}}
+                    ]
+                },
+                {
+                    "$or": [
+                        {"coordinator_id": current_user.id},
+                        {"assistant_coordinator_ids": current_user.id}
+                    ]
+                }
+            ]
+        }
+    elif current_user.role == "assistant_admin":
+        # Assistant admin sees all non-completed sessions
+        query = {
+            "$and": [
+                {"is_archived": {"$ne": True}},
+                {
+                    "$or": [
+                        {"completion_status": {"$exists": False}},
+                        {"completion_status": "ongoing"},
+                        {"completion_status": {"$nin": ["completed", "archived"]}}
+                    ]
+                }
+            ]
+        }
+    else:
+        # Default: show all non-completed, non-archived sessions
+        query = {
+            "$and": [
+                {"is_archived": {"$ne": True}},
+                {"status": "active"},
+                {
+                    "$or": [
+                        {"completion_status": {"$exists": False}},
+                        {"completion_status": "ongoing"},
+                        {"completion_status": {"$nin": ["completed", "archived"]}}
+                    ]
+                }
+            ]
+        }
+    
+    # Add search filters
+    if company_id:
+        query["$and"].append({"company_id": company_id})
+    if program_id:
+        query["$and"].append({"program_id": program_id})
+    if start_date:
+        query["$and"].append({"start_date": {"$gte": start_date}})
+    if end_date:
+        query["$and"].append({"end_date": {"$lte": end_date}})
+    
+    sessions = await db.sessions.find(query, {"_id": 0}).sort("start_date", -1).to_list(1000)
+    
+    # Enrich with company_name and program_name
+    for session in sessions:
+        if not session.get("company_name") and session.get("company_id"):
+            company = await db.companies.find_one({"id": session["company_id"]}, {"_id": 0, "name": 1})
+            if company:
+                session["company_name"] = company.get("name")
+        
+        if not session.get("program_name") and session.get("program_id"):
+            program = await db.programs.find_one({"id": session["program_id"]}, {"_id": 0, "name": 1})
+            if program:
+                session["program_name"] = program.get("name")
+        
+        # Convert datetime objects to strings for JSON serialization
+        if isinstance(session.get("created_at"), datetime):
+            session["created_at"] = session["created_at"].isoformat()
+    
+    return sessions
+
+
+
 @router.get("/calendar")
 async def get_calendar_sessions(current_user: User = Depends(get_current_user)):
     """Get all sessions for calendar view"""
