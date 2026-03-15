@@ -13,7 +13,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://training-mgmt-hub.preview.emergentagent.com/api"
+BASE_URL = "https://session-excel-hub.preview.emergentagent.com/api"
 
 # Existing trainer credentials (corrected passwords)
 TRAINER_CREDENTIALS = [

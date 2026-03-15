@@ -11,7 +11,7 @@ import json
 from datetime import datetime
 import uuid
 
-BASE_URL = "https://training-mgmt-hub.preview.emergentagent.com/api"
+BASE_URL = "https://session-excel-hub.preview.emergentagent.com/api"
 
 # Test credentials
 CREDENTIALS = {

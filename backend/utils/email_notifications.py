@@ -19,24 +19,46 @@ ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "arjuna@mddrc.com.my")
 
 
 async def send_admin_notification(subject: str, html_content: str):
-    """Send notification email to admin (non-blocking)"""
+    """Legacy: Send notification email to admin only (non-blocking)"""
+    return await send_smart_notification(subject, html_content, to=[ADMIN_EMAIL])
+
+
+async def send_smart_notification(subject: str, html_content: str, to: list = None, cc: list = None, reply_to: list = None):
+    """Smart email dispatcher with TO, CC, REPLY-TO support"""
     if not resend.api_key:
         logger.warning("RESEND_API_KEY not configured, skipping email notification")
         return None
     
+    if not to:
+        to = [ADMIN_EMAIL]
+    
+    # Filter out invalid/temp emails
+    to = [e for e in to if e and "@temp.mddrc" not in e and "@marketing.mddrc" not in e]
+    if cc:
+        cc = [e for e in cc if e and "@temp.mddrc" not in e and "@marketing.mddrc" not in e]
+    if reply_to:
+        reply_to = [e for e in reply_to if e and "@temp.mddrc" not in e and "@marketing.mddrc" not in e]
+    
+    if not to:
+        to = [ADMIN_EMAIL]
+    
     params = {
         "from": SENDER_EMAIL,
-        "to": [ADMIN_EMAIL],
+        "to": to,
         "subject": subject,
         "html": html_content
     }
+    if cc:
+        params["cc"] = cc
+    if reply_to:
+        params["reply_to"] = reply_to
     
     try:
         email = await asyncio.to_thread(resend.Emails.send, params)
-        logger.info(f"Admin notification sent: {subject}")
+        logger.info(f"Smart notification sent: {subject} -> TO:{to}, CC:{cc}, REPLY-TO:{reply_to}")
         return email.get("id")
     except Exception as e:
-        logger.error(f"Failed to send admin notification: {str(e)}")
+        logger.error(f"Failed to send notification: {str(e)}")
         return None
 
 
@@ -170,7 +192,7 @@ async def notify_lead_stage_change(lead_data: dict, new_stage: str, marketer_nam
 
 
 async def notify_quotation_for_approval(quotation_data: dict, client_name: str, marketer_name: str):
-    """Notify admin when a quotation is submitted for approval"""
+    """Quotation Created → TO: arjuna, CC: -"""
     content = f'''
     <p>A quotation requires your approval:</p>
     <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
@@ -203,7 +225,11 @@ async def notify_quotation_for_approval(quotation_data: dict, client_name: str, 
     '''
     
     html = get_email_template("Quotation Pending Approval", content)
-    await send_admin_notification(f"[MDDRC] Approval Needed: {quotation_data.get('quotation_number', 'Quotation')} - {client_name}", html)
+    await send_smart_notification(
+        f"[MDDRC] Approval Needed: {quotation_data.get('quotation_number', 'Quotation')} - {client_name}",
+        html,
+        to=[ADMIN_EMAIL]
+    )
 
 
 async def notify_discount_request(quotation_data: dict, client_name: str, marketer_name: str, discount_amount: float, discount_reason: str = ""):
@@ -247,8 +273,8 @@ async def notify_discount_request(quotation_data: dict, client_name: str, market
     await send_admin_notification(f"[MDDRC] DISCOUNT: {quotation_data.get('quotation_number', 'Quotation')} - RM {discount_amount:,.2f} off", html)
 
 
-async def notify_quotation_sent(quotation_data: dict, client_name: str, marketer_name: str):
-    """Notify admin when a quotation is sent to client"""
+async def notify_quotation_sent(quotation_data: dict, client_name: str, marketer_name: str, client_email: str = None, marketer_email: str = None):
+    """Quotation Sent to Client → TO: client, CC: arjuna, REPLY-TO: marketer"""
     content = f'''
     <p>A quotation has been sent to the client:</p>
     <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
@@ -277,7 +303,19 @@ async def notify_quotation_sent(quotation_data: dict, client_name: str, marketer
     '''
     
     html = get_email_template("Quotation Sent to Client", content)
-    await send_admin_notification(f"[MDDRC] Quotation Sent: {quotation_data.get('quotation_number', 'Quotation')} → {client_name}", html)
+    
+    # If client email available, send to client with reply-to marketer
+    to_list = [client_email] if client_email else [ADMIN_EMAIL]
+    reply_to_list = [marketer_email] if marketer_email else None
+    cc_list = [ADMIN_EMAIL] if client_email else None
+    
+    await send_smart_notification(
+        f"[MDDRC] Quotation: {quotation_data.get('quotation_number', 'Quotation')} - {client_name}",
+        html,
+        to=to_list,
+        cc=cc_list,
+        reply_to=reply_to_list
+    )
 
 
 async def notify_lead_won(lead_data: dict, quotation_data: dict, marketer_name: str):

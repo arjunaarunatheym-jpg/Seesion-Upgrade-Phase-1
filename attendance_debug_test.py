@@ -7,7 +7,7 @@ import requests
 import json
 from datetime import datetime
 
-BASE_URL = "https://training-mgmt-hub.preview.emergentagent.com/api"
+BASE_URL = "https://session-excel-hub.preview.emergentagent.com/api"
 
 def debug_attendance():
     # Login as admin

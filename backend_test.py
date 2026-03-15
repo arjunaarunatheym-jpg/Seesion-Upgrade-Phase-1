@@ -28,7 +28,7 @@ from typing import Dict, List, Optional
 import uuid
 
 # Configuration from frontend/.env
-BASE_URL = "https://training-mgmt-hub.preview.emergentagent.com/api"
+BASE_URL = "https://session-excel-hub.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "arjuna@mddrc.com.my"
