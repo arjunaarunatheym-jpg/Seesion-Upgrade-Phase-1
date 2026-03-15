@@ -116,13 +116,15 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 ### In Progress
 
 ### Recently Completed (Mar 15, 2026)
-- ✅ **Excel Import/Export Refinement** (P0) — Fully tested, 14/14 backend tests passed
-  - Added Vehicle Checklist sheet to Excel template (dynamic columns from existing data)
-  - Changed test scores from percentages to raw marks (Marks Obtained + Total Marks)
-  - Auto-calculates percentage and pass/fail based on program's pass_percentage
-  - Fixed user field mapping: full_name (not name), id_number (not ic_number)
-  - Updated import logic to handle vehicle details and checklist items
-  - Frontend import dialog updated to mention vehicle checklists
+- ✅ **Excel Import/Export Refinement** (P0) — Fully tested, 27/27 tests passed across 2 iterations
+  - 5-sheet Excel template: Pre-Post Tests, Attendance, Vehicle Checklist, Feedback, Instructions
+  - Test scores use raw marks (Marks Obtained + Total Marks), auto-calculates percentage
+  - Pass/fail determined by program's actual pass_percentage from DB (not just default)
+  - Vehicle Checklist sheet: dynamic columns + **Remarks column** for additional notes
+  - **Feedback sheet**: columns for each feedback question (rating 1-5 or text), pre-fills existing data
+  - Import handles all 5 sheets: test scores, attendance, vehicle checklists with remarks, feedback
+  - Fixed user field mapping: full_name/id_number
+  - Frontend updated: SessionManagementTab + CoordinatorDashboard import success messages
 
 ### Recently Completed (Mar 14, 2026)
 - ✅ **Coordinator Session Visibility Bug Fix** (P0)
@@ -137,14 +139,15 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
   - Mandatory reason field for audit trail
   - Completing session triggers P&L revenue recognition
 - ✅ **Excel Import/Export for Sessions** — Available in both Data Management AND Coordinator Portal
-  - Download pre-populated Excel template with 4 sheets: Pre-Post Tests, Attendance, Vehicle Checklist, Instructions
+  - Download pre-populated Excel template with 5 sheets: Pre-Post Tests, Attendance, Vehicle Checklist, Feedback, Instructions
   - Test scores use raw marks (Marks Obtained + Total Marks), system auto-calculates percentage
   - Pass/fail determined by program's pass_percentage (e.g., 90%)
-  - Vehicle Checklist sheet includes vehicle details and dynamic checklist items from existing data
-  - Upload filled Excel to bulk-import test scores, attendance, and vehicle checklists
+  - Vehicle Checklist sheet includes vehicle details, dynamic checklist items, and Remarks column
+  - Feedback sheet with admin-configured or session-specific questions (rating 1-5, text)
+  - Upload filled Excel to bulk-import test scores, attendance, vehicle checklists, and feedback
   - Matches participants by IC number (id_number field)
   - Handles updates to existing records (upsert)
-  - Response includes counts: test_scores_imported, attendance_imported, vehicle_checklists_imported
+  - Response includes counts: test_scores_imported, attendance_imported, vehicle_checklists_imported, feedback_imported
 - ✅ **Invoice Revert Status** — Data Management > Invoices tab
   - Revert cancelled/voided invoices to Draft/Finance Review
   - Amber undo button with mandatory reason field
