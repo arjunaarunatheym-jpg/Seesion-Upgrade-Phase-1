@@ -236,7 +236,8 @@ const MarketingDashboard = ({ user, onLogout }) => {
           sst_amount,
           sst_percentage: Number(quotationForm.sst_percent) || 0,
           total_amount,
-          terms_conditions: quotationForm.terms_conditions || defaultTerms
+          terms_conditions: quotationForm.terms_conditions || defaultTerms,
+          lead_id: currentLeadId || undefined
         };
         const response = await axiosInstance.post('/marketing/quotations', payload);
         toast.success('Quotation created successfully');

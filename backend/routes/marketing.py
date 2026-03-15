@@ -539,6 +539,42 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
     
     # Remove _id before returning (MongoDB adds it)
     quotation.pop("_id", None)
+    
+    # AUTO-CREATE LEAD for pipeline tracking
+    # If this quotation has a client_id but was NOT created from a lead,
+    # auto-create a lead at "quotation_sent" stage so it appears in the pipeline
+    lead_id = quotation_data.get("lead_id")
+    if not lead_id and quotation.get("client_id"):
+        client = await db.marketing_clients.find_one({"id": quotation["client_id"]}, {"_id": 0})
+        if client:
+            lead_id = str(uuid.uuid4())
+            auto_lead = {
+                "id": lead_id,
+                "company_name": client.get("company_name", ""),
+                "contact_person": client.get("contact_person", ""),
+                "contact_email": client.get("contact_email", ""),
+                "contact_phone": client.get("contact_phone", ""),
+                "source": "repeat_client",
+                "stage": "quotation_sent",
+                "stage_changed_at": now.isoformat(),
+                "expected_value": total_amount,
+                "programme_interest": quotation.get("programme_name", ""),
+                "notes": f"Auto-created from quotation {quotation_number} (returning client)",
+                "client_id": client["id"],
+                "quotation_id": quotation["id"],
+                "created_by": current_user.id,
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            }
+            await db.leads.insert_one(auto_lead)
+            
+            # Link lead back to quotation
+            await db.quotations.update_one(
+                {"id": quotation["id"]},
+                {"$set": {"lead_id": lead_id}}
+            )
+            quotation["lead_id"] = lead_id
+    
     return {"message": "Quotation created", "quotation": quotation}
 
 

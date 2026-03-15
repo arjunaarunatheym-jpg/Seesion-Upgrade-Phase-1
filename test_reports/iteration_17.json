@@ -1,0 +1,119 @@
+{
+  "summary": "Iteration 17 - Auto-Lead Creation for Repeat Clients and Revenue Recognition Updated. All 13 tests PASSED. (1) Creating quotation with client_id but NO lead_id auto-creates lead at 'quotation_sent' stage with source='repeat_client', (2) Creating quotation WITH lead_id skips auto-lead creation, (3) Revenue recognition now includes 'issued' invoices (changed from iteration 16 which only had partial/paid)",
+  "phase": "Iteration 17 - Auto-Lead Creation and Revenue Recognition",
+  "test_scope": {
+    "features_tested": [
+      "POST /api/marketing/quotations with client_id but NO lead_id auto-creates lead at 'quotation_sent' stage",
+      "Auto-created lead has source='repeat_client', company_name from client, quotation_id linked, client_id set",
+      "Quotation has lead_id set to the auto-created lead's ID",
+      "POST /api/marketing/quotations WITH lead_id in payload does NOT auto-create duplicate lead",
+      "GET /api/marketing/leads shows auto-created lead in list",
+      "Auto-created lead visible in pipeline under 'Quotation Sent' stage",
+      "Revenue recognition: P&L includes 'issued' invoices (not just paid/partial)",
+      "Session completion NOT required for revenue recognition"
+    ],
+    "endpoints_tested": [
+      "POST /api/auth/login",
+      "GET /api/marketing/clients",
+      "POST /api/marketing/quotations",
+      "GET /api/marketing/leads",
+      "GET /api/marketing/leads/{lead_id}",
+      "GET /api/marketing/leads?stage=quotation_sent",
+      "GET /api/finance/profit-loss?year=2026",
+      "GET /api/finance/invoices",
+      "DELETE /api/marketing/quotations/{id}",
+      "DELETE /api/marketing/leads/{id}"
+    ]
+  },
+  "backend_tests": {
+    "test_file": "/app/backend/tests/test_iteration17_auto_lead_revenue.py",
+    "total_tests": 13,
+    "passed": 13,
+    "failed": 0,
+    "test_results": {
+      "TestAuthentication": {
+        "test_login_success": "PASSED - Login successful, token obtained"
+      },
+      "TestAutoLeadCreation": {
+        "test_verify_test_client_exists": "PASSED - Test client (Drb Hicom) found",
+        "test_create_quotation_without_lead_id_auto_creates_lead": "PASSED - Quotation created, lead auto-created",
+        "test_auto_created_lead_has_correct_attributes": "PASSED - Lead has stage='quotation_sent', source='repeat_client', client_id and quotation_id linked",
+        "test_auto_created_lead_appears_in_leads_list": "PASSED - Lead visible in GET /api/marketing/leads",
+        "test_lead_visible_in_quotation_sent_pipeline_stage": "PASSED - Lead visible in quotation_sent stage filter"
+      },
+      "TestNoAutoLeadWhenLeadIdProvided": {
+        "test_create_quotation_with_lead_id_skips_auto_lead": "PASSED - No auto-lead created when lead_id is in payload"
+      },
+      "TestRevenueRecognition": {
+        "test_pnl_endpoint_accessible": "PASSED - P&L endpoint accessible",
+        "test_pnl_response_structure": "PASSED - 12 months with correct income/expenses structure",
+        "test_revenue_recognition_includes_issued_invoices": "PASSED - REVENUE_INVOICE_STATUSES includes 'issued', 'partial', 'paid'",
+        "test_session_completion_not_required_for_revenue": "PASSED - P&L works without session completion requirement"
+      },
+      "TestCleanup": {
+        "test_cleanup_test_quotations": "PASSED - Test quotations cleaned up",
+        "test_cleanup_test_leads": "PASSED - Test leads archived"
+      }
+    }
+  },
+  "code_review_verification": {
+    "auto_lead_creation_code": {
+      "file": "/app/backend/routes/marketing.py",
+      "lines": "546-576",
+      "logic": "lead_id = quotation_data.get('lead_id'); if not lead_id and quotation.get('client_id'): ... auto_lead = {...}",
+      "verification": "CONFIRMED - Auto-lead only created when lead_id NOT in payload AND client_id is present"
+    },
+    "auto_lead_attributes": {
+      "stage": "quotation_sent",
+      "source": "repeat_client",
+      "client_id": "Set to the marketing client's ID",
+      "quotation_id": "Set to the newly created quotation's ID",
+      "notes": "Auto-created from quotation {number} (returning client)"
+    },
+    "revenue_recognition_code": {
+      "file": "/app/backend/routes/finance_reports.py",
+      "line_128": "REVENUE_INVOICE_STATUSES = ['issued', 'partial', 'paid']",
+      "change_from_iteration_16": "Added 'issued' status (iteration 16 only had 'partial', 'paid')",
+      "session_completion_check": "NOT REQUIRED - Revenue recognized when invoice is issued"
+    },
+    "frontend_lead_id_handling": {
+      "file": "/app/frontend/src/pages/MarketingDashboard.jsx",
+      "line_240": "lead_id: currentLeadId || undefined - Sends lead_id if creating from lead",
+      "line_288": "setCurrentLeadId(leadData.lead_id) - Sets lead context when creating from pipeline",
+      "verification": "CONFIRMED - Frontend correctly passes lead_id when creating quotation from existing lead"
+    }
+  },
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration17_auto_lead_revenue.py",
+    "/app/test_reports/pytest/iteration17_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration17_auto_lead_revenue.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "N/A - Backend only testing as requested"
+  },
+  "test_credentials": {
+    "admin": "arjuna@mddrc.com.my / Dana102229"
+  },
+  "seed_data_creation": "Used existing test client ID: 07b34799-a811-4f05-b571-8001dadd43a4 (Drb Hicom)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 17 complete. All features working: (1) Auto-lead creation triggers when POST /api/marketing/quotations has client_id but NO lead_id - creates lead at 'quotation_sent' stage with source='repeat_client', (2) When lead_id IS passed in payload, no auto-lead is created (prevents duplicates), (3) Revenue recognition now includes 'issued' invoices - REVENUE_INVOICE_STATUSES = ['issued', 'partial', 'paid'] (changed from iteration 16 which excluded 'issued'), (4) Session completion is NOT required for revenue recognition.",
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  }
+}
