@@ -60,9 +60,9 @@ async def get_profit_loss_report(
 ):
     """Get Profit/Loss report - monthly breakdown and YTD
     
-    REVENUE RECOGNITION (Cash Basis):
-    - Revenue is recognized when payment is received:
-      * invoice.status IN ["partial", "paid"]
+    REVENUE RECOGNITION:
+    - Revenue is recognized when invoice is issued:
+      * invoice.status IN ["issued", "partial", "paid"]
     - SST/Tax is excluded from revenue (gross revenue = total - tax)
     - Session completion status is NOT required for revenue recognition
     
@@ -124,16 +124,16 @@ async def get_profit_loss_report(
             "net_profit": 0
         }
     
-    # ELIGIBLE invoice statuses for revenue recognition (cash basis - payment received)
-    REVENUE_INVOICE_STATUSES = ["partial", "paid"]
+    # ELIGIBLE invoice statuses for revenue recognition
+    REVENUE_INVOICE_STATUSES = ["issued", "partial", "paid"]
     
-    # Process invoices (income) - revenue recognized when payment received
+    # Process invoices (income) - revenue recognized when invoice issued
     # ========== MULTI-INVOICE SUPPORT (Improvement) ==========
     # Use invoice.session_id directly instead of legacy invoice_session_map
     # This properly supports sessions with multiple invoices
     for inv in invoices:
         try:
-            # REVENUE RECOGNITION: Only count invoices where payment has been received
+            # REVENUE RECOGNITION: Only count invoices in eligible statuses
             if inv.get("status") not in REVENUE_INVOICE_STATUSES:
                 continue
             
