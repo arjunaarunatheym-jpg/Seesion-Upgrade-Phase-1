@@ -1327,6 +1327,8 @@ async def export_session_template(session_id: str, current_user: User = Depends(
     vc_headers = ["No", "Participant Name", "IC Number", "Vehicle Model", "Registration No", "Road Tax Expiry"]
     for ci_name in checklist_items_list:
         vc_headers.append(ci_name.title())
+    vc_headers.append("Remarks")
+    remarks_col = len(vc_headers)
     
     for col, h in enumerate(vc_headers, 1):
         cell = ws3.cell(row=4, column=col, value=h)
@@ -1357,6 +1359,13 @@ async def export_session_template(session_id: str, current_user: User = Depends(
         for ci_idx, ci_name in enumerate(checklist_items_list):
             status = vc_items.get(ci_name, "")
             ws3.cell(row=row, column=7 + ci_idx, value=status).border = thin_border
+        
+        # Remarks column (collect comments from checklist items)
+        remarks_text = ""
+        if vc:
+            comments = [f"{item['item']}: {item['comments']}" for item in vc.get("checklist_items", []) if item.get("comments")]
+            remarks_text = "; ".join(comments)
+        ws3.cell(row=row, column=remarks_col, value=remarks_text).border = thin_border
     
     ws3.column_dimensions['A'].width = 6
     ws3.column_dimensions['B'].width = 30
@@ -1367,9 +1376,92 @@ async def export_session_template(session_id: str, current_user: User = Depends(
     for ci_idx in range(len(checklist_items_list)):
         col_letter = get_column_letter(7 + ci_idx)
         ws3.column_dimensions[col_letter].width = 16
+    ws3.column_dimensions[get_column_letter(remarks_col)].width = 30
     
-    # === Sheet 4: Instructions ===
-    ws4 = wb.create_sheet("Instructions")
+    # === Sheet 4: Feedback ===
+    ws4 = wb.create_sheet("Feedback")
+    ws4.merge_cells('A1:J1')
+    ws4['A1'] = f"Participant Feedback - {session.get('company_name', 'N/A')}"
+    ws4['A1'].font = Font(bold=True, size=14)
+    ws4.merge_cells('A2:J2')
+    ws4['A2'] = "Rating questions: Enter 1-5 (1=Poor, 5=Excellent). Text questions: Enter free text."
+    ws4['A2'].font = Font(size=11, italic=True, color="666666")
+    
+    # Determine feedback questions:
+    # 1. From feedback_questions collection (admin-configured)
+    # 2. From existing feedback for this session
+    # 3. Default set
+    feedback_questions_list = []
+    configured_qs = await db.feedback_questions.find({}, {"_id": 0}).sort("order", 1).to_list(100)
+    if configured_qs:
+        feedback_questions_list = [{"question": q.get("question_text", q.get("question", "")), "type": q.get("question_type", "rating")} for q in configured_qs]
+    else:
+        # Discover from existing feedback for this session
+        existing_feedback = await db.course_feedback.find({"session_id": session_id}, {"_id": 0}).to_list(1000)
+        seen_questions = []
+        for fb in existing_feedback:
+            for r in fb.get("responses", []):
+                q = r.get("question", "")
+                if q and q not in seen_questions:
+                    seen_questions.append(q)
+                    q_type = "rating" if isinstance(r.get("answer"), (int, float)) else "text"
+                    feedback_questions_list.append({"question": q, "type": q_type})
+    
+    if not feedback_questions_list:
+        feedback_questions_list = [
+            {"question": "Overall Training Experience", "type": "rating"},
+            {"question": "Training Content Quality", "type": "rating"},
+            {"question": "Trainer Effectiveness", "type": "rating"},
+            {"question": "Venue & Facilities", "type": "rating"},
+            {"question": "Suggestions for Improvement", "type": "text"},
+            {"question": "Additional Comments", "type": "text"},
+        ]
+    
+    # Build feedback lookup
+    existing_feedback = await db.course_feedback.find({"session_id": session_id}, {"_id": 0}).to_list(1000)
+    feedback_map = {}
+    for fb in existing_feedback:
+        pid = fb.get("participant_id")
+        resp_map = {}
+        for r in fb.get("responses", []):
+            resp_map[r.get("question", "")] = r.get("answer", "")
+        feedback_map[pid] = resp_map
+    
+    # Headers
+    fb_headers = ["No", "Participant Name", "IC Number"]
+    for fq in feedback_questions_list:
+        label = fq["question"]
+        if fq["type"] == "rating":
+            label += " (1-5)"
+        fb_headers.append(label)
+    
+    for col, h in enumerate(fb_headers, 1):
+        cell = ws4.cell(row=4, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', wrap_text=True)
+        cell.border = thin_border
+    
+    for i, p in enumerate(participants, 1):
+        row = i + 4
+        ws4.cell(row=row, column=1, value=i).border = thin_border
+        ws4.cell(row=row, column=2, value=p.get("full_name", "")).border = thin_border
+        ws4.cell(row=row, column=3, value=p.get("id_number", "")).border = thin_border
+        
+        p_feedback = feedback_map.get(p["id"], {})
+        for fq_idx, fq in enumerate(feedback_questions_list):
+            answer = p_feedback.get(fq["question"], "")
+            ws4.cell(row=row, column=4 + fq_idx, value=answer if answer != "" else None).border = thin_border
+    
+    ws4.column_dimensions['A'].width = 6
+    ws4.column_dimensions['B'].width = 30
+    ws4.column_dimensions['C'].width = 18
+    for fq_idx in range(len(feedback_questions_list)):
+        col_letter = get_column_letter(4 + fq_idx)
+        ws4.column_dimensions[col_letter].width = 25
+    
+    # === Sheet 5: Instructions ===
+    ws5 = wb.create_sheet("Instructions")
     instructions = [
         ("MDDRC Session Data Import Template", Font(bold=True, size=16)),
         ("", None),
@@ -1386,8 +1478,15 @@ async def export_session_template(session_id: str, current_user: User = Depends(
         ("", None),
         ("Sheet 3: Vehicle Checklist", Font(bold=True, size=12)),
         ("- Enter vehicle details: Model, Registration No, Road Tax Expiry (YYYY-MM-DD)", None),
-        ("- For each checklist item, enter: 'good', 'needs_repair', or 'n/a'", None),
+        ("- For each checklist item, enter: 'good', 'needs_repair', 'satisfactory', or 'n/a'", None),
+        ("- Use the Remarks column for any additional notes per participant", None),
         ("- Leave blank if no data", None),
+        ("", None),
+        ("Sheet 4: Feedback", Font(bold=True, size=12)),
+        ("- For rating questions (marked 1-5): Enter a number from 1 to 5", None),
+        ("  1 = Poor, 2 = Below Average, 3 = Average, 4 = Good, 5 = Excellent", None),
+        ("- For text questions: Enter free text responses", None),
+        ("- Leave blank if no feedback available", None),
         ("", None),
         ("IMPORTANT:", Font(bold=True, size=12, color="FF0000")),
         ("- Do NOT add/remove rows or change the order of participants", None),
@@ -1395,10 +1494,10 @@ async def export_session_template(session_id: str, current_user: User = Depends(
         ("- Save as .xlsx format before uploading", None),
     ]
     for i, (text, font) in enumerate(instructions, 1):
-        cell = ws4.cell(row=i, column=1, value=text)
+        cell = ws5.cell(row=i, column=1, value=text)
         if font:
             cell.font = font
-    ws4.column_dimensions['A'].width = 70
+    ws5.column_dimensions['A'].width = 70
     
     output = BytesIO()
     wb.save(output)
@@ -1436,7 +1535,7 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
     content = await file.read()
     wb = load_workbook(BytesIO(content), read_only=True)
     
-    results = {"test_scores_imported": 0, "attendance_imported": 0, "vehicle_checklists_imported": 0, "errors": [], "skipped": []}
+    results = {"test_scores_imported": 0, "attendance_imported": 0, "vehicle_checklists_imported": 0, "feedback_imported": 0, "errors": [], "skipped": []}
     
     # Build participant lookup by IC number (use id_number field)
     participant_ids = session.get("participant_ids", [])
@@ -1626,12 +1725,18 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
         ws = wb["Vehicle Checklist"]
         
         # Read checklist item names from header row (columns starting from 7th)
+        # Stop at "Remarks" column which is the last column
         header_row = list(ws.iter_rows(min_row=4, max_row=4, values_only=False))[0]
         checklist_items_list = []
+        remarks_header_col = None
         for col_idx in range(6, len(header_row)):
             h_val = header_row[col_idx].value
             if h_val and str(h_val).strip():
-                checklist_items_list.append(str(h_val).strip().lower())
+                h_lower = str(h_val).strip().lower()
+                if h_lower == "remarks":
+                    remarks_header_col = col_idx
+                else:
+                    checklist_items_list.append(str(h_val).strip().lower())
         
         for row in ws.iter_rows(min_row=5, values_only=False):
             try:
@@ -1691,6 +1796,11 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
                                 status = status.replace("needs repair", "needs_repair").replace("na", "n/a")
                                 items.append({"item": ci_name, "status": status, "comments": "", "photo_url": None})
                     
+                    # Check for remarks column
+                    remarks_text = ""
+                    if remarks_header_col is not None and remarks_header_col < len(row):
+                        remarks_text = str(row[remarks_header_col].value or "").strip()
+                    
                     if items:
                         existing_vc = await db.vehicle_checklists.find_one({"session_id": session_id, "participant_id": pid})
                         vc_data = {
@@ -1698,7 +1808,8 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
                             "interval": "imported",
                             "submitted_at": get_malaysia_time().isoformat(),
                             "verification_status": "imported",
-                            "imported": True
+                            "imported": True,
+                            "remarks": remarks_text
                         }
                         if existing_vc:
                             await db.vehicle_checklists.update_one(
@@ -1716,6 +1827,80 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
                 
             except Exception as e:
                 results["errors"].append(f"Vehicle checklist row error: {str(e)}")
+    
+    # === Process Feedback (Sheet 4) ===
+    if "Feedback" in wb.sheetnames:
+        ws = wb["Feedback"]
+        
+        # Read question names from header row (columns starting from 4th, 0-indexed col 3)
+        header_row = list(ws.iter_rows(min_row=4, max_row=4, values_only=False))[0]
+        feedback_questions_from_header = []
+        for col_idx in range(3, len(header_row)):
+            h_val = header_row[col_idx].value
+            if h_val and str(h_val).strip():
+                # Strip " (1-5)" suffix if present
+                q_text = str(h_val).strip()
+                if q_text.endswith("(1-5)"):
+                    q_text = q_text[:-5].strip()
+                feedback_questions_from_header.append(q_text)
+        
+        for row in ws.iter_rows(min_row=5, values_only=False):
+            try:
+                ic = str(row[2].value or "").strip()
+                if not ic or ic not in ic_to_participant:
+                    continue
+                
+                participant = ic_to_participant[ic]
+                pid = participant["id"]
+                
+                # Build responses array
+                responses = []
+                has_any_response = False
+                for fq_idx, fq_text in enumerate(feedback_questions_from_header):
+                    col_idx = 3 + fq_idx
+                    if col_idx >= len(row):
+                        break
+                    answer = row[col_idx].value
+                    if answer is not None and str(answer).strip() != "":
+                        # Try to convert to number for rating questions
+                        try:
+                            answer_val = int(float(str(answer)))
+                            if 1 <= answer_val <= 5:
+                                answer = answer_val
+                            else:
+                                answer = str(answer).strip()
+                        except (ValueError, TypeError):
+                            answer = str(answer).strip()
+                        responses.append({"question": fq_text, "answer": answer})
+                        has_any_response = True
+                    else:
+                        responses.append({"question": fq_text, "answer": ""})
+                
+                if has_any_response:
+                    existing_fb = await db.course_feedback.find_one({"session_id": session_id, "participant_id": pid})
+                    fb_data = {
+                        "responses": responses,
+                        "submitted_at": get_malaysia_time().isoformat(),
+                        "imported": True,
+                        "imported_at": get_malaysia_time().isoformat()
+                    }
+                    if existing_fb:
+                        await db.course_feedback.update_one(
+                            {"session_id": session_id, "participant_id": pid},
+                            {"$set": fb_data}
+                        )
+                    else:
+                        await db.course_feedback.insert_one({
+                            "id": str(uuid.uuid4()),
+                            "participant_id": pid,
+                            "session_id": session_id,
+                            "program_id": session.get("program_id", ""),
+                            **fb_data
+                        })
+                    results["feedback_imported"] += 1
+                    
+            except Exception as e:
+                results["errors"].append(f"Feedback row error: {str(e)}")
     
     wb.close()
     return results

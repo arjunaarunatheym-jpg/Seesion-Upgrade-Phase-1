@@ -1205,7 +1205,7 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                                         headers: { 'Content-Type': 'multipart/form-data' }
                                       });
                                       const data = res.data;
-                                      toast.success(`Imported: ${data.test_scores_imported} test scores, ${data.attendance_imported} attendance${data.vehicle_checklists_imported ? `, ${data.vehicle_checklists_imported} checklists` : ''}`);
+                                      toast.success(`Imported: ${data.test_scores_imported} scores, ${data.attendance_imported} attendance${data.vehicle_checklists_imported ? `, ${data.vehicle_checklists_imported} checklists` : ''}${data.feedback_imported ? `, ${data.feedback_imported} feedback` : ''}`);
                                       if (data.errors?.length > 0) toast.warning(`${data.errors.length} errors`);
                                     } catch { toast.error("Import failed"); }
                                     e.target.value = '';

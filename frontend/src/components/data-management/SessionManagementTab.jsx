@@ -89,6 +89,7 @@ const SessionManagementTab = ({ sessions, loading, onRefresh }) => {
       const data = res.data;
       const parts = [`${data.test_scores_imported} test scores`, `${data.attendance_imported} attendance records`];
       if (data.vehicle_checklists_imported > 0) parts.push(`${data.vehicle_checklists_imported} vehicle checklists`);
+      if (data.feedback_imported > 0) parts.push(`${data.feedback_imported} feedback entries`);
       toast.success(`Imported: ${parts.join(', ')}`);
       if (data.errors?.length > 0) {
         toast.warning(`${data.errors.length} errors during import`);
@@ -272,7 +273,7 @@ const SessionManagementTab = ({ sessions, loading, onRefresh }) => {
             <DialogDescription>
               Upload filled Excel template for <strong>{importDialog.session?.company_name}</strong>
               <br />
-              This will import test scores (raw marks), attendance, and vehicle checklists.
+              This will import test scores (raw marks), attendance, vehicle checklists, and feedback.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
