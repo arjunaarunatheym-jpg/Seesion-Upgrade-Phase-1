@@ -35,7 +35,8 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - `/api/marketing/quotations/{id}/download-pdf` - PDF generation with rich text
 - `/api/settings/indemnity-sections` - Admin-managed indemnity content
 - `/api/settings/feedback-questions` - GET/POST feedback questions (Admin)
-- `/api/sessions/{session_id}/export-feedback-excel` - Export feedback as Excel
+- `/api/sessions/{session_id}/export-template` - Download Excel template (4 sheets: Pre-Post Tests, Attendance, Vehicle Checklist, Instructions)
+- `/api/sessions/{session_id}/import-data` - Import Excel data (raw marks, attendance, vehicle checklists)
 - `/api/marketing/leads` - Lead CRUD (Marketing sees own, Admin sees all)
 - `/api/marketing/leads/{id}/stage` - Quick stage update
 - `/api/marketing/leads/{id}/convert-to-client` - Convert lead to client
@@ -114,6 +115,15 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 
 ### In Progress
 
+### Recently Completed (Mar 15, 2026)
+- ✅ **Excel Import/Export Refinement** (P0) — Fully tested, 14/14 backend tests passed
+  - Added Vehicle Checklist sheet to Excel template (dynamic columns from existing data)
+  - Changed test scores from percentages to raw marks (Marks Obtained + Total Marks)
+  - Auto-calculates percentage and pass/fail based on program's pass_percentage
+  - Fixed user field mapping: full_name (not name), id_number (not ic_number)
+  - Updated import logic to handle vehicle details and checklist items
+  - Frontend import dialog updated to mention vehicle checklists
+
 ### Recently Completed (Mar 14, 2026)
 - ✅ **Coordinator Session Visibility Bug Fix** (P0)
   - Moved `GET /sessions` from server.py to routes/sessions_new.py
@@ -127,10 +137,14 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
   - Mandatory reason field for audit trail
   - Completing session triggers P&L revenue recognition
 - ✅ **Excel Import/Export for Sessions** — Available in both Data Management AND Coordinator Portal
-  - Download pre-populated Excel template with 3 sheets: Test Scores, Attendance, Instructions
-  - Upload filled Excel to bulk-import pre/post test scores and attendance records
-  - Matches participants by IC number
+  - Download pre-populated Excel template with 4 sheets: Pre-Post Tests, Attendance, Vehicle Checklist, Instructions
+  - Test scores use raw marks (Marks Obtained + Total Marks), system auto-calculates percentage
+  - Pass/fail determined by program's pass_percentage (e.g., 90%)
+  - Vehicle Checklist sheet includes vehicle details and dynamic checklist items from existing data
+  - Upload filled Excel to bulk-import test scores, attendance, and vehicle checklists
+  - Matches participants by IC number (id_number field)
   - Handles updates to existing records (upsert)
+  - Response includes counts: test_scores_imported, attendance_imported, vehicle_checklists_imported
 - ✅ **Invoice Revert Status** — Data Management > Invoices tab
   - Revert cancelled/voided invoices to Draft/Finance Review
   - Amber undo button with mandatory reason field
@@ -195,23 +209,25 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
   - Removed all duplicate/broken draft quotations (Vinda Malaysia, Taj Curry House, etc.)
 
 ### Upcoming (P1)
-- "Won Lead → Draft Session" UI dialog completion
+- `server.py` refactoring — Move remaining endpoints to modular route files
+- SaaS Monetization — Stripe integration for tiered subscription plans
+- Post-Training Evaluation System — Automated evaluation forms
+- Automated Certificate Generation Workflow — Auto-issue on completion
+- Native App Conversion — Capacitor integration with push notifications & camera
+- Privacy Policy Page — New route `/privacy-policy`
 - Collapsible UI tables (Payables, Users, Invoices)
 - Payables Excel export verification
-- PDF bugs: `valid_until` date, "System Administrator" name (investigate stale data)
-- Google Drive Feedback Integration
-- WYSIWYG PDF Template Editor
+- PDF bugs: `valid_until` date, "System Administrator" name
 
 ### Backlog (P2)
+- Journal entry "Unknown" descriptions fix
+- Expense description "1% of invoice" too generic in journal entries
 - Backend cleanup (remove redundant server.py code)
-- Billing party deletion fix
-- Dummy participant re-add fix
-- Invoice undo/replace buttons fix
-- Period exists error fix
-- Invoice CSV export sorting
-- Post-Training Evaluation System
-- Marketing Portal Phase 2
-- Accountant P&L view with YoY analysis
+- Client Portal for customers
+- Trainer Portal for trainers
+- Enhanced Data Management tables with search/pagination
+- WYSIWYG PDF Template Editor
+- Collapsible table UI in Admin Dashboard (P3)
 
 ## Architecture
 ```
