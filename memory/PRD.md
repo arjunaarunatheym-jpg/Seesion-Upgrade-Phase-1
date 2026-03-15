@@ -116,6 +116,9 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 ### In Progress
 
 ### Recently Completed (Mar 15, 2026)
+- ✅ **Marketing Pipeline Month/Year Grouping** — Leads within each stage column are now grouped by month/year with collapsible sections. Current month auto-expanded, older months collapsed. Each group shows label and lead count.
+- ✅ **Revenue Recognition (Cash Basis)** — Revenue now recognized purely when payment is received (invoice status 'partial' or 'paid'). Session completion is no longer required.
+- ✅ **Printing Expense Description Fix** — Changed from generic "1% of invoice" to "Training Materials Printing" in both `finance_payables.py` and `server.py`.
 - ✅ **Excel Import/Export Refinement** (P0) — Fully tested, 27/27 tests passed across 2 iterations
   - 5-sheet Excel template: Pre-Post Tests, Attendance, Vehicle Checklist, Feedback, Instructions
   - Test scores use raw marks (Marks Obtained + Total Marks), auto-calculates percentage
