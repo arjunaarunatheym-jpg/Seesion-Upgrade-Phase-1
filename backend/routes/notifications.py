@@ -301,8 +301,8 @@ async def get_broadcast_history(current_user: User = Depends(get_current_user)):
 
 # ============ ENHANCED NOTIFICATION DISPATCHER ============
 
-async def send_event_notification(event_id: str, subject: str, html_content: str, extra_recipients: list = None):
-    """Send notification based on configured settings for an event"""
+async def send_event_notification(event_id: str, subject: str, html_content: str, extra_recipients: list = None, cc: list = None, reply_to: list = None):
+    """Send notification based on configured settings for an event, with optional CC/REPLY-TO."""
     if not resend.api_key:
         logger.warning("RESEND_API_KEY not configured, skipping notification")
         return
@@ -357,14 +357,24 @@ async def send_event_notification(event_id: str, subject: str, html_content: str
         admin_email = os.environ.get("ADMIN_EMAIL", "arjuna@mddrc.com.my")
         recipients.add(admin_email)
     
+    # Clean CC/REPLY-TO
+    clean_cc = [e for e in (cc or []) if e and "@temp.mddrc" not in e and e not in recipients]
+    clean_reply_to = [e for e in (reply_to or []) if e and "@temp.mddrc" not in e]
+    
+    params = {
+        "from": SENDER_EMAIL,
+        "to": list(recipients),
+        "subject": subject,
+        "html": html_content
+    }
+    if clean_cc:
+        params["cc"] = clean_cc
+    if clean_reply_to:
+        params["reply_to"] = clean_reply_to
+    
     try:
-        await asyncio.to_thread(resend.Emails.send, {
-            "from": SENDER_EMAIL,
-            "to": list(recipients),
-            "subject": subject,
-            "html": html_content
-        })
-        logger.info(f"Event notification sent: {event_id} to {len(recipients)} recipients")
+        await asyncio.to_thread(resend.Emails.send, params)
+        logger.info(f"Event notification sent: {event_id} to {len(recipients)} recipients (CC:{clean_cc}, REPLY-TO:{clean_reply_to})")
     except Exception as e:
         logger.error(f"Failed to send event notification {event_id}: {str(e)}")
 

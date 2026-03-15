@@ -11,6 +11,7 @@ import pytz
 
 from core import db, get_current_user, get_malaysia_time
 from models import User
+from utils.email_notifications import notify_payment_received as notify_payment_received_email
 
 # Import accounting auto-posting functions (Phase 2)
 from routes.accounting import post_payment_received, post_credit_note_issued
@@ -180,6 +181,13 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     except Exception as e:
         print(f"Accounting auto-post error: {str(e)}")
     # ============ END ACCOUNTING AUTO-POST ============
+    
+    # ============ EMAIL NOTIFICATION ============
+    try:
+        await notify_payment_received_email(payment, invoice)
+    except Exception as e:
+        print(f"Payment notification error: {str(e)}")
+    # ============ END EMAIL NOTIFICATION ============
     
     return payment
 

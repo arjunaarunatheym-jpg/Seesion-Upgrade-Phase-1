@@ -11,6 +11,7 @@ import pytz
 
 from core import db, get_current_user, get_malaysia_time
 from models import User
+from utils.email_notifications import notify_invoice_issued
 
 # Import accounting auto-posting functions (Phase 2)
 from routes.accounting import post_invoice_issued
@@ -383,12 +384,18 @@ async def issue_invoice(invoice_id: str, current_user: User = Depends(get_curren
             user_name=current_user.full_name
         )
         if accounting_result.get("error"):
-            # Log error but don't fail the invoice issuance
             print(f"Accounting auto-post warning: {accounting_result.get('error')}")
     except Exception as e:
-        # Log but don't fail - accounting is supplementary
         print(f"Accounting auto-post error: {str(e)}")
     # ============ END ACCOUNTING AUTO-POST ============
+    
+    # ============ EMAIL NOTIFICATION ============
+    try:
+        updated_invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+        await notify_invoice_issued(updated_invoice, session)
+    except Exception as e:
+        print(f"Invoice notification error: {str(e)}")
+    # ============ END EMAIL NOTIFICATION ============
     
     return {"message": "Invoice issued successfully"}
 

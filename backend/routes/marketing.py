@@ -20,6 +20,7 @@ from utils.email_notifications import (
     notify_new_lead,
     notify_lead_stage_change,
     notify_quotation_for_approval,
+    notify_quotation_approved,
     notify_discount_request,
     notify_quotation_sent,
     notify_lead_won,
@@ -649,12 +650,11 @@ async def submit_quotation(quotation_id: str, current_user: User = Depends(get_c
         {"$set": {"status": "pending_approval", "submitted_at": get_malaysia_time().isoformat()}}
     )
     
-    # Notify admin for approval
+    # Notify admin for approval (REPLY-TO: marketer)
     try:
-        # Get client name
         client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
         client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
-        await notify_quotation_for_approval(quotation, client_name, current_user.full_name)
+        await notify_quotation_for_approval(quotation, client_name, current_user.full_name, marketer_email=current_user.email)
     except:
         pass
     
@@ -678,6 +678,17 @@ async def approve_quotation(quotation_id: str, current_user: User = Depends(get_
         {"id": quotation_id},
         {"$set": {"status": "approved", "approved_at": get_malaysia_time().isoformat(), "approved_by": current_user.id}}
     )
+    
+    # Notify marketer who created the quotation (TO: marketer, CC: admin)
+    try:
+        client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
+        client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
+        marketer = await db.users.find_one({"id": quotation.get("created_by")}, {"_id": 0, "email": 1})
+        marketer_email = marketer.get("email") if marketer else None
+        await notify_quotation_approved(quotation, client_name, current_user.full_name, marketer_email=marketer_email)
+    except:
+        pass
+    
     return {"message": "Quotation approved"}
 
 
@@ -698,11 +709,13 @@ async def reject_quotation(quotation_id: str, reason: dict = None, current_user:
         {"$set": {"status": "draft", "rejection_reason": rejection_reason}}
     )
     
-    # Send email notification
+    # Send email notification (TO: marketer who created)
     try:
         client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
         client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
-        await notify_quotation_rejected(quotation, client_name, current_user.full_name, rejection_reason or "")
+        marketer = await db.users.find_one({"id": quotation.get("created_by")}, {"_id": 0, "email": 1})
+        marketer_email = marketer.get("email") if marketer else None
+        await notify_quotation_rejected(quotation, client_name, current_user.full_name, rejection_reason or "", marketer_email=marketer_email)
     except:
         pass
     
@@ -766,11 +779,12 @@ async def mark_quotation_sent(quotation_id: str, current_user: User = Depends(ge
     # Sync lead stage
     await sync_lead_stage_from_quotation(quotation_id, "sent")
     
-    # Send email notification
+    # Send email notification (TO: client, CC: admin, REPLY-TO: marketer)
     try:
         client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
         client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
-        await notify_quotation_sent(quotation, client_name, current_user.full_name)
+        client_email = client.get("contact_email") if client else None
+        await notify_quotation_sent(quotation, client_name, current_user.full_name, client_email=client_email, marketer_email=current_user.email)
     except:
         pass
     
@@ -1029,7 +1043,7 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
         details=f"Discount of RM {discount_amount:.2f} ({discount_percentage:.2f}%) applied. Revision {new_revision}"
     )
     
-    # Send email notification for discount approval
+    # Send email notification for discount approval (REPLY-TO: marketer)
     try:
         client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
         client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
@@ -1039,7 +1053,8 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
             client_name, 
             current_user.full_name, 
             discount_amount,
-            discount_data.get("reason", "")
+            discount_data.get("reason", ""),
+            marketer_email=current_user.email
         )
     except:
         pass

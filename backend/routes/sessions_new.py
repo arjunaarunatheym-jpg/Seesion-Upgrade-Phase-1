@@ -11,6 +11,7 @@ import logging
 
 from core import db, get_current_user, get_malaysia_time, find_or_create_user, get_or_create_participant_access
 from models import User, Session, SessionCreate
+from utils.email_notifications import notify_session_completed
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -1052,6 +1053,13 @@ async def mark_session_completed(session_id: str, current_user: User = Depends(g
         {"$set": {"available_to_supervisors": True, "pushed_to_supervisors_at": get_malaysia_time().isoformat()}}
     )
     
+    # Notify admin, coordinator, trainers
+    try:
+        updated_session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+        await notify_session_completed(updated_session)
+    except:
+        pass
+    
     return {
         "message": "Session marked as completed successfully. Report is now available to supervisors.",
         "session_archived": True,
@@ -1087,6 +1095,13 @@ async def admin_mark_session_complete(session_id: str, data: dict, current_user:
             "is_archived": True
         }}
     )
+    
+    # Notify coordinator & trainers
+    try:
+        updated_session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+        await notify_session_completed(updated_session)
+    except:
+        pass
     
     return {
         "message": f"Session marked as completed by admin",
