@@ -1,0 +1,137 @@
+{
+  "summary": "Iteration 18 - Email & Notifications System. All 16 backend tests PASSED, all frontend UI elements verified. Fixed PUT /notifications/settings endpoint which was missing Body(...) annotation.",
+  "phase": "Iteration 18 - Email & Notifications System",
+  "test_scope": {
+    "features_tested": [
+      "GET /api/notifications/events returns 10 notification events with id, label, description, category",
+      "GET /api/notifications/settings returns settings with enabled, recipient_roles, etc",
+      "PUT /api/notifications/settings saves notification settings correctly (FIXED - added Body annotation)",
+      "GET /api/notifications/recipients returns staff members with id, full_name, email, role",
+      "POST /api/notifications/test sends test email (domain error on free tier is expected)",
+      "POST /api/notifications/broadcast with recipient_group=custom sends broadcast",
+      "GET /api/notifications/broadcast-history returns history of sent broadcasts",
+      "Frontend: Email & Notifications tab visible in Data Management",
+      "Frontend: Notification Rules subtab shows events grouped by category (Marketing, Finance, Operations)",
+      "Frontend: Each event has toggle ON/OFF, role badges, specific staff badges, custom email input",
+      "Frontend: Broadcast tab has recipient dropdown, subject, message, attachment upload, send button",
+      "Frontend: History tab shows broadcast history entries with status and error messages"
+    ],
+    "endpoints_tested": [
+      "POST /api/auth/login",
+      "GET /api/notifications/events",
+      "GET /api/notifications/settings",
+      "PUT /api/notifications/settings",
+      "GET /api/notifications/recipients",
+      "POST /api/notifications/test",
+      "POST /api/notifications/broadcast",
+      "GET /api/notifications/broadcast-history"
+    ]
+  },
+  "backend_tests": {
+    "test_file": "/app/backend/tests/test_email_notifications.py",
+    "total_tests": 16,
+    "passed": 16,
+    "failed": 0,
+    "test_results": {
+      "TestAuthentication": {
+        "test_login_success": "PASSED - Login successful, token obtained"
+      },
+      "TestNotificationEvents": {
+        "test_get_events_returns_10_events": "PASSED - Returns 10 events",
+        "test_events_have_required_fields": "PASSED - All events have id, label, description, category",
+        "test_events_categories": "PASSED - Categories: Marketing, Finance, Operations"
+      },
+      "TestNotificationSettings": {
+        "test_get_settings_returns_settings": "PASSED - Settings list returned",
+        "test_settings_have_required_fields": "PASSED - All settings have event_id, enabled, recipient_roles",
+        "test_put_settings_saves_correctly": "PASSED - Settings saved and verified"
+      },
+      "TestNotificationRecipients": {
+        "test_get_recipients_returns_staff": "PASSED - Staff members returned",
+        "test_recipients_have_required_fields": "PASSED - All have id, full_name, email, role"
+      },
+      "TestNotificationTest": {
+        "test_send_test_notification": "PASSED - Test email endpoint works"
+      },
+      "TestBroadcast": {
+        "test_send_broadcast_with_custom_emails": "PASSED - Broadcast sent to verified email",
+        "test_broadcast_validation_no_recipients": "PASSED - Empty recipients rejected with 400"
+      },
+      "TestBroadcastHistory": {
+        "test_get_broadcast_history": "PASSED - History list returned",
+        "test_history_entries_have_expected_fields": "PASSED - Entries have subject, recipient_count, sent_at"
+      },
+      "TestAccessControl": {
+        "test_events_requires_auth": "PASSED - Returns 401 without auth",
+        "test_settings_requires_auth": "PASSED - Returns 401 without auth"
+      }
+    }
+  },
+  "frontend_tests": {
+    "results": {
+      "login_and_navigation": "PASSED - Admin login and navigation to Data Management works",
+      "email_notifications_tab": "PASSED - Visible in Data Management",
+      "subtabs": "PASSED - Notification Rules, Broadcast / Greetings, History all present",
+      "notification_rules_ui": "PASSED - Categories (MARKETING, FINANCE, OPERATIONS), 10 toggle switches, role badges, staff badges, custom email input visible",
+      "broadcast_form": "PASSED - Recipients dropdown, Subject, Message, Attachment upload, Send button all present",
+      "history_display": "PASSED - Broadcast history shows sent broadcasts with status, timestamps, sender name"
+    }
+  },
+  "bug_fixed": {
+    "issue": "PUT /api/notifications/settings returned 422 Validation Error",
+    "root_cause": "FastAPI expected settings:list parameter to be wrapped in {\"settings\": [...]} but frontend sends plain list",
+    "fix": "Added Body(...) annotation to accept raw list as request body",
+    "file": "/app/backend/routes/notifications.py",
+    "line": 77,
+    "change": "async def update_notification_settings(settings: list = Body(...), ...)"
+  },
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/notifications/settings",
+        "issue": "After any setting is saved, only saved settings are returned (not merged with defaults). This means initially all 10 events show settings, but after modifying one, only that one is returned.",
+        "suggestion": "Consider merging saved settings with defaults for all events not yet saved"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "console_errors": [
+      {
+        "error": "Failed to load checklist templates: AxiosError (500)",
+        "note": "Unrelated to Email & Notifications - occurs on admin dashboard load"
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_email_notifications.py",
+    "/app/test_reports/pytest/email_notifications_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/routes/notifications.py",
+    "/app/backend/tests/test_email_notifications.py"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": {
+    "admin": "arjuna@mddrc.com.my / Dana102229"
+  },
+  "seed_data_creation": "Test broadcasts created in broadcast_history collection",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 18 - Email & Notifications system complete. All features working: (1) Notification events grouped by category, (2) Settings save/load with role-based and user-specific recipients, (3) Custom email recipients, (4) Broadcast composition with attachments, (5) Broadcast history with status. Note: Resend free tier only sends to verified email (arjunaarunatheym@gmail.com) - domain verification errors for other recipients are EXPECTED.",
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  },
+  "notes": {
+    "resend_free_tier": "On free tier, emails can only be sent to the account owner's verified email. Sending to other emails returns domain verification error - this is expected behavior until domain is verified at resend.com/domains"
+  }
+}

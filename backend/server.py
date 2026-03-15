@@ -312,6 +312,7 @@ from routes import (
     finance_payables_router,
     accounting_router,
     superadmin_portal_router,
+    notifications_router,
 )
 
 # Import accounting auto-posting functions (Phase 2)
@@ -350,6 +351,7 @@ api_router.include_router(finance_reports_router)
 api_router.include_router(finance_payables_router)
 api_router.include_router(accounting_router)
 api_router.include_router(superadmin_portal_router)
+api_router.include_router(notifications_router)
 # ==================== END MODULAR ROUTERS ====================
 
 # Static files directory

@@ -30,6 +30,7 @@ from .finance_reports import router as finance_reports_router
 from .finance_payables import router as finance_payables_router
 from .accounting import router as accounting_router
 from .superadmin_portal import router as superadmin_portal_router
+from .notifications import router as notifications_router
 
 # Create combined router for easy registration
 def get_all_routers():
@@ -61,6 +62,7 @@ def get_all_routers():
         finance_payables_router, # /finance/payables/*, income/*, dashboard, company-settings (F4)
         accounting_router,      # /accounting/* (Chart of Accounts, Journal Entries, Trial Balance)
         superadmin_portal_router, # /superadmin/* (Super Admin Portal)
+        notifications_router,   # /notifications/* (Email & Broadcast)
     ]
 
 __all__ = [
@@ -90,5 +92,6 @@ __all__ = [
     'finance_payables_router',
     'accounting_router',
     'superadmin_portal_router',
+    'notifications_router',
     'get_all_routers',
 ]
