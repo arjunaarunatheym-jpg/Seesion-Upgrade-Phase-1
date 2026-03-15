@@ -106,7 +106,7 @@ async def update_notification_settings(settings: list = Body(...), current_user:
 
 @router.get("/recipients")
 async def get_available_recipients(current_user: User = Depends(get_current_user)):
-    """Get available staff recipients for notification configuration"""
+    """Get available staff recipients for notification configuration (deduplicated by email)"""
     if current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -114,9 +114,37 @@ async def get_available_recipients(current_user: User = Depends(get_current_user
     staff = await db.users.find(
         {"role": {"$in": staff_roles}, "is_active": {"$ne": False}},
         {"_id": 0, "id": 1, "full_name": 1, "email": 1, "role": 1}
-    ).to_list(100)
+    ).to_list(500)
     
-    return staff
+    # Deduplicate by email, merge roles, skip fake emails
+    email_map = {}
+    for s in staff:
+        email = s.get("email", "")
+        if not email or "@temp.mddrc" in email or "@marketing.mddrc" in email or email == "admin@example.com":
+            continue
+        if email in email_map:
+            # Merge roles
+            if s["role"] not in email_map[email]["roles"]:
+                email_map[email]["roles"].append(s["role"])
+        else:
+            email_map[email] = {
+                "id": s["id"],
+                "full_name": s["full_name"],
+                "email": email,
+                "role": s["role"],
+                "roles": [s["role"]]
+            }
+    
+    result = []
+    for email, data in email_map.items():
+        result.append({
+            "id": data["id"],
+            "full_name": data["full_name"],
+            "email": data["email"],
+            "role": "/".join(data["roles"])
+        })
+    
+    return sorted(result, key=lambda x: x["full_name"])
 
 
 @router.post("/test")
