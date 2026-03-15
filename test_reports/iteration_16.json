@@ -1,0 +1,124 @@
+{
+  "summary": "Iteration 16 - All 3 Features Tested and Working: (1) Marketing Pipeline month/year grouping with collapsible sections, (2) Revenue Recognition changed to cash basis (partial/paid only), (3) Expense category printing description updated to 'Training Materials Printing'",
+  "phase": "Iteration 16 - Three Feature Implementations",
+  "test_scope": {
+    "features_tested": [
+      "Marketing Pipeline Lead grouping by month/year within each stage column",
+      "Month group collapsible toggle - click to expand/collapse",
+      "Current month (March 2026) expanded by default, older months (February 2026) collapsed",
+      "Each month group shows month label and lead count badge",
+      "Lead cards show all details (company, contact, value, date, source, quotation) within month groups",
+      "Pipeline and List view toggle still works",
+      "Revenue recognition - P&L only counts invoices with status 'partial' or 'paid' (not 'issued')",
+      "Session completion status NOT required for revenue recognition (cash basis)",
+      "Expense category 'printing' description is 'Training Materials Printing' (not '1% of invoice')"
+    ],
+    "endpoints_tested": [
+      "POST /api/auth/login",
+      "GET /api/finance/profit-loss?year=2026",
+      "GET /api/finance/expense-categories",
+      "GET /api/finance/invoices",
+      "GET /api/marketing/leads"
+    ]
+  },
+  "backend_tests": {
+    "test_file": "/app/backend/tests/test_iteration16_features.py",
+    "total_tests": 13,
+    "passed": 13,
+    "failed": 0,
+    "test_results": {
+      "TestAuthentication": {
+        "test_login_success": "PASSED - Login successful, token obtained"
+      },
+      "TestRevenueRecognition": {
+        "test_pnl_endpoint_accessible": "PASSED - P&L endpoint accessible",
+        "test_pnl_response_structure": "PASSED - 12 months with correct income/expenses structure",
+        "test_pnl_ytd_summary_structure": "PASSED - YTD summary has all required fields"
+      },
+      "TestExpenseCategories": {
+        "test_expense_categories_endpoint_accessible": "PASSED - 11 categories returned",
+        "test_printing_category_description": "PASSED - Description is 'Training Materials Printing' (NOT '1% of invoice')",
+        "test_all_expense_categories_have_required_fields": "PASSED - All categories have id, name, type, rate, description",
+        "test_expense_category_types": "PASSED - All expected categories present"
+      },
+      "TestMarketingLeadsEndpoint": {
+        "test_marketing_leads_endpoint": "PASSED - Returns lead list",
+        "test_leads_have_created_at_field": "PASSED - Leads have date fields for month grouping",
+        "test_leads_have_stage_field": "PASSED - All leads have valid stage field"
+      },
+      "TestRevenueRecognitionLogic": {
+        "test_invoices_endpoint": "PASSED - Invoices endpoint accessible",
+        "test_pnl_excludes_non_revenue_statuses": "PASSED - Only 'partial' and 'paid' counted"
+      }
+    }
+  },
+  "frontend_tests": {
+    "tool": "Playwright Browser Automation",
+    "test_results": {
+      "login": "PASSED - Admin login successful",
+      "marketing_portal_navigation": "PASSED - Marketing portal accessible",
+      "leads_tab_navigation": "PASSED - Leads tab clickable and loads pipeline view",
+      "pipeline_stage_columns": "PASSED - All 6 stages visible (Inquiry, Contacted, Quotation Sent, Negotiating, Won, Lost)",
+      "month_grouping_display": "PASSED - February 2026 month group visible in Won column with count badge (2)",
+      "month_group_collapsed_by_default": "PASSED - February 2026 collapsed (older than current month March 2026)",
+      "month_group_toggle_expand": "PASSED - Clicking February 2026 header expands to show 2 lead cards",
+      "month_group_toggle_collapse": "PASSED - Clicking again collapses the month group",
+      "lead_card_details": "PASSED - Lead cards show company, contact, value, date, source, quotation link",
+      "list_view_toggle": "PASSED - List view shows table with Company, Contact, Stage, Value, Follow-up, Source, Owner, Actions columns",
+      "pipeline_view_toggle": "PASSED - Can switch back to Pipeline view"
+    },
+    "leads_data_verified": [
+      {"company": "SAPURA MANAGEMENT SERVICES SDN. BHD.", "value": "RM 4,800.00", "stage": "Won", "month": "February 2026"},
+      {"company": "KONE ELEVATOR (M) SDN BHD", "value": "RM 8,000.00", "stage": "Won", "month": "February 2026"}
+    ]
+  },
+  "code_review_verification": {
+    "revenue_recognition_code": {
+      "file": "/app/backend/routes/finance_reports.py",
+      "line_128": "REVENUE_INVOICE_STATUSES = ['partial', 'paid']",
+      "verification": "CONFIRMED - Only 'partial' and 'paid' invoices counted for revenue (cash basis)",
+      "session_completion_check": "REMOVED - Session completion status is no longer required"
+    },
+    "expense_categories_code": {
+      "file_1": "/app/backend/routes/finance_payables.py",
+      "line_973": "{id: 'printing', name: 'Printing', description: 'Training Materials Printing'}",
+      "file_2": "/app/backend/server.py",
+      "verification": "CONFIRMED - Description is 'Training Materials Printing' not '1% of invoice'"
+    },
+    "frontend_month_grouping_code": {
+      "file": "/app/frontend/src/components/marketing/LeadPipelineTab.jsx",
+      "functions": ["groupByMonth", "toggleMonth"],
+      "data_testids": ["month-group-{stageId}-{monthKey}", "toggle-{stageId}-{monthKey}"],
+      "verification": "CONFIRMED - Leads grouped by month/year, collapsible sections implemented"
+    }
+  },
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration16_features.py",
+    "/app/test_reports/pytest/iteration16_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration16_features.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "100% (All UI tests passed via Playwright)"
+  },
+  "test_credentials": {
+    "admin": "arjuna@mddrc.com.my / Dana102229"
+  },
+  "seed_data_creation": "None - Used existing leads data (2 Won leads from February 2026)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 16 complete. All 3 features working: (1) Marketing Pipeline shows leads grouped by month/year with collapsible sections - February 2026 group in Won column is collapsed by default with 2 leads visible when expanded, (2) Revenue recognition changed to cash basis - only 'partial' and 'paid' invoice statuses count, 'issued' is excluded, session completion status NOT required, (3) Expense category 'printing' description updated to 'Training Materials Printing' instead of '1% of invoice'."
+}

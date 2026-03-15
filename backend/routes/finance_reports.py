@@ -60,12 +60,11 @@ async def get_profit_loss_report(
 ):
     """Get Profit/Loss report - monthly breakdown and YTD
     
-    REVENUE RECOGNITION (Improvement 2 - Accrual Basis):
-    - Revenue is recognized when:
-      * session.completion_status = "completed" AND
-      * invoice.status IN ["issued", "partial", "paid"]
+    REVENUE RECOGNITION (Cash Basis):
+    - Revenue is recognized when payment is received:
+      * invoice.status IN ["partial", "paid"]
     - SST/Tax is excluded from revenue (gross revenue = total - tax)
-    - If session.completion_status is missing (backward compatibility), treat as eligible
+    - Session completion status is NOT required for revenue recognition
     
     EXPENSE POLICY (Improvement 2 - Actuals Only):
     - Session expenses use ONLY actual_amount
@@ -125,27 +124,21 @@ async def get_profit_loss_report(
             "net_profit": 0
         }
     
-    # ELIGIBLE invoice statuses for revenue recognition
-    REVENUE_INVOICE_STATUSES = ["issued", "partial", "paid"]
+    # ELIGIBLE invoice statuses for revenue recognition (cash basis - payment received)
+    REVENUE_INVOICE_STATUSES = ["partial", "paid"]
     
-    # Process invoices (income) - with revenue recognition rules
+    # Process invoices (income) - revenue recognized when payment received
     # ========== MULTI-INVOICE SUPPORT (Improvement) ==========
     # Use invoice.session_id directly instead of legacy invoice_session_map
     # This properly supports sessions with multiple invoices
     for inv in invoices:
         try:
-            # REVENUE RECOGNITION: Only count invoices in eligible statuses
+            # REVENUE RECOGNITION: Only count invoices where payment has been received
             if inv.get("status") not in REVENUE_INVOICE_STATUSES:
                 continue
             
             # Use session_id directly from invoice (multi-invoice support)
             session_id = inv.get("session_id")
-            
-            # REVENUE RECOGNITION: Session must be completed (or missing status for backward compat)
-            if session_id:
-                completion_status = session_completion_map.get(session_id, "completed")
-                if completion_status != "completed":
-                    continue  # Session not completed - don't recognize revenue
             
             # Calculate gross revenue (exclude SST/tax)
             total_amount = float(inv.get("total_amount") or inv.get("amount") or 0)

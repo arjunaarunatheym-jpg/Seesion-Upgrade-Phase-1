@@ -970,7 +970,7 @@ async def get_expense_categories(current_user: User = Depends(get_current_user))
         {"id": "fnb", "name": "F&B", "type": "per_pax", "rate": 25, "description": "Food & Beverages - RM 25 per participant"},
         {"id": "hrdc_levy", "name": "HRDCorp Levy", "type": "percentage", "rate": 4, "description": "HRDCorp Levy Deduction - 4% of invoice total"},
         {"id": "wear_tear", "name": "Wear and Tear", "type": "percentage", "rate": 2, "description": "Vehicle Wear & Tear - 2% of invoice total"},
-        {"id": "printing", "name": "Printing", "type": "percentage", "rate": 1, "description": "Training Materials Printing - 1% of invoice total"},
+        {"id": "printing", "name": "Printing", "type": "percentage", "rate": 1, "description": "Training Materials Printing"},
         {"id": "accommodation", "name": "Accommodation", "type": "fixed", "rate": 0, "description": "Trainer/Coordinator Accommodation"},
         {"id": "allowance", "name": "Allowance", "type": "fixed", "rate": 0, "description": "Staff Daily Allowance"},
         {"id": "petrol", "name": "Petrol", "type": "fixed", "rate": 0, "description": "Vehicle Fuel/Petrol"},

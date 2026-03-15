@@ -13,7 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { 
   Plus, Search, Phone, Mail, Building, Calendar, DollarSign, 
   ChevronRight, Edit, Trash2, UserPlus, AlertCircle, Clock, FileText,
-  Eye, Download, Percent, CheckCircle, XCircle, Send, Archive, RotateCcw
+  Eye, Download, Percent, CheckCircle, XCircle, Send, Archive, RotateCcw,
+  ChevronDown
 } from "lucide-react";
 import { toast } from "sonner";
 import { axiosInstance } from "../../App";
@@ -74,6 +75,7 @@ const LeadPipelineTab = ({
   // Won Dialog State
   const [wonDialogOpen, setWonDialogOpen] = useState(false);
   const [wonLead, setWonLead] = useState(null);
+  const [collapsedMonths, setCollapsedMonths] = useState({});
   const [wonForm, setWonForm] = useState({
     training_date: "",
     end_date: "",
@@ -295,6 +297,32 @@ const LeadPipelineTab = ({
     acc[stage.id] = filteredLeads.filter((l) => l.stage === stage.id);
     return acc;
   }, {});
+
+  // Group leads within a stage by month/year
+  const groupByMonth = (stageLeads) => {
+    const groups = {};
+    for (const lead of stageLeads) {
+      const dateStr = lead.created_at || lead.follow_up_date || "";
+      const d = dateStr ? new Date(dateStr) : new Date();
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleString("default", { month: "long", year: "numeric" });
+      if (!groups[key]) groups[key] = { key, label, leads: [], totalValue: 0 };
+      groups[key].leads.push(lead);
+      groups[key].totalValue += lead.expected_value || 0;
+    }
+    return Object.values(groups).sort((a, b) => b.key.localeCompare(a.key));
+  };
+
+  const toggleMonth = (stageId, monthKey) => {
+    const k = `${stageId}-${monthKey}`;
+    setCollapsedMonths((prev) => {
+      const current = prev[k] !== undefined ? prev[k] : monthKey !== currentMonthKey;
+      return { ...prev, [k]: !current };
+    });
+  };
+
+  // Current month key to auto-expand
+  const currentMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
 
   const isOverdue = (followUpDate) => {
     if (!followUpDate) return false;
@@ -555,27 +583,58 @@ const LeadPipelineTab = ({
       {/* Pipeline View */}
       {viewMode === "pipeline" && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 overflow-x-auto">
-          {STAGES.map((stage) => (
-            <div 
-              key={stage.id}
-              className={`min-w-[200px] rounded-lg border-2 ${stage.borderColor} p-2`}
-            >
-              <div className={`flex items-center justify-between mb-2 px-2 py-1 rounded ${stage.color}`}>
-                <span className="font-medium text-sm">{stage.label}</span>
-                <Badge variant="secondary" className="text-xs">
-                  {leadsByStage[stage.id]?.length || 0}
-                </Badge>
+          {STAGES.map((stage) => {
+            const stageLeads = leadsByStage[stage.id] || [];
+            const monthGroups = groupByMonth(stageLeads);
+            return (
+              <div 
+                key={stage.id}
+                className={`min-w-[200px] rounded-lg border-2 ${stage.borderColor} p-2`}
+              >
+                <div className={`flex items-center justify-between mb-2 px-2 py-1 rounded ${stage.color}`}>
+                  <span className="font-medium text-sm">{stage.label}</span>
+                  <Badge variant="secondary" className="text-xs">
+                    {stageLeads.length}
+                  </Badge>
+                </div>
+                <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  {stageLeads.length === 0 && (
+                    <p className="text-xs text-gray-400 text-center py-4">No leads</p>
+                  )}
+                  {monthGroups.map((group) => {
+                    const collapseKey = `${stage.id}-${group.key}`;
+                    const isCollapsed = collapsedMonths[collapseKey] !== undefined
+                      ? collapsedMonths[collapseKey]
+                      : group.key !== currentMonthKey;
+                    return (
+                      <div key={group.key} data-testid={`month-group-${collapseKey}`}>
+                        <button
+                          onClick={() => toggleMonth(stage.id, group.key)}
+                          className="w-full flex items-center justify-between px-2 py-1.5 rounded bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                          data-testid={`toggle-${collapseKey}`}
+                        >
+                          <span className="text-xs font-semibold text-gray-700 truncate">{group.label}</span>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              {group.leads.length}
+                            </Badge>
+                            <ChevronDown className={`w-3 h-3 text-gray-500 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                          </div>
+                        </button>
+                        {!isCollapsed && (
+                          <div className="space-y-2 mt-1">
+                            {group.leads.map((lead) => (
+                              <LeadCard key={lead.id} lead={lead} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                {leadsByStage[stage.id]?.map((lead) => (
-                  <LeadCard key={lead.id} lead={lead} />
-                ))}
-                {leadsByStage[stage.id]?.length === 0 && (
-                  <p className="text-xs text-gray-400 text-center py-4">No leads</p>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

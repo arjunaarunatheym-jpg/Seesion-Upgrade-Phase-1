@@ -11608,7 +11608,7 @@ async def get_expense_categories(current_user: User = Depends(get_current_user))
         {"id": "fnb", "name": "F&B", "type": "per_pax", "rate": 25, "description": "RM 25 per pax (auto-calculated)"},
         {"id": "hrdc_levy", "name": "HRDCorp Levy", "type": "percentage", "rate": 4, "description": "4% of invoice"},
         {"id": "wear_tear", "name": "Wear and Tear", "type": "percentage", "rate": 2, "description": "2% of invoice"},
-        {"id": "printing", "name": "Printing", "type": "percentage", "rate": 1, "description": "1% of invoice"},
+        {"id": "printing", "name": "Printing", "type": "percentage", "rate": 1, "description": "Training Materials Printing"},
         {"id": "accommodation", "name": "Accommodation", "type": "fixed", "rate": 0, "description": "Fixed amount"},
         {"id": "allowance", "name": "Allowance", "type": "fixed", "rate": 0, "description": "Fixed amount"},
         {"id": "petrol", "name": "Petrol", "type": "fixed", "rate": 0, "description": "Fixed amount"},
