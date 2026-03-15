@@ -87,7 +87,9 @@ const SessionManagementTab = ({ sessions, loading, onRefresh }) => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       const data = res.data;
-      toast.success(`Imported: ${data.test_scores_imported} test scores, ${data.attendance_imported} attendance records`);
+      const parts = [`${data.test_scores_imported} test scores`, `${data.attendance_imported} attendance records`];
+      if (data.vehicle_checklists_imported > 0) parts.push(`${data.vehicle_checklists_imported} vehicle checklists`);
+      toast.success(`Imported: ${parts.join(', ')}`);
       if (data.errors?.length > 0) {
         toast.warning(`${data.errors.length} errors during import`);
       }
@@ -270,7 +272,7 @@ const SessionManagementTab = ({ sessions, loading, onRefresh }) => {
             <DialogDescription>
               Upload filled Excel template for <strong>{importDialog.session?.company_name}</strong>
               <br />
-              This will import test scores and attendance records.
+              This will import test scores (raw marks), attendance, and vehicle checklists.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -278,7 +280,7 @@ const SessionManagementTab = ({ sessions, loading, onRefresh }) => {
               <strong>Steps:</strong>
               <ol className="list-decimal ml-4 mt-1 space-y-1">
                 <li>First download the template using the <Download className="inline h-3 w-3" /> button</li>
-                <li>Fill in test scores and attendance in the Excel file</li>
+                <li>Fill in test scores (raw marks), attendance, and vehicle checklists in the Excel file</li>
                 <li>Upload the completed file here</li>
               </ol>
             </div>

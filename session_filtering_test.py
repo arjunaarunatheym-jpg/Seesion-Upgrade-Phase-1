@@ -14,7 +14,7 @@ import sys
 from datetime import datetime, date, timedelta
 
 # Configuration
-BASE_URL = "https://cert-designer-3.preview.emergentagent.com/api"
+BASE_URL = "https://training-mgmt-hub.preview.emergentagent.com/api"
 ADMIN_EMAIL = "arjuna@mddrc.com.my"
 ADMIN_PASSWORD = "Dana102229"
 

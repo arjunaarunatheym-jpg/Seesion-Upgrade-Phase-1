@@ -30,7 +30,7 @@ from datetime import datetime, timedelta
 import random
 
 # Configuration
-BASE_URL = "https://cert-designer-3.preview.emergentagent.com/api"
+BASE_URL = "https://training-mgmt-hub.preview.emergentagent.com/api"
 
 # Test Credentials from request
 ADMIN_EMAIL = "arjuna@mddrc.com.my"

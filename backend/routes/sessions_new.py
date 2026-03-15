@@ -1137,23 +1137,32 @@ async def export_session_template(session_id: str, current_user: User = Depends(
     from fastapi.responses import StreamingResponse
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
     from io import BytesIO
     
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Get participants
+    # Get program for pass_percentage
+    program = None
+    if session.get("program_id"):
+        program = await db.programs.find_one({"id": session["program_id"]}, {"_id": 0})
+    pass_pct = program.get("pass_percentage", 70.0) if program else 70.0
+    
+    # Get participants (use correct field names: full_name, id_number)
     participant_ids = session.get("participant_ids", [])
     participants = []
     for pid in participant_ids:
-        user = await db.users.find_one({"id": pid}, {"_id": 0, "id": 1, "name": 1, "ic_number": 1, "email": 1, "phone": 1})
+        user = await db.users.find_one({"id": pid}, {"_id": 0, "id": 1, "full_name": 1, "id_number": 1, "email": 1, "phone_number": 1})
         if user:
             participants.append(user)
     
     # Get existing data
     existing_attendance = await db.attendance.find({"session_id": session_id}, {"_id": 0}).to_list(1000)
     existing_tests = await db.test_results.find({"session_id": session_id}, {"_id": 0}).to_list(1000)
+    existing_checklists = await db.vehicle_checklists.find({"session_id": session_id}, {"_id": 0}).to_list(1000)
+    existing_vehicle_details = await db.vehicle_details.find({"session_id": session_id}, {"_id": 0}).to_list(1000)
     
     att_map = {}
     for a in existing_attendance:
@@ -1167,15 +1176,18 @@ async def export_session_template(session_id: str, current_user: User = Depends(
         key = (t.get("participant_id"), t.get("test_type"))
         test_map[key] = t
     
-    # Get session dates for attendance columns
+    checklist_map = {}
+    for c in existing_checklists:
+        checklist_map[c.get("participant_id")] = c
+    
+    vehicle_map = {}
+    for v in existing_vehicle_details:
+        vehicle_map[v.get("participant_id")] = v
+    
     start = session.get("start_date", "")
     end = session.get("end_date", start)
     
     wb = Workbook()
-    
-    # === Sheet 1: Test Scores ===
-    ws1 = wb.active
-    ws1.title = "Test Scores"
     
     header_fill = PatternFill(start_color="1A365D", end_color="1A365D", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF", size=11)
@@ -1183,43 +1195,66 @@ async def export_session_template(session_id: str, current_user: User = Depends(
         left=Side(style='thin'), right=Side(style='thin'),
         top=Side(style='thin'), bottom=Side(style='thin')
     )
+    info_font = Font(size=11, italic=True)
     
-    # Info rows
-    ws1.merge_cells('A1:F1')
+    # === Sheet 1: Pre/Post Tests (Raw Marks) ===
+    ws1 = wb.active
+    ws1.title = "Pre-Post Tests"
+    
+    ws1.merge_cells('A1:H1')
     ws1['A1'] = f"Session: {session.get('company_name', 'N/A')} - {session.get('program_name', 'N/A')}"
     ws1['A1'].font = Font(bold=True, size=14)
-    ws1.merge_cells('A2:F2')
-    ws1['A2'] = f"Dates: {start} to {end} | Session ID: {session_id}"
-    ws1['A2'].font = Font(size=11, italic=True)
+    ws1.merge_cells('A2:H2')
+    ws1['A2'] = f"Dates: {start} to {end} | Pass Mark: {pass_pct}% | Session ID: {session_id}"
+    ws1['A2'].font = info_font
     
-    headers = ["No", "Participant Name", "IC Number", "Pre-Test Score (%)", "Post-Test Score (%)", "Remarks"]
-    for col, h in enumerate(headers, 1):
+    test_headers = [
+        "No", "Participant Name", "IC Number",
+        "Pre-Test (Marks)", "Pre-Test (Total)",
+        "Post-Test (Marks)", "Post-Test (Total)",
+        "Remarks"
+    ]
+    for col, h in enumerate(test_headers, 1):
         cell = ws1.cell(row=4, column=col, value=h)
         cell.fill = header_fill
         cell.font = header_font
-        cell.alignment = Alignment(horizontal='center')
+        cell.alignment = Alignment(horizontal='center', wrap_text=True)
         cell.border = thin_border
     
     for i, p in enumerate(participants, 1):
         row = i + 4
         ws1.cell(row=row, column=1, value=i).border = thin_border
-        ws1.cell(row=row, column=2, value=p.get("name", "")).border = thin_border
-        ws1.cell(row=row, column=3, value=p.get("ic_number", "")).border = thin_border
+        ws1.cell(row=row, column=2, value=p.get("full_name", "")).border = thin_border
+        ws1.cell(row=row, column=3, value=p.get("id_number", "")).border = thin_border
         
-        pre = test_map.get((p["id"], "pre"))
-        post = test_map.get((p["id"], "post"))
-        pre_cell = ws1.cell(row=row, column=4, value=pre.get("score") if pre else None)
-        pre_cell.border = thin_border
-        post_cell = ws1.cell(row=row, column=5, value=post.get("score") if post else None)
-        post_cell.border = thin_border
-        ws1.cell(row=row, column=6, value="").border = thin_border
+        pre = test_map.get((p["id"], "pre")) or test_map.get((p["id"], "pre_test"))
+        post = test_map.get((p["id"], "post")) or test_map.get((p["id"], "post_test"))
+        
+        # Pre-existing marks (if imported before with raw marks, show them; otherwise show score as marks with total=100)
+        if pre:
+            ws1.cell(row=row, column=4, value=pre.get("marks_obtained", pre.get("score"))).border = thin_border
+            ws1.cell(row=row, column=5, value=pre.get("total_marks", 100)).border = thin_border
+        else:
+            ws1.cell(row=row, column=4, value=None).border = thin_border
+            ws1.cell(row=row, column=5, value=None).border = thin_border
+        
+        if post:
+            ws1.cell(row=row, column=6, value=post.get("marks_obtained", post.get("score"))).border = thin_border
+            ws1.cell(row=row, column=7, value=post.get("total_marks", 100)).border = thin_border
+        else:
+            ws1.cell(row=row, column=6, value=None).border = thin_border
+            ws1.cell(row=row, column=7, value=None).border = thin_border
+        
+        ws1.cell(row=row, column=8, value="").border = thin_border
     
     ws1.column_dimensions['A'].width = 6
     ws1.column_dimensions['B'].width = 30
     ws1.column_dimensions['C'].width = 18
-    ws1.column_dimensions['D'].width = 20
-    ws1.column_dimensions['E'].width = 20
-    ws1.column_dimensions['F'].width = 25
+    ws1.column_dimensions['D'].width = 18
+    ws1.column_dimensions['E'].width = 16
+    ws1.column_dimensions['F'].width = 18
+    ws1.column_dimensions['G'].width = 16
+    ws1.column_dimensions['H'].width = 25
     
     # === Sheet 2: Attendance ===
     ws2 = wb.create_sheet("Attendance")
@@ -1227,11 +1262,10 @@ async def export_session_template(session_id: str, current_user: User = Depends(
     ws2['A1'] = f"Attendance Record - {session.get('company_name', 'N/A')}"
     ws2['A1'].font = Font(bold=True, size=14)
     ws2.merge_cells('A2:F2')
-    ws2['A2'] = f"Enter 'P' for Present, 'A' for Absent, 'L' for Late"
+    ws2['A2'] = "Enter 'P' for Present, 'A' for Absent, 'L' for Late"
     ws2['A2'].font = Font(size=11, italic=True, color="666666")
     
     att_headers = ["No", "Participant Name", "IC Number"]
-    # Generate day columns
     from datetime import date as dt_date, timedelta
     day_dates = []
     if start:
@@ -1243,7 +1277,7 @@ async def export_session_template(session_id: str, current_user: User = Depends(
                 day_dates.append(current.isoformat())
                 att_headers.append(f"Day {len(day_dates)} ({current.strftime('%d/%m')})")
                 current += timedelta(days=1)
-        except:
+        except Exception:
             att_headers.append("Day 1")
             day_dates.append(start)
     
@@ -1257,8 +1291,8 @@ async def export_session_template(session_id: str, current_user: User = Depends(
     for i, p in enumerate(participants, 1):
         row = i + 4
         ws2.cell(row=row, column=1, value=i).border = thin_border
-        ws2.cell(row=row, column=2, value=p.get("name", "")).border = thin_border
-        ws2.cell(row=row, column=3, value=p.get("ic_number", "")).border = thin_border
+        ws2.cell(row=row, column=2, value=p.get("full_name", "")).border = thin_border
+        ws2.cell(row=row, column=3, value=p.get("id_number", "")).border = thin_border
         
         p_att = att_map.get(p["id"], [])
         for d_idx, d_date in enumerate(day_dates):
@@ -1270,15 +1304,78 @@ async def export_session_template(session_id: str, current_user: User = Depends(
     ws2.column_dimensions['B'].width = 30
     ws2.column_dimensions['C'].width = 18
     for d_idx in range(len(day_dates)):
-        ws2.column_dimensions[chr(68 + d_idx)].width = 16
+        col_letter = get_column_letter(4 + d_idx)
+        ws2.column_dimensions[col_letter].width = 16
     
-    # === Sheet 3: Instructions ===
-    ws3 = wb.create_sheet("Instructions")
+    # === Sheet 3: Vehicle Checklist ===
+    ws3 = wb.create_sheet("Vehicle Checklist")
+    ws3.merge_cells('A1:J1')
+    ws3['A1'] = f"Vehicle Checklist - {session.get('company_name', 'N/A')}"
+    ws3['A1'].font = Font(bold=True, size=14)
+    ws3.merge_cells('A2:J2')
+    ws3['A2'] = "Enter vehicle details and checklist items. Status: Good / Needs Repair / Satisfactory / N/A"
+    ws3['A2'].font = Font(size=11, italic=True, color="666666")
+    
+    # Determine checklist items from existing data, or use defaults
+    all_checklist_item_names = set()
+    for c in existing_checklists:
+        for item in c.get("checklist_items", []):
+            all_checklist_item_names.add(item.get("item", "").lower().strip())
+    
+    checklist_items_list = sorted(all_checklist_item_names) if all_checklist_item_names else ["helmet", "tires", "safety vest", "lights", "side mirror"]
+    
+    vc_headers = ["No", "Participant Name", "IC Number", "Vehicle Model", "Registration No", "Road Tax Expiry"]
+    for ci_name in checklist_items_list:
+        vc_headers.append(ci_name.title())
+    
+    for col, h in enumerate(vc_headers, 1):
+        cell = ws3.cell(row=4, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', wrap_text=True)
+        cell.border = thin_border
+    
+    for i, p in enumerate(participants, 1):
+        row = i + 4
+        ws3.cell(row=row, column=1, value=i).border = thin_border
+        ws3.cell(row=row, column=2, value=p.get("full_name", "")).border = thin_border
+        ws3.cell(row=row, column=3, value=p.get("id_number", "")).border = thin_border
+        
+        # Pre-fill vehicle details if they exist
+        vd = vehicle_map.get(p["id"])
+        ws3.cell(row=row, column=4, value=vd.get("vehicle_model", "") if vd else "").border = thin_border
+        ws3.cell(row=row, column=5, value=vd.get("registration_number", "") if vd else "").border = thin_border
+        ws3.cell(row=row, column=6, value=vd.get("roadtax_expiry", "") if vd else "").border = thin_border
+        
+        # Pre-fill checklist items if they exist
+        vc = checklist_map.get(p["id"])
+        vc_items = {}
+        if vc:
+            for item in vc.get("checklist_items", []):
+                vc_items[item.get("item", "").lower()] = item.get("status", "")
+        
+        for ci_idx, ci_name in enumerate(checklist_items_list):
+            status = vc_items.get(ci_name, "")
+            ws3.cell(row=row, column=7 + ci_idx, value=status).border = thin_border
+    
+    ws3.column_dimensions['A'].width = 6
+    ws3.column_dimensions['B'].width = 30
+    ws3.column_dimensions['C'].width = 18
+    ws3.column_dimensions['D'].width = 18
+    ws3.column_dimensions['E'].width = 18
+    ws3.column_dimensions['F'].width = 16
+    for ci_idx in range(len(checklist_items_list)):
+        col_letter = get_column_letter(7 + ci_idx)
+        ws3.column_dimensions[col_letter].width = 16
+    
+    # === Sheet 4: Instructions ===
+    ws4 = wb.create_sheet("Instructions")
     instructions = [
         ("MDDRC Session Data Import Template", Font(bold=True, size=16)),
         ("", None),
-        ("Sheet 1: Test Scores", Font(bold=True, size=12)),
-        ("- Fill in Pre-Test Score and Post-Test Score as percentages (0-100)", None),
+        ("Sheet 1: Pre/Post Tests", Font(bold=True, size=12)),
+        (f"- Enter raw marks: 'Marks Obtained' and 'Total Marks' for each test", None),
+        (f"- System will auto-calculate percentage and pass/fail (pass mark: {pass_pct}%)", None),
         ("- Do NOT modify the IC Number column - it's used for matching", None),
         ("- Leave blank if no score available", None),
         ("", None),
@@ -1287,16 +1384,21 @@ async def export_session_template(session_id: str, current_user: User = Depends(
         ("- Each Day column corresponds to the session date shown in the header", None),
         ("- Leave blank if no data", None),
         ("", None),
+        ("Sheet 3: Vehicle Checklist", Font(bold=True, size=12)),
+        ("- Enter vehicle details: Model, Registration No, Road Tax Expiry (YYYY-MM-DD)", None),
+        ("- For each checklist item, enter: 'good', 'needs_repair', or 'n/a'", None),
+        ("- Leave blank if no data", None),
+        ("", None),
         ("IMPORTANT:", Font(bold=True, size=12, color="FF0000")),
         ("- Do NOT add/remove rows or change the order of participants", None),
         ("- Do NOT modify IC Numbers - they are used to match participants", None),
         ("- Save as .xlsx format before uploading", None),
     ]
     for i, (text, font) in enumerate(instructions, 1):
-        cell = ws3.cell(row=i, column=1, value=text)
+        cell = ws4.cell(row=i, column=1, value=text)
         if font:
             cell.font = font
-    ws3.column_dimensions['A'].width = 70
+    ws4.column_dimensions['A'].width = 70
     
     output = BytesIO()
     wb.save(output)
@@ -1314,7 +1416,7 @@ async def export_session_template(session_id: str, current_user: User = Depends(
 
 @router.post("/{session_id}/import-data")
 async def import_session_data(session_id: str, file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
-    """Import session data (test scores, attendance) from Excel"""
+    """Import session data (test scores, attendance, vehicle checklist) from Excel"""
     if current_user.role not in ["admin", "super_admin", "assistant_admin", "coordinator"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -1325,22 +1427,34 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
+    # Get program for pass_percentage
+    program = None
+    if session.get("program_id"):
+        program = await db.programs.find_one({"id": session["program_id"]}, {"_id": 0})
+    pass_pct = program.get("pass_percentage", 70.0) if program else 70.0
+    
     content = await file.read()
     wb = load_workbook(BytesIO(content), read_only=True)
     
-    results = {"test_scores_imported": 0, "attendance_imported": 0, "errors": [], "skipped": []}
+    results = {"test_scores_imported": 0, "attendance_imported": 0, "vehicle_checklists_imported": 0, "errors": [], "skipped": []}
     
-    # Build participant lookup by IC number
+    # Build participant lookup by IC number (use id_number field)
     participant_ids = session.get("participant_ids", [])
     ic_to_participant = {}
     for pid in participant_ids:
-        user = await db.users.find_one({"id": pid}, {"_id": 0, "id": 1, "name": 1, "ic_number": 1})
-        if user and user.get("ic_number"):
-            ic_to_participant[str(user["ic_number"]).strip()] = user
+        user = await db.users.find_one({"id": pid}, {"_id": 0, "id": 1, "full_name": 1, "id_number": 1})
+        if user and user.get("id_number"):
+            ic_to_participant[str(user["id_number"]).strip()] = user
     
-    # === Process Test Scores (Sheet 1) ===
-    if "Test Scores" in wb.sheetnames:
-        ws = wb["Test Scores"]
+    # === Process Pre/Post Tests (Sheet 1) — Raw Marks ===
+    test_sheet_name = None
+    for name in ["Pre-Post Tests", "Test Scores"]:
+        if name in wb.sheetnames:
+            test_sheet_name = name
+            break
+    
+    if test_sheet_name:
+        ws = wb[test_sheet_name]
         for row in ws.iter_rows(min_row=5, values_only=False):
             try:
                 ic = str(row[2].value or "").strip()
@@ -1349,17 +1463,45 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
                 
                 participant = ic_to_participant[ic]
                 pid = participant["id"]
-                pre_score = row[3].value
-                post_score = row[4].value
                 
-                # Import pre-test score
-                if pre_score is not None and str(pre_score).strip() != "":
-                    score_val = float(pre_score)
+                # Determine column layout based on sheet name
+                if test_sheet_name == "Pre-Post Tests":
+                    # New format: col 3=Pre Marks, col 4=Pre Total, col 5=Post Marks, col 6=Post Total
+                    pre_marks = row[3].value
+                    pre_total = row[4].value
+                    post_marks = row[5].value
+                    post_total = row[6].value
+                else:
+                    # Legacy format: col 3=Pre Score (%), col 4=Post Score (%)
+                    pre_marks = row[3].value
+                    pre_total = 100
+                    post_marks = row[4].value
+                    post_total = 100
+                
+                # Import pre-test score from raw marks
+                if pre_marks is not None and str(pre_marks).strip() != "":
+                    marks = float(pre_marks)
+                    total = float(pre_total) if pre_total and str(pre_total).strip() != "" else 100
+                    if total <= 0:
+                        total = 100
+                    score_pct = round((marks / total) * 100, 2)
+                    passed = score_pct >= pass_pct
+                    
+                    test_data = {
+                        "score": score_pct,
+                        "marks_obtained": marks,
+                        "total_marks": total,
+                        "passed": passed,
+                        "pass_percentage_used": pass_pct,
+                        "imported": True,
+                        "imported_at": get_malaysia_time().isoformat()
+                    }
+                    
                     existing = await db.test_results.find_one({"session_id": session_id, "participant_id": pid, "test_type": "pre"})
                     if existing:
                         await db.test_results.update_one(
                             {"session_id": session_id, "participant_id": pid, "test_type": "pre"},
-                            {"$set": {"score": score_val, "passed": score_val >= 50, "imported": True, "imported_at": get_malaysia_time().isoformat()}}
+                            {"$set": test_data}
                         )
                     else:
                         await db.test_results.insert_one({
@@ -1369,24 +1511,37 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
                             "session_id": session_id,
                             "test_type": "pre",
                             "answers": [],
-                            "score": score_val,
                             "total_questions": 0,
                             "correct_answers": 0,
-                            "passed": score_val >= 50,
-                            "imported": True,
-                            "imported_at": get_malaysia_time().isoformat(),
-                            "submitted_at": get_malaysia_time().isoformat()
+                            "submitted_at": get_malaysia_time().isoformat(),
+                            **test_data
                         })
                     results["test_scores_imported"] += 1
                 
-                # Import post-test score
-                if post_score is not None and str(post_score).strip() != "":
-                    score_val = float(post_score)
+                # Import post-test score from raw marks
+                if post_marks is not None and str(post_marks).strip() != "":
+                    marks = float(post_marks)
+                    total = float(post_total) if post_total and str(post_total).strip() != "" else 100
+                    if total <= 0:
+                        total = 100
+                    score_pct = round((marks / total) * 100, 2)
+                    passed = score_pct >= pass_pct
+                    
+                    test_data = {
+                        "score": score_pct,
+                        "marks_obtained": marks,
+                        "total_marks": total,
+                        "passed": passed,
+                        "pass_percentage_used": pass_pct,
+                        "imported": True,
+                        "imported_at": get_malaysia_time().isoformat()
+                    }
+                    
                     existing = await db.test_results.find_one({"session_id": session_id, "participant_id": pid, "test_type": "post"})
                     if existing:
                         await db.test_results.update_one(
                             {"session_id": session_id, "participant_id": pid, "test_type": "post"},
-                            {"$set": {"score": score_val, "passed": score_val >= 50, "imported": True, "imported_at": get_malaysia_time().isoformat()}}
+                            {"$set": test_data}
                         )
                     else:
                         await db.test_results.insert_one({
@@ -1396,26 +1551,21 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
                             "session_id": session_id,
                             "test_type": "post",
                             "answers": [],
-                            "score": score_val,
                             "total_questions": 0,
                             "correct_answers": 0,
-                            "passed": score_val >= 50,
-                            "imported": True,
-                            "imported_at": get_malaysia_time().isoformat(),
-                            "submitted_at": get_malaysia_time().isoformat()
+                            "submitted_at": get_malaysia_time().isoformat(),
+                            **test_data
                         })
                     results["test_scores_imported"] += 1
                     
             except Exception as e:
-                results["errors"].append(f"Row error: {str(e)}")
+                results["errors"].append(f"Test row error: {str(e)}")
     
     # === Process Attendance (Sheet 2) ===
     if "Attendance" in wb.sheetnames:
         ws = wb["Attendance"]
         
-        # Parse day dates from headers
         day_dates = []
-        header_row = list(ws.iter_rows(min_row=4, max_row=4, values_only=True))[0]
         from datetime import date as dt_date, timedelta
         start = session.get("start_date", "")
         end = session.get("end_date", start)
@@ -1427,7 +1577,7 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
                 while current <= e_date:
                     day_dates.append(current.isoformat())
                     current += timedelta(days=1)
-            except:
+            except Exception:
                 day_dates = [start]
         
         for row in ws.iter_rows(min_row=5, values_only=False):
@@ -1466,11 +1616,106 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
                             })
                         results["attendance_imported"] += 1
                     elif val in ["A", "ABSENT"]:
-                        # Mark as absent by removing any existing attendance
                         await db.attendance.delete_one({"session_id": session_id, "participant_id": pid, "date": d_date})
                         
             except Exception as e:
                 results["errors"].append(f"Attendance row error: {str(e)}")
+    
+    # === Process Vehicle Checklist (Sheet 3) ===
+    if "Vehicle Checklist" in wb.sheetnames:
+        ws = wb["Vehicle Checklist"]
+        
+        # Read checklist item names from header row (columns starting from 7th)
+        header_row = list(ws.iter_rows(min_row=4, max_row=4, values_only=False))[0]
+        checklist_items_list = []
+        for col_idx in range(6, len(header_row)):
+            h_val = header_row[col_idx].value
+            if h_val and str(h_val).strip():
+                checklist_items_list.append(str(h_val).strip().lower())
+        
+        for row in ws.iter_rows(min_row=5, values_only=False):
+            try:
+                ic = str(row[2].value or "").strip()
+                if not ic or ic not in ic_to_participant:
+                    continue
+                
+                participant = ic_to_participant[ic]
+                pid = participant["id"]
+                
+                # Vehicle details (cols 3-5: model, reg no, road tax)
+                vehicle_model = str(row[3].value or "").strip()
+                registration_no = str(row[4].value or "").strip()
+                roadtax_expiry = str(row[5].value or "").strip()
+                
+                has_vehicle_data = vehicle_model or registration_no
+                has_checklist_data = any(
+                    str(row[6 + ci_idx].value or "").strip()
+                    for ci_idx in range(len(checklist_items_list))
+                    if 6 + ci_idx < len(row)
+                )
+                
+                if not has_vehicle_data and not has_checklist_data:
+                    continue
+                
+                # Upsert vehicle details
+                if has_vehicle_data:
+                    vd_data = {
+                        "vehicle_model": vehicle_model,
+                        "registration_number": registration_no,
+                        "roadtax_expiry": roadtax_expiry,
+                        "imported": True
+                    }
+                    existing_vd = await db.vehicle_details.find_one({"session_id": session_id, "participant_id": pid})
+                    if existing_vd:
+                        await db.vehicle_details.update_one(
+                            {"session_id": session_id, "participant_id": pid},
+                            {"$set": vd_data}
+                        )
+                    else:
+                        await db.vehicle_details.insert_one({
+                            "id": str(uuid.uuid4()),
+                            "participant_id": pid,
+                            "session_id": session_id,
+                            "created_at": get_malaysia_time().isoformat(),
+                            **vd_data
+                        })
+                
+                # Upsert vehicle checklist
+                if has_checklist_data:
+                    items = []
+                    for ci_idx, ci_name in enumerate(checklist_items_list):
+                        col_idx = 6 + ci_idx
+                        if col_idx < len(row):
+                            status = str(row[col_idx].value or "").strip().lower()
+                            if status in ["good", "needs_repair", "needs repair", "satisfactory", "n/a", "na"]:
+                                status = status.replace("needs repair", "needs_repair").replace("na", "n/a")
+                                items.append({"item": ci_name, "status": status, "comments": "", "photo_url": None})
+                    
+                    if items:
+                        existing_vc = await db.vehicle_checklists.find_one({"session_id": session_id, "participant_id": pid})
+                        vc_data = {
+                            "checklist_items": items,
+                            "interval": "imported",
+                            "submitted_at": get_malaysia_time().isoformat(),
+                            "verification_status": "imported",
+                            "imported": True
+                        }
+                        if existing_vc:
+                            await db.vehicle_checklists.update_one(
+                                {"session_id": session_id, "participant_id": pid},
+                                {"$set": vc_data}
+                            )
+                        else:
+                            await db.vehicle_checklists.insert_one({
+                                "id": str(uuid.uuid4()),
+                                "participant_id": pid,
+                                "session_id": session_id,
+                                **vc_data
+                            })
+                        results["vehicle_checklists_imported"] += 1
+                
+            except Exception as e:
+                results["errors"].append(f"Vehicle checklist row error: {str(e)}")
     
     wb.close()
     return results

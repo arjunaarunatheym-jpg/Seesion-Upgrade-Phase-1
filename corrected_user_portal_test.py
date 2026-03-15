@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import uuid
 
 # Configuration
-BASE_URL = "https://cert-designer-3.preview.emergentagent.com/api"
+BASE_URL = "https://training-mgmt-hub.preview.emergentagent.com/api"
 
 # Corrected Test Credentials based on actual database users
 TEST_CREDENTIALS = {

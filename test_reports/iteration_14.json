@@ -1,0 +1,126 @@
+{
+  "summary": "Iteration 14 - Excel Import/Export Feature Testing Complete. Backend API tests passed (14/14). Frontend UI tests passed for Admin Session Mgmt tab and Coordinator Dashboard.",
+  "phase": "Iteration 14 - Excel Upload/Import Feature Refinement",
+  "test_scope": {
+    "feature_tested": "Excel Export/Import for Session Data",
+    "endpoints_tested": [
+      "GET /api/sessions/{session_id}/export-template",
+      "POST /api/sessions/{session_id}/import-data"
+    ],
+    "ui_tested": [
+      "Admin Dashboard > Data Management > Session Mgmt tab",
+      "Coordinator Dashboard > My Sessions > Template/Import buttons"
+    ]
+  },
+  "backend_tests": {
+    "test_file": "/app/backend/tests/test_excel_import_export.py",
+    "total_tests": 14,
+    "passed": 14,
+    "failed": 0,
+    "test_results": {
+      "TestExportTemplate": {
+        "test_export_template_returns_excel": "PASSED - Returns Excel file with correct Content-Type",
+        "test_export_template_has_4_sheets": "PASSED - Contains: Pre-Post Tests, Attendance, Vehicle Checklist, Instructions",
+        "test_pre_post_tests_sheet_has_raw_marks_columns": "PASSED - Has Pre-Test (Marks), Pre-Test (Total), Post-Test (Marks), Post-Test (Total) columns",
+        "test_vehicle_checklist_sheet_structure": "PASSED - Has Participant Name, IC Number, Vehicle Model, Registration No, Road Tax Expiry columns",
+        "test_participant_names_not_empty": "PASSED - Participant names populated using full_name field",
+        "test_ic_numbers_not_empty": "PASSED - IC numbers populated using id_number field"
+      },
+      "TestImportData": {
+        "test_import_test_scores_raw_marks": "PASSED - Raw marks imported and percentage calculated correctly",
+        "test_import_vehicle_checklist": "PASSED - Vehicle checklist data imported",
+        "test_import_attendance": "PASSED - Attendance records imported",
+        "test_import_returns_all_counts": "PASSED - Response includes test_scores_imported, attendance_imported, vehicle_checklists_imported"
+      },
+      "TestUnauthorizedAccess": {
+        "test_export_requires_auth": "PASSED - Returns 403 without authentication",
+        "test_import_requires_auth": "PASSED - Returns 403 without authentication"
+      },
+      "TestSessionNotFound": {
+        "test_export_nonexistent_session": "PASSED - Returns 404",
+        "test_import_nonexistent_session": "PASSED - Returns 404"
+      }
+    }
+  },
+  "frontend_tests": {
+    "admin_session_mgmt_tab": {
+      "location": "VERIFIED - Admin Dashboard > Data Management > Session Mgmt",
+      "search_input": "FOUND - data-testid='session-mgmt-search'",
+      "status_filter": "FOUND - data-testid='session-mgmt-status-filter'",
+      "sessions_table": "FOUND - Displays Date, Company, Programme, Pax, Status, Completion, Actions",
+      "export_buttons": "FOUND - 6 buttons with data-testid='export-session-{id}'",
+      "import_buttons": "FOUND - 6 buttons with data-testid='import-session-{id}'",
+      "complete_buttons": "FOUND - 6 buttons with data-testid='complete-session-{id}' or 'revert-session-{id}'",
+      "import_dialog": "VERIFIED - Opens with correct message about 'test scores (raw marks), attendance, and vehicle checklists'"
+    },
+    "coordinator_dashboard": {
+      "location": "VERIFIED - /coordinator route",
+      "my_sessions_tab": "VISIBLE - Shows 'My Assigned Sessions'",
+      "template_buttons": "FOUND - 2 Template download buttons",
+      "import_buttons": "FOUND - 2 Import buttons",
+      "session_card_display": "VERIFIED - Shows Participants, Pre-Test, Post-Test, Feedback counts"
+    }
+  },
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "console_warnings": [
+      {"warning": "Button nested in button HTML warning in CoordinatorDashboard.jsx", "impact": "Minor - cosmetic React warning, no functional impact"},
+      {"warning": "Failed to load checklist templates: 500 error", "impact": "Minor - pre-existing unrelated issue"}
+    ]
+  },
+  "working_features": {
+    "export_template": [
+      "Returns Excel file with 4 sheets: Pre-Post Tests, Attendance, Vehicle Checklist, Instructions",
+      "Pre-Post Tests sheet has raw marks columns (Marks Obtained + Total Marks)",
+      "Vehicle Checklist sheet has correct structure with dynamic checklist items",
+      "Participant names populated correctly using full_name field",
+      "IC numbers populated correctly using id_number field"
+    ],
+    "import_data": [
+      "Accepts Excel file with raw marks, calculates percentage automatically",
+      "Pass/fail calculated based on program's pass_percentage (90%)",
+      "Imports attendance records (P=Present, A=Absent, L=Late)",
+      "Imports vehicle checklist data including vehicle details",
+      "Response includes vehicle_checklists_imported count"
+    ],
+    "ui_access": [
+      "Admin Session Mgmt tab accessible at /admin > Data Management > Session Mgmt",
+      "Coordinator Template/Import buttons in session cards on My Sessions tab"
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_excel_import_export.py",
+    "/app/test_reports/pytest/excel_import_export_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Export template correctly uses full_name and id_number fields (fixed from previous wrong field names)",
+    "Import logic correctly calculates percentage from raw marks: (marks_obtained / total_marks) * 100",
+    "Pass/fail determination uses program's pass_percentage from database",
+    "Vehicle Checklist sheet is now included in export template (new feature)",
+    "Import response includes vehicle_checklists_imported count (new feature)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_excel_import_export.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": {
+    "admin": "arjuna@mddrc.com.my / Dana102229",
+    "coordinator": "chandra.selvaguru@mddrc.com.my / mddrc1"
+  },
+  "test_session_id": "1f9cfa93-d5f5-4796-9d8a-566884663d1b",
+  "test_ic_numbers_used": ["8445118", "98546161165", "85525655", "5515265", "8995495198", "874656"],
+  "seed_data_creation": "Test import data created and processed during backend tests",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 14 complete. Excel Import/Export feature fully tested. Export template returns 4 sheets with raw marks columns. Import calculates percentage from raw marks and determines pass/fail based on program pass_percentage. Vehicle Checklist sheet added to template. Frontend UI verified in both Admin Session Mgmt tab and Coordinator Dashboard."
+}
