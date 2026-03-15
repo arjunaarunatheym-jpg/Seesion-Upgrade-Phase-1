@@ -57,18 +57,17 @@ async def get_notification_settings(current_user: User = Depends(get_current_use
     
     settings = await db.notification_settings.find({}, {"_id": 0}).to_list(100)
     
-    # If no settings exist, return defaults
-    if not settings:
-        defaults = []
-        for event in NOTIFICATION_EVENTS:
-            defaults.append({
+    # Merge saved settings with defaults for any events not yet configured
+    saved_event_ids = {s.get("event_id") for s in settings}
+    for event in NOTIFICATION_EVENTS:
+        if event["id"] not in saved_event_ids:
+            settings.append({
                 "event_id": event["id"],
                 "enabled": True,
                 "recipient_roles": event["default_roles"],
                 "recipient_user_ids": [],
                 "custom_emails": []
             })
-        return defaults
     
     return settings
 

@@ -116,7 +116,12 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 ### In Progress
 
 ### Recently Completed (Mar 15, 2026)
-- ✅ **Auto-Lead for Returning Clients** — When creating a quotation for an existing client (not from a lead), system auto-creates a lead at "Quotation Sent" stage. This ensures returning clients flow through the pipeline (Quotation Sent → Negotiating → Won → auto-create session). Source tagged as `repeat_client`.
+- ✅ **Email & Notifications System** — Full notification management with 3 features:
+  - **Notification Rules**: 10 configurable events (Quotation Created/Approved, Invoice Created, Payment Received, Session Completed, Post-Eval Reminder). Per-event: toggle ON/OFF, notify by role, specific staff, custom external emails
+  - **Broadcast/Greetings**: Compose and send emails to groups (All Staff, All Participants, Session Participants, Custom emails) with attachment support (festive cards, safety posters). Perfect for Hari Raya, safety messages etc
+  - **Broadcast History**: View all sent broadcasts with recipient counts, timestamps, sender, and error tracking
+  - Resend integration with configurable SENDER_EMAIL. Note: Requires domain verification at resend.com/domains to send to external emails
+- ✅ **Auto-Lead for Returning Clients** — When creating a quotation for an existing client (not from a lead), system auto-creates a lead at "Quotation Sent" stage. Source tagged as `repeat_client`.
 - ✅ **Revenue Recognition Fix** — Revenue recognized when invoice is issued (issued/partial/paid). Session completion no longer required. Corrected from earlier change that mistakenly removed "issued" status.
 - ✅ **Marketing Pipeline Month/Year Grouping** — Leads within each stage column are now grouped by month/year with collapsible sections. Current month auto-expanded, older months collapsed. Each group shows label and lead count.
 - ✅ **Printing Expense Description Fix** — Changed from generic "1% of invoice" to "Training Materials Printing" in both `finance_payables.py` and `server.py`.
