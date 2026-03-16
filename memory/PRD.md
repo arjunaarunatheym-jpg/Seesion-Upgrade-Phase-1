@@ -49,9 +49,13 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 ## Current Status (Mar 2026)
 
 ### Recently Completed (Mar 16, 2026)
-- ✅ **Calendar View for All Staff** — Calendar now shows ALL sessions to all staff roles (admin, coordinator, trainer, marketing, finance). No role-based filtering. Marketing and finance users can now access `/calendar`.
-- ✅ **Marketing "My Sessions" Tab** — New tab in Marketing Portal showing sessions from the marketer's deals. Read-only view with current/past toggle, company names, programme, dates, venue, coordinators, trainers, and invoice status.
-- ✅ **Smart Email Dispatcher** (P0) — Complete contextual email routing system with 14 event-specific notification functions
+- ✅ **CEO P&L Multi-Invoice Fix** — Revenue now correctly captures ALL invoices for sessions with multiple invoices (was only showing the first). Fixed by using `invoice.session_id` directly instead of legacy `session.invoice_id` mapping.
+- ✅ **"undefined" Programme Name Fix** — Sessions with deleted/orphaned programmes now show their session name instead of "undefined". Added dynamic fallback for missing programmes.
+- ✅ **Journal Reference Improvement** — Expense journal entries now show invoice numbers (e.g., `TF-INV/MDDRC/2026/01/0001`) instead of cryptic UUIDs (`TF-eabe85db`), making it easy to trace expenses to invoices.
+- ✅ **Pay Advice Generation Fix** — Fixed duplicate route conflict where stub endpoints in `routes/hr.py` intercepted requests before the full implementation in `server.py`. Bulk generate now properly creates pay advice for all staff.
+- ✅ **Calendar View for All Staff** — All sessions visible to all roles
+- ✅ **Marketing "My Sessions" Tab** — Read-only view with current/past toggle
+- ✅ **Smart Email Dispatcher** — Complete contextual email routing
   - Core `send_smart_notification()` function with TO/CC/REPLY-TO support
   - 14 event-specific notification functions with hardcoded routing rules:
     - Quotation for Approval → TO: Admin | REPLY-TO: Marketer

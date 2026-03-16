@@ -100,7 +100,6 @@ async def get_profit_loss_report(
     # ========== END MULTI-INVOICE SUPPORT ==========
     
     # Get all data sources
-    invoices = await db.invoices.find({}, {"_id": 0}).to_list(10000)
     manual_income = await db.manual_income.find({"date": {"$gte": start_date, "$lte": end_date}}, {"_id": 0}).to_list(1000)
     payslips = await db.hr_payslips.find({"year": year}, {"_id": 0}).to_list(1000)
     pay_advice = await db.hr_pay_advices.find({"year": year}, {"_id": 0}).to_list(1000)
@@ -127,18 +126,28 @@ async def get_profit_loss_report(
     # ELIGIBLE invoice statuses for revenue recognition
     REVENUE_INVOICE_STATUSES = ["issued", "partial", "paid"]
     
-    # Process invoices (income) - revenue recognized when invoice issued
-    # ========== MULTI-INVOICE SUPPORT (Improvement) ==========
-    # Use invoice.session_id directly instead of legacy invoice_session_map
-    # This properly supports sessions with multiple invoices
-    for inv in invoices:
+    # ========== MULTI-INVOICE SUPPORT ==========
+    # Build a comprehensive invoice-to-session map using both directions
+    invoice_session_map = {}
+    all_invoices = await db.invoices.find({}, {"_id": 0}).to_list(10000)
+    for inv in all_invoices:
+        inv_id = inv.get("id")
+        # Direct session_id on invoice (multi-invoice support)
+        if inv.get("session_id") and inv["session_id"] in session_date_map:
+            invoice_session_map[inv_id] = inv["session_id"]
+    # Also add from session.invoice_id (legacy single invoice)
+    for s in sessions:
+        if s.get("invoice_id") and s["invoice_id"] not in invoice_session_map:
+            invoice_session_map[s["invoice_id"]] = s["id"]
+    
+    # Process invoices (income) - revenue recognized when payment received (cash-basis)
+    for inv in all_invoices:
         try:
-            # REVENUE RECOGNITION: Only count invoices in eligible statuses
             if inv.get("status") not in REVENUE_INVOICE_STATUSES:
                 continue
             
-            # Use session_id directly from invoice (multi-invoice support)
-            session_id = inv.get("session_id")
+            inv_id = inv.get("id")
+            session_id = invoice_session_map.get(inv_id) or inv.get("session_id")
             
             # Calculate gross revenue (exclude SST/tax)
             total_amount = float(inv.get("total_amount") or inv.get("amount") or 0)
@@ -306,7 +315,6 @@ async def get_profit_loss_by_programme(
     end_date = f"{year}-12-31"
     
     programmes = await db.programs.find({}, {"_id": 0, "id": 1, "name": 1, "category": 1}).to_list(100)
-    programme_map = {p["id"]: p for p in programmes}
     
     sessions = await db.sessions.find({"start_date": {"$gte": start_date, "$lte": end_date}}, {"_id": 0}).to_list(10000)
     
@@ -316,14 +324,28 @@ async def get_profit_loss_by_programme(
     for s in sessions:
         sid = s.get("id")
         session_to_programme[sid] = s.get("program_id")
+        # Legacy: session.invoice_id (single invoice)
         if s.get("invoice_id"):
             invoice_to_session[s.get("invoice_id")] = sid
     
+    # ========== MULTI-INVOICE SUPPORT ==========
+    # Also map invoices that have session_id on the invoice document
+    # This catches additional invoices not stored in session.invoice_id
+    all_invoices = await db.invoices.find({}, {"_id": 0}).to_list(10000)
+    for inv in all_invoices:
+        inv_session_id = inv.get("session_id")
+        if inv_session_id and inv_session_id in session_to_programme:
+            inv_id = inv.get("id")
+            if inv_id and inv_id not in invoice_to_session:
+                invoice_to_session[inv_id] = inv_session_id
+    # ========== END MULTI-INVOICE SUPPORT ==========
+    
     programme_data = {}
     for prog in programmes:
+        prog_name = prog.get("name") or prog.get("programme_name") or "Unknown Programme"
         programme_data[prog["id"]] = {
             "programme_id": prog["id"],
-            "programme_name": prog.get("name", "Unknown"),
+            "programme_name": prog_name,
             "category": prog.get("category", ""),
             "income": 0,
             "expenses": {"trainer_fees": 0, "coordinator_fees": 0, "marketing_commissions": 0, "session_expenses": 0, "total": 0},
@@ -345,6 +367,18 @@ async def get_profit_loss_by_programme(
     
     for s in sessions:
         prog_id = s.get("program_id") or "_other"
+        # Create entry for orphaned programmes (programme was deleted from DB)
+        if prog_id not in programme_data and prog_id != "_other":
+            programme_data[prog_id] = {
+                "programme_id": prog_id,
+                "programme_name": s.get("name") or s.get("programme_name") or "Unknown Programme",
+                "category": "",
+                "income": 0,
+                "expenses": {"trainer_fees": 0, "coordinator_fees": 0, "marketing_commissions": 0, "session_expenses": 0, "total": 0},
+                "gross_profit": 0,
+                "gross_margin_pct": 0,
+                "session_count": 0
+            }
         if prog_id in programme_data:
             programme_data[prog_id]["session_count"] += 1
     
@@ -354,7 +388,13 @@ async def get_profit_loss_by_programme(
         try:
             amount = float(inv.get("total_amount") or inv.get("amount") or 0)
             inv_id = inv.get("id")
+            
+            # Try multiple ways to find the session for this invoice
             session_id = invoice_to_session.get(inv_id)
+            if not session_id:
+                # Direct session_id on the invoice document (multi-invoice support)
+                session_id = inv.get("session_id")
+            
             prog_id = session_to_programme.get(session_id, "_other") if session_id else "_other"
             
             if session_id and session_id in session_to_programme:
@@ -376,8 +416,9 @@ async def get_profit_loss_by_programme(
             if session_id not in session_to_programme:
                 continue
             prog_id = session_to_programme.get(session_id) or "_other"
-            if prog_id in programme_data:
-                programme_data[prog_id]["expenses"]["trainer_fees"] += float(tf.get("fee_amount") or 0)
+            if prog_id not in programme_data:
+                prog_id = "_other"
+            programme_data[prog_id]["expenses"]["trainer_fees"] += float(tf.get("fee_amount") or 0)
         except:
             pass
     
@@ -388,8 +429,9 @@ async def get_profit_loss_by_programme(
             if session_id not in session_to_programme:
                 continue
             prog_id = session_to_programme.get(session_id) or "_other"
-            if prog_id in programme_data:
-                programme_data[prog_id]["expenses"]["coordinator_fees"] += float(cf.get("total_fee") or 0)
+            if prog_id not in programme_data:
+                prog_id = "_other"
+            programme_data[prog_id]["expenses"]["coordinator_fees"] += float(cf.get("total_fee") or 0)
         except:
             pass
     
@@ -400,8 +442,9 @@ async def get_profit_loss_by_programme(
             if session_id not in session_to_programme:
                 continue
             prog_id = session_to_programme.get(session_id) or "_other"
-            if prog_id in programme_data:
-                programme_data[prog_id]["expenses"]["marketing_commissions"] += float(mc.get("calculated_amount") or 0)
+            if prog_id not in programme_data:
+                prog_id = "_other"
+            programme_data[prog_id]["expenses"]["marketing_commissions"] += float(mc.get("calculated_amount") or 0)
         except:
             pass
     
@@ -412,9 +455,10 @@ async def get_profit_loss_by_programme(
             if session_id not in session_to_programme:
                 continue
             prog_id = session_to_programme.get(session_id) or "_other"
-            if prog_id in programme_data:
-                amount = float(exp.get("actual_amount") or exp.get("estimated_amount") or exp.get("amount") or 0)
-                programme_data[prog_id]["expenses"]["session_expenses"] += amount
+            if prog_id not in programme_data:
+                prog_id = "_other"
+            amount = float(exp.get("actual_amount") or exp.get("estimated_amount") or exp.get("amount") or 0)
+            programme_data[prog_id]["expenses"]["session_expenses"] += amount
         except:
             pass
     

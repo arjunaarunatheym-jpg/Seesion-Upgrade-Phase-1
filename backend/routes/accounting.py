@@ -754,6 +754,39 @@ async def post_expense_recorded(
     return result
 
 
+
+async def _get_invoice_ref(prefix: str, record_id: str, trainer_fee: dict = None, coordinator_fee: dict = None, commission: dict = None, session: dict = None) -> str:
+    """Build a journal reference that includes the invoice number for traceability.
+    Format: TF-INV/MDDRC/2026/01/0001 or CF-INV/MDDRC/2026/01/0001
+    Falls back to prefix-{id[:8]} if no invoice found."""
+    session_id = None
+    if session:
+        session_id = session.get("id")
+    elif trainer_fee:
+        session_id = trainer_fee.get("session_id")
+    elif coordinator_fee:
+        session_id = coordinator_fee.get("session_id")
+    elif commission:
+        session_id = commission.get("session_id")
+    
+    if session_id:
+        # Find invoices linked to this session
+        invoice = await db.invoices.find_one(
+            {"session_id": session_id, "status": {"$in": ["issued", "paid", "partial", "approved"]}},
+            {"_id": 0, "invoice_number": 1}
+        )
+        if not invoice:
+            # Fallback: check session.invoice_id
+            sess = session or await db.sessions.find_one({"id": session_id}, {"_id": 0, "invoice_id": 1})
+            if sess and sess.get("invoice_id"):
+                invoice = await db.invoices.find_one({"id": sess["invoice_id"]}, {"_id": 0, "invoice_number": 1})
+        
+        if invoice and invoice.get("invoice_number"):
+            return f"{prefix}-{invoice['invoice_number']}"
+    
+    return f"{prefix}-{record_id[:8]}"
+
+
 # ============ AUTO-POSTING: TRAINER FEE RECORDED ============
 
 async def post_trainer_fee(
@@ -809,7 +842,7 @@ async def post_trainer_fee(
         description=f"Trainer fee - {trainer_name} for {session_name}",
         source_module="trainer_fee",
         source_id=fee_id,
-        source_reference=f"TF-{fee_id[:8]}",
+        source_reference=await _get_invoice_ref("TF", fee_id, trainer_fee=trainer_fee, session=session),
         lines=lines,
         created_by_id=user_id,
         created_by_name=user_name
@@ -873,7 +906,7 @@ async def post_coordinator_fee(
         description=f"Coordinator fee - {coordinator_name} for {session_name}",
         source_module="coordinator_fee",
         source_id=fee_id,
-        source_reference=f"CF-{fee_id[:8]}",
+        source_reference=await _get_invoice_ref("CF", fee_id, coordinator_fee=coordinator_fee, session=session),
         lines=lines,
         created_by_id=user_id,
         created_by_name=user_name
@@ -937,7 +970,7 @@ async def post_marketing_commission(
         description=f"Marketing commission - {marketer_name} for {session_name}",
         source_module="marketing_commission",
         source_id=comm_id,
-        source_reference=f"MC-{comm_id[:8]}",
+        source_reference=await _get_invoice_ref("MC", comm_id, commission=commission, session=session),
         lines=lines,
         created_by_id=user_id,
         created_by_name=user_name
