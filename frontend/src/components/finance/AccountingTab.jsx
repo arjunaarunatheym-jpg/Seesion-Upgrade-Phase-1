@@ -563,13 +563,32 @@ const AccountingTab = () => {
                   <Button variant="outline" size="sm" className="text-orange-600 border-orange-300" onClick={async () => {
                     try {
                       const res = await axiosInstance.get('/accounting/migrate-journal-references');
-                      toast.success(`Updated ${res.data.updated} of ${res.data.total_found} references to invoice numbers`);
-                      loadJournalEntries();
+                      const d = res.data;
+                      if (d.updated > 0) {
+                        toast.success(`Updated ${d.updated} of ${d.total_found} references to invoice numbers`);
+                        loadJournalEntries();
+                      } else if (d.total_found === 0) {
+                        toast.info('No entries found needing reference migration. All references may already be up to date.');
+                      } else {
+                        toast.info(`Found ${d.total_found} entries but could not update. ${d.skipped_no_session || 0} missing session link, ${d.skipped_no_invoice || 0} missing invoice.`);
+                      }
                     } catch (e) {
                       toast.error(e.response?.data?.detail || 'Migration failed');
                     }
                   }}>
                     Fix References
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-blue-600 border-blue-300" onClick={async () => {
+                    try {
+                      const res = await axiosInstance.get('/accounting/diagnose-journal-references');
+                      const d = res.data;
+                      const msg = `Total entries: ${d.total_journal_entries}\nWith invoice ref: ${d.with_invoice_ref}\nTF/CF/MC needing fix: ${d.tf_cf_mc_needing_fix}\nMissing source_id: ${d.tf_cf_mc_missing_source_id}`;
+                      alert(msg + '\n\nSample needing fix:\n' + (d.sample_needing_fix || []).map(s => `${s.ref} (${s.module})`).join('\n'));
+                    } catch (e) {
+                      toast.error(e.response?.data?.detail || 'Diagnose failed');
+                    }
+                  }}>
+                    Diagnose Refs
                   </Button>
                   <Button size="sm" onClick={() => {
                     setNewJournal({

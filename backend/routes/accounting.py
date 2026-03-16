@@ -88,24 +88,62 @@ class PeriodReopenRequest(BaseModel):
 
 
 
+@router.get("/diagnose-journal-references")
+async def diagnose_journal_references(current_user: User = Depends(get_current_user)):
+    """Diagnostic: Show sample journal entry references to help debug migration issues."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    total = await db.journal_entries.count_documents({})
+    
+    # Get distinct source_reference patterns
+    all_refs = await db.journal_entries.find(
+        {},
+        {"_id": 0, "id": 1, "source_reference": 1, "source_module": 1, "source_id": 1, "description": 1}
+    ).to_list(5000)
+    
+    # Categorize
+    with_inv = [r for r in all_refs if "INV" in (r.get("source_reference") or "")]
+    tf_cf_mc = [r for r in all_refs if (r.get("source_reference") or "").startswith(("TF-", "CF-", "MC-"))]
+    tf_cf_mc_no_inv = [r for r in tf_cf_mc if "INV" not in (r.get("source_reference") or "")]
+    no_source_id = [r for r in tf_cf_mc_no_inv if not r.get("source_id")]
+    
+    return {
+        "total_journal_entries": total,
+        "with_invoice_ref": len(with_inv),
+        "tf_cf_mc_total": len(tf_cf_mc),
+        "tf_cf_mc_needing_fix": len(tf_cf_mc_no_inv),
+        "tf_cf_mc_missing_source_id": len(no_source_id),
+        "sample_needing_fix": [
+            {"ref": r.get("source_reference"), "source_id": r.get("source_id"), "module": r.get("source_module"), "desc": (r.get("description") or "")[:60]}
+            for r in tf_cf_mc_no_inv[:15]
+        ],
+        "sample_already_fixed": [r.get("source_reference") for r in with_inv[:5]],
+        "all_unique_ref_prefixes": list(set([(r.get("source_reference") or "?")[:3] for r in all_refs]))[:20]
+    }
+
+
 @router.post("/migrate-journal-references")
 @router.get("/migrate-journal-references")
 async def migrate_journal_references(current_user: User = Depends(get_current_user)):
-    """One-time migration: Update TF-xxx, CF-xxx, MC-xxx references to include invoice numbers."""
+    """One-time migration: Update TF-xxx, CF-xxx, MC-xxx references to include invoice numbers.
+    Finds ALL entries starting with TF-, CF-, MC- that do NOT already contain an invoice number (INV/)."""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin only")
     
     updated = 0
+    skipped_no_session = 0
+    skipped_no_invoice = 0
     errors = []
+    sample_refs = []
     
-    # Find all journal entries with old-format references (TF-, CF-, MC- followed by 8-char hex)
-    import re
-    pattern = re.compile(r'^(TF|CF|MC)-[a-f0-9]{8}$')
-    
-    entries = await db.journal_entries.find(
-        {"source_reference": {"$regex": "^(TF|CF|MC)-[a-f0-9]{8}$"}},
+    # Find ALL journal entries with TF-/CF-/MC- prefix, then filter out already-migrated ones
+    all_tf_cf_mc = await db.journal_entries.find(
+        {"source_reference": {"$regex": "^(TF|CF|MC)-"}},
         {"_id": 0, "id": 1, "source_reference": 1, "source_module": 1, "source_id": 1}
     ).to_list(5000)
+    sample_refs = [e.get("source_reference", "?") for e in all_tf_cf_mc[:15]]
+    entries = [e for e in all_tf_cf_mc if "INV" not in (e.get("source_reference") or "")]
     
     for entry in entries:
         try:
@@ -129,11 +167,12 @@ async def migrate_journal_references(current_user: User = Depends(get_current_us
                     session_id = comm.get("session_id")
             
             if not session_id:
+                skipped_no_session += 1
                 continue
             
-            # Find invoice for this session
+            # Find ANY invoice for this session (broader status match)
             invoice = await db.invoices.find_one(
-                {"session_id": session_id, "status": {"$in": ["issued", "paid", "partial", "approved"]}},
+                {"session_id": session_id},
                 {"_id": 0, "invoice_number": 1}
             )
             if not invoice:
@@ -149,6 +188,8 @@ async def migrate_journal_references(current_user: User = Depends(get_current_us
                     {"$set": {"source_reference": new_ref}}
                 )
                 updated += 1
+            else:
+                skipped_no_invoice += 1
         except Exception as e:
             errors.append(f"{entry.get('id')}: {str(e)}")
     
@@ -156,6 +197,9 @@ async def migrate_journal_references(current_user: User = Depends(get_current_us
         "message": f"Migration complete. Updated {updated} of {len(entries)} entries.",
         "updated": updated,
         "total_found": len(entries),
+        "skipped_no_session": skipped_no_session,
+        "skipped_no_invoice": skipped_no_invoice,
+        "sample_existing_refs": sample_refs[:10],
         "errors": errors[:10]
     }
 
