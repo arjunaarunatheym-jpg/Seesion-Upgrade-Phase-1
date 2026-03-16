@@ -773,6 +773,22 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
     session_map = {s.get("id"): s for s in sessions}
     session_ids = set(session_map.keys())
     
+    # Pre-load invoice numbers for all sessions (for TF/CF/MC references)
+    all_invoices = await db.invoices.find({}, {"_id": 0, "id": 1, "invoice_number": 1, "session_id": 1}).to_list(10000)
+    session_invoice_map = {}
+    for inv in all_invoices:
+        sid = inv.get("session_id")
+        if sid and inv.get("invoice_number"):
+            session_invoice_map[sid] = inv["invoice_number"]
+    # Also check session.invoice_id mappings
+    for s in sessions:
+        sid = s.get("id")
+        if sid not in session_invoice_map and s.get("invoice_id"):
+            for inv in all_invoices:
+                if inv.get("id") == s["invoice_id"] and inv.get("invoice_number"):
+                    session_invoice_map[sid] = inv["invoice_number"]
+                    break
+    
     # 1. INVOICES - DR Accounts Receivable, CR Training Income
     invoices = await db.invoices.find({"status": {"$in": ["approved", "issued", "paid"]}}, {"_id": 0}).to_list(10000)
     
@@ -861,12 +877,14 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
             
             trans_date = session.get("start_date", tf.get("created_at", "")[:10])
             programme = programme_map.get(session.get("program_id"), "Unknown")
+            inv_num = session_invoice_map.get(session_id)
+            tf_ref = f"TF-{inv_num}" if inv_num else f"TF-{session_id[:8]}"
             
-            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": f"TF-{session_id[:8]}",
+            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": tf_ref,
                               "description": f"Trainer fee accrual - {tf.get('trainer_name', 'Trainer')}",
                               "account_code": "5001", "account_name": CHART_OF_ACCOUNTS["5001"]["name"],
                               "debit": amount, "credit": 0, "tags": {"session_id": session_id, "programme": programme}})
-            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": f"TF-{session_id[:8]}",
+            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": tf_ref,
                               "description": f"Trainer fee accrual - {tf.get('trainer_name', 'Trainer')}",
                               "account_code": "2100", "account_name": CHART_OF_ACCOUNTS["2100"]["name"],
                               "debit": 0, "credit": amount, "tags": {"session_id": session_id, "programme": programme}})
@@ -888,12 +906,14 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
             
             trans_date = session.get("start_date", cf.get("created_at", "")[:10])
             programme = programme_map.get(session.get("program_id"), "Unknown")
+            inv_num = session_invoice_map.get(session_id)
+            cf_ref = f"CF-{inv_num}" if inv_num else f"CF-{session_id[:8]}"
             
-            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": f"CF-{session_id[:8]}",
+            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": cf_ref,
                               "description": f"Coordinator fee accrual - {cf.get('coordinator_name', 'Coordinator')}",
                               "account_code": "5002", "account_name": CHART_OF_ACCOUNTS["5002"]["name"],
                               "debit": amount, "credit": 0, "tags": {"session_id": session_id, "programme": programme}})
-            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": f"CF-{session_id[:8]}",
+            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": cf_ref,
                               "description": f"Coordinator fee accrual - {cf.get('coordinator_name', 'Coordinator')}",
                               "account_code": "2101", "account_name": CHART_OF_ACCOUNTS["2101"]["name"],
                               "debit": 0, "credit": amount, "tags": {"session_id": session_id, "programme": programme}})
@@ -915,12 +935,14 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
             
             trans_date = session.get("start_date", mc.get("created_at", "")[:10])
             programme = programme_map.get(session.get("program_id"), "Unknown")
+            inv_num = session_invoice_map.get(session_id)
+            mc_ref = f"MC-{inv_num}" if inv_num else f"MC-{session_id[:8]}"
             
-            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": f"MC-{session_id[:8]}",
+            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": mc_ref,
                               "description": f"Marketing commission - {mc.get('marketer_name', 'Marketer')}",
                               "account_code": "5003", "account_name": CHART_OF_ACCOUNTS["5003"]["name"],
                               "debit": amount, "credit": 0, "tags": {"session_id": session_id, "programme": programme}})
-            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": f"MC-{session_id[:8]}",
+            gl_entries.append({"entry_id": entry_id, "date": trans_date, "reference": mc_ref,
                               "description": f"Marketing commission - {mc.get('marketer_name', 'Marketer')}",
                               "account_code": "2102", "account_name": CHART_OF_ACCOUNTS["2102"]["name"],
                               "debit": 0, "credit": amount, "tags": {"session_id": session_id, "programme": programme}})
