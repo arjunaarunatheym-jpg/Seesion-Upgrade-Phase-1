@@ -149,18 +149,9 @@ async def get_sessions(
 
 @router.get("/calendar")
 async def get_calendar_sessions(current_user: User = Depends(get_current_user)):
-    """Get all sessions for calendar view"""
-    query = {"is_archived": {"$ne": True}}
-    
-    if current_user.role == "coordinator":
-        query["coordinator_id"] = current_user.id
-    elif current_user.role == "trainer":
-        query["$or"] = [
-            {"trainer_assignments.trainer_id": current_user.id},
-            {"assistant_coordinator_ids": current_user.id}
-        ]
-    elif current_user.role == "participant":
-        query["participant_ids"] = current_user.id
+    """Get all sessions for calendar view — visible to ALL staff for availability planning"""
+    # No role-based filtering — all staff see all sessions
+    query = {}
     
     sessions = await db.sessions.find(query, {"_id": 0}).to_list(1000)
     
@@ -178,6 +169,55 @@ async def get_calendar_sessions(current_user: User = Depends(get_current_user)):
             session["program_name"] = program.get("name", "Unknown") if program else "Unknown"
     
     return sessions
+
+
+@router.get("/my-marketing-sessions")
+async def get_marketing_sessions(current_user: User = Depends(get_current_user)):
+    """Get sessions brought in by a marketing user (via their quotations).
+    Returns current (ongoing/draft) and past (completed) sessions separately."""
+    if current_user.role not in ["marketing", "admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Marketing access required")
+
+    # Find sessions linked to this marketer
+    if current_user.role == "marketing":
+        query = {"marketing_user_id": current_user.id}
+    else:
+        query = {"marketing_user_id": {"$exists": True, "$ne": None}}
+
+    sessions = await db.sessions.find(query, {"_id": 0}).to_list(500)
+
+    current_sessions = []
+    past_sessions = []
+
+    for session in sessions:
+        # Enrich
+        if session.get("company_id"):
+            company = await db.companies.find_one({"id": session["company_id"]}, {"_id": 0})
+            session["company_name"] = company.get("name", "Unknown") if company else "Unknown"
+        if session.get("program_id"):
+            program = await db.programs.find_one({"id": session["program_id"]}, {"_id": 0})
+            session["program_name"] = program.get("name", "Unknown") if program else "Unknown"
+        if session.get("coordinator_id"):
+            coord = await db.users.find_one({"id": session["coordinator_id"]}, {"_id": 0, "full_name": 1})
+            session["coordinator_name"] = coord.get("full_name", "Unassigned") if coord else "Unassigned"
+        # Trainer names
+        trainer_names = []
+        for ta in session.get("trainer_assignments") or []:
+            tid = ta.get("trainer_id") if isinstance(ta, dict) else ta
+            if tid:
+                trainer = await db.users.find_one({"id": tid}, {"_id": 0, "full_name": 1})
+                if trainer:
+                    trainer_names.append(trainer["full_name"])
+        session["trainer_names"] = trainer_names
+        session["participant_count"] = len(session.get("participant_ids", []))
+
+        if session.get("completion_status") in ["completed", "archived"] or session.get("is_archived"):
+            past_sessions.append(session)
+        else:
+            current_sessions.append(session)
+
+    return {"current": current_sessions, "past": past_sessions}
+
 
 
 @router.get("/past-training")

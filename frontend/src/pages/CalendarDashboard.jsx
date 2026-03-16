@@ -174,6 +174,8 @@ const CalendarDashboard = ({ user, onLogout }) => {
                 else if (user.role === "assistant_admin") navigate("/assistant-admin");
                 else if (user.role === "coordinator") navigate("/coordinator");
                 else if (user.role === "trainer") navigate("/trainer");
+                else if (user.role === "marketing") navigate("/marketing");
+                else if (user.role === "finance") navigate("/finance");
               }}
               variant="outline"
               size="sm"

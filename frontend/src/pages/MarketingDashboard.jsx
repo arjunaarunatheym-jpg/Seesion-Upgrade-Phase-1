@@ -14,7 +14,8 @@ import {
   DollarSign, Calendar, TrendingUp, LogOut, RefreshCw, Wallet,
   Building, Clock, CheckCircle, FileText, Search, Eye, Download,
   Users, ChevronDown, ChevronRight, BarChart3, Plus, Edit, Trash2,
-  Send, FileCheck, XCircle, Phone, Mail, MapPin, User, Printer, Target
+  Send, FileCheck, XCircle, Phone, Mail, MapPin, User, Printer, Target,
+  CalendarDays, Briefcase
 } from 'lucide-react';
 import MyEarnings from '../components/MyEarnings';
 import { DashboardTab } from '../components/marketing/DashboardTab';
@@ -105,6 +106,10 @@ const MarketingDashboard = ({ user, onLogout }) => {
   const [pipelineStats, setPipelineStats] = useState({});
   const [reminders, setReminders] = useState({ overdue: [], upcoming: [], overdue_count: 0, upcoming_count: 0 });
   const [currentLeadId, setCurrentLeadId] = useState(null); // Track lead when creating quotation from lead
+  
+  // My Sessions state
+  const [mySessions, setMySessions] = useState({ current: [], past: [] });
+  const [sessionViewMode, setSessionViewMode] = useState('current'); // 'current' or 'past'
 
   useEffect(() => {
     loadData();
@@ -113,7 +118,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [statsRes, clientsRes, quotationsRes, programmesRes, termsRes, settingsRes, descItemsRes, leadsRes, pipelineStatsRes, remindersRes] = await Promise.all([
+      const [statsRes, clientsRes, quotationsRes, programmesRes, termsRes, settingsRes, descItemsRes, leadsRes, pipelineStatsRes, remindersRes, mySessionsRes] = await Promise.all([
         axiosInstance.get('/marketing/stats'),
         axiosInstance.get('/marketing/clients'),
         axiosInstance.get('/marketing/quotations'),
@@ -124,6 +129,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
         axiosInstance.get('/marketing/leads').catch(() => ({ data: [] })),
         axiosInstance.get('/marketing/stats/pipeline').catch(() => ({ data: {} })),
         axiosInstance.get('/marketing/leads/reminders/pending').catch(() => ({ data: { overdue: [], upcoming: [], overdue_count: 0, upcoming_count: 0 } })),
+        axiosInstance.get('/sessions/my-marketing-sessions').catch(() => ({ data: { current: [], past: [] } })),
       ]);
       
       setStats(statsRes.data || {});
@@ -136,6 +142,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
       setLeads(leadsRes.data || []);
       setPipelineStats(pipelineStatsRes.data || {});
       setReminders(remindersRes.data || { overdue: [], upcoming: [], overdue_count: 0, upcoming_count: 0 });
+      setMySessions(mySessionsRes.data || { current: [], past: [] });
     } catch (error) {
       console.error('Failed to load data:', error);
       toast.error('Failed to load data');
@@ -638,6 +645,16 @@ const MarketingDashboard = ({ user, onLogout }) => {
               <p className="text-xs sm:text-sm text-gray-600">Welcome, {user.full_name}</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {/* Calendar button for all staff */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => window.location.href = '/calendar'}
+                className="bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-100 text-xs sm:text-sm"
+              >
+                <CalendarDays className="w-3 h-3 sm:w-4 sm:h-4 mr-1" /> 
+                <span className="hidden sm:inline">Calendar</span>
+              </Button>
               {/* Back button for coordinators/trainers */}
               {(user.role === 'coordinator' || user.role === 'trainer' || user.role === 'supervisor') && (
                 <Button 
@@ -691,6 +708,12 @@ const MarketingDashboard = ({ user, onLogout }) => {
             </TabsTrigger>
             <TabsTrigger value="earnings" data-testid="earnings-tab" className="text-xs sm:text-sm px-2 sm:px-3">
               <Wallet className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Earnings
+            </TabsTrigger>
+            <TabsTrigger value="sessions" data-testid="sessions-tab" className="text-xs sm:text-sm px-2 sm:px-3">
+              <Briefcase className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> My Sessions
+              {mySessions.current.length > 0 && (
+                <Badge variant="secondary" className="ml-1 text-xs px-1">{mySessions.current.length}</Badge>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -769,6 +792,125 @@ const MarketingDashboard = ({ user, onLogout }) => {
           {/* Earnings Tab */}
           <TabsContent value="earnings">
             <MyEarnings user={user} />
+          </TabsContent>
+
+          {/* My Sessions Tab */}
+          <TabsContent value="sessions" data-testid="my-sessions-content">
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                  <div>
+                    <CardTitle className="text-lg">My Sessions</CardTitle>
+                    <CardDescription>Training sessions from your deals</CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={sessionViewMode === 'current' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSessionViewMode('current')}
+                      data-testid="current-sessions-btn"
+                    >
+                      <Clock className="w-4 h-4 mr-1" /> Current ({mySessions.current.length})
+                    </Button>
+                    <Button
+                      variant={sessionViewMode === 'past' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSessionViewMode('past')}
+                      data-testid="past-sessions-btn"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-1" /> Past ({mySessions.past.length})
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const sessionList = sessionViewMode === 'current' ? mySessions.current : mySessions.past;
+                  if (sessionList.length === 0) {
+                    return (
+                      <div className="text-center py-12 text-gray-500">
+                        <Briefcase className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p className="font-medium">No {sessionViewMode} sessions</p>
+                        <p className="text-sm mt-1">
+                          {sessionViewMode === 'current'
+                            ? 'Sessions will appear here when your quotations are accepted'
+                            : 'Completed sessions from your deals will appear here'}
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-3">
+                      {sessionList.map(session => (
+                        <div
+                          key={session.id}
+                          data-testid={`session-card-${session.id}`}
+                          className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-gray-900 truncate">
+                                {session.company_name || session.name || 'Unnamed Session'}
+                              </h4>
+                              <p className="text-sm text-gray-600 mt-0.5">
+                                {session.program_name || 'Programme not set'}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {session.start_date || 'Date TBD'}
+                                  {session.end_date && session.end_date !== session.start_date && ` — ${session.end_date}`}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3 h-3" />
+                                  {session.location || 'Venue TBD'}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Users className="w-3 h-3" />
+                                  {session.participant_count || 0} pax
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-xs text-gray-500">
+                                {session.coordinator_name && (
+                                  <span className="flex items-center gap-1">
+                                    <User className="w-3 h-3" />
+                                    Coordinator: {session.coordinator_name}
+                                  </span>
+                                )}
+                                {session.trainer_names?.length > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <User className="w-3 h-3" />
+                                    Trainer: {session.trainer_names.join(', ')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-1">
+                              <Badge
+                                variant="secondary"
+                                className={
+                                  session.completion_status === 'completed' ? 'bg-green-100 text-green-800' :
+                                  session.status === 'draft' ? 'bg-gray-100 text-gray-700' :
+                                  'bg-blue-100 text-blue-800'
+                                }
+                              >
+                                {session.completion_status === 'completed' ? 'Completed' :
+                                 session.status === 'draft' ? 'Draft' : 'Ongoing'}
+                              </Badge>
+                              {session.invoice_status && (
+                                <Badge variant="outline" className="text-xs">
+                                  Invoice: {session.invoice_status}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>

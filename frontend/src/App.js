@@ -97,12 +97,8 @@ function App() {
                   <Navigate to="/participant" replace />
                 ) : user.role === "supervisor" || user.role === "pic_supervisor" ? (
                   <Navigate to="/supervisor" replace />
-                ) : user.role === "finance" ? (
-                  <Navigate to="/finance" replace />
-                ) : user.role === "marketing" ? (
-                  <Navigate to="/marketing" replace />
                 ) : (
-                  // All other roles (admin, assistant_admin, coordinator, trainer) and super admin go to calendar
+                  // All staff roles (admin, assistant_admin, coordinator, trainer, finance, marketing) go to calendar
                   <Navigate to="/calendar" replace />
                 )
               ) : (
@@ -123,7 +119,7 @@ function App() {
           <Route
             path="/calendar"
             element={
-              user && ["admin", "assistant_admin", "coordinator", "trainer"].includes(user.role) ? (
+              user && ["admin", "assistant_admin", "coordinator", "trainer", "marketing", "finance"].includes(user.role) ? (
                 <CalendarDashboard user={user} onLogout={handleLogout} />
               ) : (
                 <Navigate to="/login" replace />
