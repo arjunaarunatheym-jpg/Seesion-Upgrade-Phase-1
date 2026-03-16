@@ -15,6 +15,91 @@ from models import User
 router = APIRouter(prefix="/hr", tags=["hr"])
 
 
+@router.get("/pay-advice/debug/{year}/{month}")
+async def debug_pay_advice(year: int, month: int, current_user: User = Depends(get_current_user)):
+    """Debug endpoint: show exactly what bulk-generate would find for a given payment month."""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    training_month = month - 1
+    training_year = year
+    if training_month < 1:
+        training_month = 12
+        training_year = year - 1
+    
+    # Find sessions in training month
+    all_sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1}).to_list(1000)
+    matched_sessions = []
+    parse_errors = []
+    
+    for s in all_sessions:
+        sd = s.get("start_date")
+        if not sd:
+            continue
+        try:
+            if isinstance(sd, str):
+                # Try multiple date formats
+                sdt = None
+                for fmt in [None, "%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S"]:
+                    try:
+                        if fmt is None:
+                            sdt = datetime.fromisoformat(sd.replace('Z', '+00:00'))
+                        else:
+                            sdt = datetime.strptime(sd, fmt)
+                        break
+                    except:
+                        pass
+                if sdt and sdt.year == training_year and sdt.month == training_month:
+                    matched_sessions.append({"id": s["id"], "name": s.get("name"), "start_date": sd})
+                elif not sdt:
+                    parse_errors.append({"session": s.get("name"), "start_date": sd, "error": "Could not parse date"})
+            else:
+                if sd.year == training_year and sd.month == training_month:
+                    matched_sessions.append({"id": s["id"], "name": s.get("name"), "start_date": str(sd)})
+        except Exception as e:
+            parse_errors.append({"session": s.get("name"), "start_date": str(sd), "error": str(e)})
+    
+    session_ids = [s["id"] for s in matched_sessions]
+    
+    # Find workers
+    trainer_ids = set()
+    coord_ids = set()
+    mkt_ids = set()
+    
+    if session_ids:
+        for tf in await db.trainer_fees.find({"session_id": {"$in": session_ids}}, {"_id": 0, "trainer_id": 1, "session_id": 1, "fee_amount": 1}).to_list(500):
+            trainer_ids.add(tf.get("trainer_id"))
+        for cf in await db.coordinator_fees.find({"session_id": {"$in": session_ids}}, {"_id": 0, "coordinator_id": 1, "session_id": 1, "total_fee": 1}).to_list(500):
+            coord_ids.add(cf.get("coordinator_id"))
+        for mc in await db.marketing_commissions.find({"session_id": {"$in": session_ids}}, {"_id": 0, "marketing_user_id": 1, "session_id": 1}).to_list(500):
+            mkt_ids.add(mc.get("marketing_user_id"))
+    
+    # Check existing pay advice
+    existing_count = await db.pay_advice.count_documents({"year": year, "month": month})
+    existing_training = await db.pay_advice.count_documents({"training_year": training_year, "training_month": training_month})
+    
+    return {
+        "payment_month": f"{year}-{str(month).zfill(2)}",
+        "training_month": f"{training_year}-{str(training_month).zfill(2)}",
+        "sessions_found": len(matched_sessions),
+        "sessions": matched_sessions,
+        "workers": {
+            "trainers": len(trainer_ids),
+            "coordinators": len(coord_ids),
+            "marketers": len(mkt_ids),
+            "total_unique": len(trainer_ids | coord_ids | mkt_ids)
+        },
+        "existing_pay_advice": {
+            "by_payment_month": existing_count,
+            "by_training_month": existing_training
+        },
+        "date_parse_errors": parse_errors,
+        "all_session_dates": [{"name": s.get("name", "?"), "start_date": s.get("start_date")} for s in all_sessions[:20]]
+    }
+
+
+
+
 # =====================================================
 # HELPER FUNCTIONS
 # =====================================================
@@ -808,11 +893,21 @@ async def bulk_generate_pay_advice(year: int, month: int, current_user: User = D
         sd = s.get("start_date")
         if sd:
             try:
+                sdt = None
                 if isinstance(sd, str):
-                    sdt = datetime.fromisoformat(sd.replace('Z', '+00:00'))
+                    # Try multiple date formats
+                    for fmt in [None, "%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%dT%H:%M:%S", "%d-%m-%Y"]:
+                        try:
+                            if fmt is None:
+                                sdt = datetime.fromisoformat(sd.replace('Z', '+00:00'))
+                            else:
+                                sdt = datetime.strptime(sd, fmt)
+                            break
+                        except:
+                            pass
                 else:
                     sdt = sd
-                if sdt.year == training_year and sdt.month == training_month:
+                if sdt and sdt.year == training_year and sdt.month == training_month:
                     session_ids.append(s["id"])
             except:
                 pass
