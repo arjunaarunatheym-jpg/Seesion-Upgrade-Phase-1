@@ -560,6 +560,17 @@ const AccountingTab = () => {
                   <Button variant="outline" size="sm" onClick={exportJournalEntriesToExcel}>
                     <Download className="w-4 h-4 mr-1" /> Excel
                   </Button>
+                  <Button variant="outline" size="sm" className="text-orange-600 border-orange-300" onClick={async () => {
+                    try {
+                      const res = await axiosInstance.get('/accounting/migrate-journal-references');
+                      toast.success(`Updated ${res.data.updated} of ${res.data.total_found} references to invoice numbers`);
+                      loadJournalEntries();
+                    } catch (e) {
+                      toast.error(e.response?.data?.detail || 'Migration failed');
+                    }
+                  }}>
+                    Fix References
+                  </Button>
                   <Button size="sm" onClick={() => {
                     setNewJournal({
                       date: new Date().toISOString().split('T')[0],

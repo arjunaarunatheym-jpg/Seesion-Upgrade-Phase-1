@@ -89,6 +89,7 @@ class PeriodReopenRequest(BaseModel):
 
 
 @router.post("/migrate-journal-references")
+@router.get("/migrate-journal-references")
 async def migrate_journal_references(current_user: User = Depends(get_current_user)):
     """One-time migration: Update TF-xxx, CF-xxx, MC-xxx references to include invoice numbers."""
     if current_user.role != "admin":

@@ -391,9 +391,29 @@ const HRModule = () => {
     try {
       const response = await axiosInstance.post(`/hr/pay-advice/bulk-generate?year=${payAdviceForm.year}&month=${payAdviceForm.month}`);
       toast.success(`Generated ${response.data.generated} pay advice (${response.data.skipped} skipped)`);
+      if (response.data.generated === 0 && response.data.skipped === 0) {
+        toast.info(response.data.message || 'No sessions found for this training period');
+      }
       loadData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to bulk generate');
+    }
+  };
+
+  const handleDebugPayAdvice = async () => {
+    try {
+      const response = await axiosInstance.get(`/hr/pay-advice/debug/${payAdviceForm.year}/${payAdviceForm.month}`);
+      const d = response.data;
+      const msg = `Payment: ${d.payment_month} | Training: ${d.training_month}\nSessions found: ${d.sessions_found}\nWorkers: ${d.workers.total_unique} (T:${d.workers.trainers} C:${d.workers.coordinators} M:${d.workers.marketers})\nExisting pay advice: ${d.existing_pay_advice.by_payment_month}\nDate errors: ${d.date_parse_errors.length}`;
+      if (d.sessions_found === 0) {
+        const dates = d.all_session_dates.map(s => `${s.name}: ${s.start_date}`).join('\n');
+        alert(`No sessions for training month ${d.training_month}.\n\n${msg}\n\nAll session dates:\n${dates}`);
+      } else {
+        const sessions = d.sessions.map(s => `${s.name} (${s.start_date})`).join('\n');
+        alert(`${msg}\n\nMatched sessions:\n${sessions}`);
+      }
+    } catch (error) {
+      toast.error('Debug failed: ' + (error.response?.data?.detail || error.message));
     }
   };
 
@@ -665,6 +685,9 @@ const HRModule = () => {
               </Select>
               <Button onClick={handleBulkGeneratePayAdvice} className="bg-green-600 hover:bg-green-700">
                 <RefreshCw className="w-4 h-4 mr-2" /> Bulk Generate
+              </Button>
+              <Button onClick={handleDebugPayAdvice} variant="outline" size="sm" className="text-xs">
+                Diagnose
               </Button>
               <Button onClick={handleBulkLockPayAdvice} variant="outline" className="border-orange-300 text-orange-600">
                 <Lock className="w-4 h-4 mr-2" /> Lock All
