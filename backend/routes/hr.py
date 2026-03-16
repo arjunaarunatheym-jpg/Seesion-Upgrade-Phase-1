@@ -5,11 +5,11 @@ Endpoints: 27
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 from io import BytesIO
 
-from core import db, get_current_user
+from core import db, get_current_user, get_malaysia_time
 from models import User
 
 router = APIRouter(prefix="/hr", tags=["hr"])
@@ -541,7 +541,7 @@ async def get_pay_advice_list(period_id: Optional[str] = None, year: Optional[in
 
 @router.post("/pay-advice/generate")
 async def generate_pay_advice(data: dict, current_user: User = Depends(get_current_user)):
-    """Generate pay advice for a session worker"""
+    """Generate pay advice for a session worker based on their session work"""
     if current_user.role not in ["admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -550,30 +550,175 @@ async def generate_pay_advice(data: dict, current_user: User = Depends(get_curre
     month = data.get("month")
     
     if not user_id or not year or not month:
-        raise HTTPException(status_code=400, detail="user_id, year, and month required")
+        raise HTTPException(status_code=400, detail="user_id, year, and month are required")
     
-    existing = await db.pay_advice.find_one({"user_id": user_id, "year": year, "month": month})
+    # Calculate payment month (training done in month X is paid in month X+1)
+    payment_year = year
+    payment_month = month + 1
+    if payment_month > 12:
+        payment_month = 1
+        payment_year = year + 1
+    
+    # Check if pay advice already exists for this user/period (check by training month)
+    existing = await db.pay_advice.find_one(
+        {"user_id": user_id, "training_year": year, "training_month": month},
+        {"_id": 0}
+    )
+    if not existing:
+        # Also check by payment month for backward compatibility
+        existing = await db.pay_advice.find_one(
+            {"user_id": user_id, "year": payment_year, "month": payment_month},
+            {"_id": 0}
+        )
     if existing:
-        raise HTTPException(status_code=400, detail="Pay advice already exists")
+        raise HTTPException(status_code=400, detail="Pay advice already exists for this period. Delete it first to regenerate.")
     
+    # Check period status (use payables_periods)
+    period = await db.payables_periods.find_one({"year": year, "month": month})
+    
+    # Get user details
     user = await db.users.find_one({"id": user_id}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    advice = {
+    # Build session details from all fee sources
+    session_details = []
+    total_amount = 0
+    
+    # 1. Trainer fees - filter by session date
+    trainer_fees = await db.trainer_fees.find({"trainer_id": user_id}, {"_id": 0}).to_list(500)
+    for fee in trainer_fees:
+        session = await db.sessions.find_one({"id": fee.get("session_id")}, {"_id": 0, "name": 1, "start_date": 1, "company_id": 1})
+        if not session:
+            continue
+        session_date = session.get("start_date")
+        if session_date:
+            try:
+                if isinstance(session_date, str):
+                    session_dt = datetime.fromisoformat(session_date.replace('Z', '+00:00'))
+                else:
+                    session_dt = session_date
+                if session_dt.year != year or session_dt.month != month:
+                    continue
+            except:
+                continue
+        else:
+            continue
+        company = await db.companies.find_one({"id": session.get("company_id")}, {"_id": 0, "name": 1})
+        session_details.append({
+            "session_id": fee.get("session_id"),
+            "session_name": session.get("name"),
+            "company_name": company.get("name") if company else "Unknown",
+            "session_date": session_date,
+            "role": fee.get("trainer_role", "Trainer"),
+            "amount": fee.get("fee_amount", 0),
+            "status": fee.get("status", "pending"),
+            "remark": fee.get("remark", "")
+        })
+        total_amount += fee.get("fee_amount", 0)
+    
+    # 2. Coordinator fees - filter by session date
+    coord_fees = await db.coordinator_fees.find({"coordinator_id": user_id}, {"_id": 0}).to_list(500)
+    for fee in coord_fees:
+        session = await db.sessions.find_one({"id": fee.get("session_id")}, {"_id": 0, "name": 1, "start_date": 1, "company_id": 1})
+        if not session:
+            continue
+        session_date = session.get("start_date")
+        if session_date:
+            try:
+                if isinstance(session_date, str):
+                    session_dt = datetime.fromisoformat(session_date.replace('Z', '+00:00'))
+                else:
+                    session_dt = session_date
+                if session_dt.year != year or session_dt.month != month:
+                    continue
+            except:
+                continue
+        else:
+            continue
+        company = await db.companies.find_one({"id": session.get("company_id")}, {"_id": 0, "name": 1})
+        session_details.append({
+            "session_id": fee.get("session_id"),
+            "session_name": session.get("name"),
+            "company_name": company.get("name") if company else "Unknown",
+            "session_date": session_date,
+            "role": "Coordinator",
+            "amount": fee.get("total_fee", 0),
+            "status": fee.get("status", "pending"),
+            "remark": f"{fee.get('num_days', 1)} day(s) @ RM{fee.get('daily_rate', 50)}/day"
+        })
+        total_amount += fee.get("total_fee", 0)
+    
+    # 3. Marketing commissions - filter by session date
+    mkt_comm = await db.marketing_commissions.find({"marketing_user_id": user_id}, {"_id": 0}).to_list(500)
+    for comm in mkt_comm:
+        session = await db.sessions.find_one({"id": comm.get("session_id")}, {"_id": 0, "name": 1, "start_date": 1, "company_id": 1})
+        if not session:
+            continue
+        session_date = session.get("start_date")
+        if session_date:
+            try:
+                if isinstance(session_date, str):
+                    session_dt = datetime.fromisoformat(session_date.replace('Z', '+00:00'))
+                else:
+                    session_dt = session_date
+                if session_dt.year != year or session_dt.month != month:
+                    continue
+            except:
+                continue
+        else:
+            continue
+        company = await db.companies.find_one({"id": session.get("company_id")}, {"_id": 0, "name": 1})
+        session_details.append({
+            "session_id": comm.get("session_id"),
+            "session_name": session.get("name"),
+            "company_name": company.get("name") if company else "Unknown",
+            "session_date": session_date,
+            "role": "Marketing",
+            "amount": comm.get("calculated_amount", 0),
+            "status": comm.get("status", "pending"),
+            "remark": f"{comm.get('commission_type', 'Commission')} @ {comm.get('commission_percentage', 0)}%"
+        })
+        total_amount += comm.get("calculated_amount", 0)
+    
+    if not session_details:
+        raise HTTPException(status_code=400, detail="No session work found for this user in this period")
+    
+    # Sort by session date
+    session_details.sort(key=lambda x: x.get("session_date", ""))
+    
+    # Create pay advice
+    now = get_malaysia_time()
+    pay_advice = {
         "id": str(uuid.uuid4()),
+        "advice_number": f"PA/MDDRC/{payment_year}/{str(payment_month).zfill(2)}/{str(uuid.uuid4())[:4].upper()}",
         "user_id": user_id,
+        "period_id": period["id"] if period else None,
+        "training_year": year,
+        "training_month": month,
+        "year": payment_year,
+        "month": payment_month,
+        "period_name": f"{datetime(payment_year, payment_month, 1).strftime('%B %Y')}",
+        "training_period_name": f"{datetime(year, month, 1).strftime('%B %Y')}",
         "full_name": user.get("full_name"),
-        "year": year,
-        "month": month,
-        "period_name": f"{year}-{str(month).zfill(2)}",
-        "total_amount": data.get("total_amount", 0),
+        "id_number": user.get("id_number"),
+        "email": user.get("email"),
+        "phone": user.get("phone_number"),
+        "bank_name": user.get("bank_name"),
+        "bank_account": user.get("bank_account"),
+        "session_details": session_details,
+        "total_sessions": len(session_details),
+        "gross_amount": total_amount,
+        "deductions": 0,
+        "nett_amount": total_amount,
         "is_locked": False,
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": now.isoformat(),
+        "created_by": current_user.id,
+        "created_by_name": current_user.full_name or current_user.email
     }
     
-    await db.pay_advice.insert_one(advice)
-    return {"id": advice["id"], "message": "Pay advice generated"}
+    await db.pay_advice.insert_one({**pay_advice, "_id": pay_advice["id"]})
+    return {"id": pay_advice["id"], "message": "Pay advice generated successfully", "total_sessions": len(session_details), "total_amount": total_amount}
 
 
 @router.get("/pay-advice/{advice_id}")
@@ -590,15 +735,15 @@ async def get_pay_advice(advice_id: str, current_user: User = Depends(get_curren
 
 @router.delete("/pay-advice/{advice_id}")
 async def delete_pay_advice(advice_id: str, current_user: User = Depends(get_current_user)):
-    """Delete pay advice"""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only Admin can delete")
+    """Delete pay advice (only if not locked)"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Finance can delete pay advice")
     
     advice = await db.pay_advice.find_one({"id": advice_id})
     if not advice:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="Pay advice not found")
     if advice.get("is_locked"):
-        raise HTTPException(status_code=400, detail="Cannot delete locked advice")
+        raise HTTPException(status_code=400, detail="Cannot delete locked pay advice. Period is closed.")
     
     await db.pay_advice.delete_one({"id": advice_id})
     return {"message": "Pay advice deleted"}
@@ -606,44 +751,235 @@ async def delete_pay_advice(advice_id: str, current_user: User = Depends(get_cur
 
 @router.post("/pay-advice/{advice_id}/lock")
 async def lock_pay_advice(advice_id: str, current_user: User = Depends(get_current_user)):
-    """Lock a pay advice"""
+    """Lock a pay advice (finalize it so staff can view)"""
     if current_user.role not in ["admin", "finance"]:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail="Only Admin/Finance can lock pay advice")
     
-    await db.pay_advice.update_one({"id": advice_id}, {"$set": {"is_locked": True}})
-    return {"message": "Pay advice locked"}
+    advice = await db.pay_advice.find_one({"id": advice_id}, {"_id": 0})
+    if not advice:
+        raise HTTPException(status_code=404, detail="Pay advice not found")
+    if advice.get("is_locked"):
+        raise HTTPException(status_code=400, detail="Pay advice is already locked")
+    
+    now = get_malaysia_time()
+    await db.pay_advice.update_one(
+        {"id": advice_id},
+        {"$set": {
+            "is_locked": True,
+            "locked_at": now.isoformat(),
+            "locked_by": current_user.id,
+            "locked_by_name": current_user.full_name or current_user.email
+        }}
+    )
+    return {"message": "Pay advice locked successfully"}
 
 
 @router.post("/pay-advice/{advice_id}/unlock")
-async def unlock_pay_advice(advice_id: str, current_user: User = Depends(get_current_user)):
-    """Unlock a pay advice"""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only Admin can unlock")
+async def unlock_pay_advice(advice_id: str, reason: str = "", current_user: User = Depends(get_current_user)):
+    """Unlock a pay advice (requires admin and reason)"""
+    if current_user.role not in ["admin"]:
+        raise HTTPException(status_code=403, detail="Only Admin can unlock pay advice")
     
-    await db.pay_advice.update_one({"id": advice_id}, {"$set": {"is_locked": False}})
-    return {"message": "Pay advice unlocked"}
+    advice = await db.pay_advice.find_one({"id": advice_id}, {"_id": 0})
+    if not advice:
+        raise HTTPException(status_code=404, detail="Pay advice not found")
+    if not advice.get("is_locked"):
+        raise HTTPException(status_code=400, detail="Pay advice is not locked")
+    
+    if not reason or len(reason.strip()) < 5:
+        raise HTTPException(status_code=400, detail="Reason must be at least 5 characters")
+    
+    now = get_malaysia_time()
+    await db.pay_advice.update_one(
+        {"id": advice_id},
+        {"$set": {
+            "is_locked": False,
+            "unlocked_at": now.isoformat(),
+            "unlocked_by": current_user.id,
+            "unlock_reason": reason
+        }}
+    )
+    return {"message": "Pay advice unlocked successfully"}
 
 
 @router.post("/pay-advice/bulk-generate")
-async def bulk_generate_pay_advice(data: dict, current_user: User = Depends(get_current_user)):
-    """Bulk generate pay advice"""
+async def bulk_generate_pay_advice(year: int, month: int, current_user: User = Depends(get_current_user)):
+    """Bulk generate pay advice for all session workers who have work in the period"""
     if current_user.role not in ["admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Simplified bulk generation
-    return {"message": "Bulk generation completed", "count": 0}
+    # Get all sessions in this training month
+    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "start_date": 1}).to_list(1000)
+    session_ids = []
+    for s in sessions:
+        sd = s.get("start_date")
+        if sd:
+            try:
+                if isinstance(sd, str):
+                    sdt = datetime.fromisoformat(sd.replace('Z', '+00:00'))
+                else:
+                    sdt = sd
+                if sdt.year == year and sdt.month == month:
+                    session_ids.append(s["id"])
+            except:
+                pass
+    
+    if not session_ids:
+        return {"message": "No sessions found for this period", "generated": 0, "skipped": 0}
+    
+    # Find unique users who worked in these sessions
+    user_ids = set()
+    
+    trainer_fees = await db.trainer_fees.find({"session_id": {"$in": session_ids}}, {"_id": 0, "trainer_id": 1}).to_list(1000)
+    for tf in trainer_fees:
+        if tf.get("trainer_id"):
+            user_ids.add(tf["trainer_id"])
+    
+    coord_fees = await db.coordinator_fees.find({"session_id": {"$in": session_ids}}, {"_id": 0, "coordinator_id": 1}).to_list(1000)
+    for cf in coord_fees:
+        if cf.get("coordinator_id"):
+            user_ids.add(cf["coordinator_id"])
+    
+    mkt_comm = await db.marketing_commissions.find({"session_id": {"$in": session_ids}}, {"_id": 0, "marketing_user_id": 1}).to_list(1000)
+    for mc in mkt_comm:
+        if mc.get("marketing_user_id"):
+            user_ids.add(mc["marketing_user_id"])
+    
+    # Calculate payment month
+    payment_year = year
+    payment_month = month + 1
+    if payment_month > 12:
+        payment_month = 1
+        payment_year = year + 1
+    
+    generated = 0
+    skipped = 0
+    errors = []
+    
+    for user_id in user_ids:
+        try:
+            # Check if already exists (by training month or payment month)
+            existing = await db.pay_advice.find_one({"user_id": user_id, "training_year": year, "training_month": month})
+            if not existing:
+                existing = await db.pay_advice.find_one({"user_id": user_id, "year": payment_year, "month": payment_month})
+            if existing:
+                skipped += 1
+                continue
+            
+            user = await db.users.find_one({"id": user_id}, {"_id": 0})
+            if not user:
+                continue
+            
+            session_details = []
+            total_amount = 0
+            
+            # Trainer fees
+            for fee in await db.trainer_fees.find({"trainer_id": user_id, "session_id": {"$in": session_ids}}, {"_id": 0}).to_list(100):
+                session = await db.sessions.find_one({"id": fee.get("session_id")}, {"_id": 0, "name": 1, "start_date": 1, "company_id": 1})
+                company = await db.companies.find_one({"id": session.get("company_id")}, {"_id": 0, "name": 1}) if session else None
+                session_details.append({
+                    "session_id": fee.get("session_id"),
+                    "session_name": session.get("name") if session else "Unknown",
+                    "company_name": company.get("name") if company else "Unknown",
+                    "session_date": session.get("start_date") if session else None,
+                    "role": fee.get("trainer_role", "Trainer"),
+                    "amount": fee.get("fee_amount", 0),
+                    "status": fee.get("status", "pending")
+                })
+                total_amount += fee.get("fee_amount", 0)
+            
+            # Coordinator fees
+            for fee in await db.coordinator_fees.find({"coordinator_id": user_id, "session_id": {"$in": session_ids}}, {"_id": 0}).to_list(100):
+                session = await db.sessions.find_one({"id": fee.get("session_id")}, {"_id": 0, "name": 1, "start_date": 1, "company_id": 1})
+                company = await db.companies.find_one({"id": session.get("company_id")}, {"_id": 0, "name": 1}) if session else None
+                session_details.append({
+                    "session_id": fee.get("session_id"),
+                    "session_name": session.get("name") if session else "Unknown",
+                    "company_name": company.get("name") if company else "Unknown",
+                    "session_date": session.get("start_date") if session else None,
+                    "role": "Coordinator",
+                    "amount": fee.get("total_fee", 0),
+                    "status": fee.get("status", "pending")
+                })
+                total_amount += fee.get("total_fee", 0)
+            
+            # Marketing commissions
+            for comm in await db.marketing_commissions.find({"marketing_user_id": user_id, "session_id": {"$in": session_ids}}, {"_id": 0}).to_list(100):
+                session = await db.sessions.find_one({"id": comm.get("session_id")}, {"_id": 0, "name": 1, "start_date": 1, "company_id": 1})
+                company = await db.companies.find_one({"id": session.get("company_id")}, {"_id": 0, "name": 1}) if session else None
+                session_details.append({
+                    "session_id": comm.get("session_id"),
+                    "session_name": session.get("name") if session else "Unknown",
+                    "company_name": company.get("name") if company else "Unknown",
+                    "session_date": session.get("start_date") if session else None,
+                    "role": "Marketing",
+                    "amount": comm.get("calculated_amount", 0),
+                    "status": comm.get("status", "pending")
+                })
+                total_amount += comm.get("calculated_amount", 0)
+            
+            if not session_details:
+                continue
+            
+            now = get_malaysia_time()
+            period = await db.payables_periods.find_one({"year": year, "month": month})
+            pay_advice = {
+                "id": str(uuid.uuid4()),
+                "advice_number": f"PA/MDDRC/{payment_year}/{str(payment_month).zfill(2)}/{str(uuid.uuid4())[:4].upper()}",
+                "user_id": user_id,
+                "period_id": period["id"] if period else None,
+                "training_year": year,
+                "training_month": month,
+                "year": payment_year,
+                "month": payment_month,
+                "period_name": f"{datetime(payment_year, payment_month, 1).strftime('%B %Y')}",
+                "training_period_name": f"{datetime(year, month, 1).strftime('%B %Y')}",
+                "full_name": user.get("full_name"),
+                "id_number": user.get("id_number"),
+                "email": user.get("email"),
+                "phone": user.get("phone_number"),
+                "bank_name": user.get("bank_name"),
+                "bank_account": user.get("bank_account"),
+                "session_details": session_details,
+                "total_sessions": len(session_details),
+                "gross_amount": total_amount,
+                "deductions": 0,
+                "nett_amount": total_amount,
+                "is_locked": False,
+                "created_at": now.isoformat(),
+                "created_by": current_user.id
+            }
+            
+            await db.pay_advice.insert_one({**pay_advice, "_id": pay_advice["id"]})
+            generated += 1
+        except Exception as e:
+            errors.append(f"{user_id}: {str(e)}")
+    
+    return {
+        "message": "Bulk generation complete",
+        "generated": generated,
+        "skipped": skipped,
+        "total_workers": len(user_ids),
+        "errors": errors[:5] if errors else []
+    }
 
 
 @router.post("/pay-advice/bulk-lock")
-async def bulk_lock_pay_advice(data: dict, current_user: User = Depends(get_current_user)):
-    """Bulk lock pay advice"""
+async def bulk_lock_pay_advice(year: int, month: int, current_user: User = Depends(get_current_user)):
+    """Bulk lock all pay advice for a period"""
     if current_user.role not in ["admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    advice_ids = data.get("advice_ids", [])
-    if advice_ids:
-        await db.pay_advice.update_many({"id": {"$in": advice_ids}}, {"$set": {"is_locked": True}})
-    return {"message": f"Locked {len(advice_ids)} records"}
+    now = get_malaysia_time()
+    result = await db.pay_advice.update_many(
+        {"year": year, "month": month, "is_locked": False},
+        {"$set": {
+            "is_locked": True,
+            "locked_at": now.isoformat(),
+            "locked_by": current_user.id
+        }}
+    )
+    return {"message": f"Locked {result.modified_count} pay advice records"}
 
 
 # =====================================================
