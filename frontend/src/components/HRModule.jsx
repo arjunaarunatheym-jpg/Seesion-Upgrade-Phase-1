@@ -681,6 +681,10 @@ const HRModule = () => {
               Showing: <span className="font-medium">{getMonthName(payAdviceForm.month)} {payAdviceForm.year}</span>
               {' • '}{payAdviceList.filter(pa => pa.year === payAdviceForm.year && pa.month === payAdviceForm.month).length} records
             </p>
+            <p className="text-xs text-gray-400 mt-1">
+              Training month: {getMonthName(payAdviceForm.month === 1 ? 12 : payAdviceForm.month - 1)} {payAdviceForm.month === 1 ? payAdviceForm.year - 1 : payAdviceForm.year}
+              {' '}(sessions that ran in the previous month)
+            </p>
           </div>
           
           <div className="grid gap-3">
