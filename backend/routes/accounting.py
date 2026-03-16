@@ -87,6 +87,78 @@ class PeriodReopenRequest(BaseModel):
     reason: str = Field(..., min_length=10)
 
 
+
+@router.post("/migrate-journal-references")
+async def migrate_journal_references(current_user: User = Depends(get_current_user)):
+    """One-time migration: Update TF-xxx, CF-xxx, MC-xxx references to include invoice numbers."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    updated = 0
+    errors = []
+    
+    # Find all journal entries with old-format references (TF-, CF-, MC- followed by 8-char hex)
+    import re
+    pattern = re.compile(r'^(TF|CF|MC)-[a-f0-9]{8}$')
+    
+    entries = await db.journal_entries.find(
+        {"source_reference": {"$regex": "^(TF|CF|MC)-[a-f0-9]{8}$"}},
+        {"_id": 0, "id": 1, "source_reference": 1, "source_module": 1, "source_id": 1}
+    ).to_list(5000)
+    
+    for entry in entries:
+        try:
+            ref = entry.get("source_reference", "")
+            prefix = ref[:2]  # TF, CF, or MC
+            source_id = entry.get("source_id")
+            session_id = None
+            
+            # Find the session_id from the fee/commission record
+            if prefix == "TF" and source_id:
+                fee = await db.trainer_fees.find_one({"id": source_id}, {"_id": 0, "session_id": 1})
+                if fee:
+                    session_id = fee.get("session_id")
+            elif prefix == "CF" and source_id:
+                fee = await db.coordinator_fees.find_one({"id": source_id}, {"_id": 0, "session_id": 1})
+                if fee:
+                    session_id = fee.get("session_id")
+            elif prefix == "MC" and source_id:
+                comm = await db.marketing_commissions.find_one({"id": source_id}, {"_id": 0, "session_id": 1})
+                if comm:
+                    session_id = comm.get("session_id")
+            
+            if not session_id:
+                continue
+            
+            # Find invoice for this session
+            invoice = await db.invoices.find_one(
+                {"session_id": session_id, "status": {"$in": ["issued", "paid", "partial", "approved"]}},
+                {"_id": 0, "invoice_number": 1}
+            )
+            if not invoice:
+                # Fallback: check session.invoice_id
+                sess = await db.sessions.find_one({"id": session_id}, {"_id": 0, "invoice_id": 1})
+                if sess and sess.get("invoice_id"):
+                    invoice = await db.invoices.find_one({"id": sess["invoice_id"]}, {"_id": 0, "invoice_number": 1})
+            
+            if invoice and invoice.get("invoice_number"):
+                new_ref = f"{prefix}-{invoice['invoice_number']}"
+                await db.journal_entries.update_one(
+                    {"id": entry["id"]},
+                    {"$set": {"source_reference": new_ref}}
+                )
+                updated += 1
+        except Exception as e:
+            errors.append(f"{entry.get('id')}: {str(e)}")
+    
+    return {
+        "message": f"Migration complete. Updated {updated} of {len(entries)} entries.",
+        "updated": updated,
+        "total_found": len(entries),
+        "errors": errors[:10]
+    }
+
+
 # ============ HELPER FUNCTIONS ============
 
 def round_money(value: float) -> float:
