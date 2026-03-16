@@ -33,7 +33,7 @@ from typing import Dict, List, Optional
 import uuid
 
 # Configuration
-BASE_URL = "https://session-excel-hub.preview.emergentagent.com/api"
+BASE_URL = "https://hr-dispatcher-v2.preview.emergentagent.com/api"
 
 # Test credentials from review request
 TEST_CREDENTIALS = {

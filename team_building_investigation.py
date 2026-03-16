@@ -23,7 +23,7 @@ import pymongo
 import os
 
 # Configuration
-BASE_URL = "https://session-excel-hub.preview.emergentagent.com/api"
+BASE_URL = "https://hr-dispatcher-v2.preview.emergentagent.com/api"
 
 # Test Credentials from review request
 ADMIN_EMAIL = "arjuna@mddrc.com.my"
