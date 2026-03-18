@@ -352,8 +352,20 @@ const QuotationsTab = ({
                 <CardDescription className="text-xs sm:text-sm">View all clients across all marketers ({allClients.length} total)</CardDescription>
               </div>
               <Button 
-                onClick={() => {
-                  window.location.href = `${process.env.REACT_APP_BACKEND_URL}/api/marketing/clients/export`;
+                onClick={async () => {
+                  try {
+                    const response = await axiosInstance.get('/marketing/clients/export', { responseType: 'blob' });
+                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.setAttribute('download', `marketing_clients_${new Date().toISOString().split('T')[0]}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    window.URL.revokeObjectURL(url);
+                  } catch (e) {
+                    toast.error(e.response?.data?.detail || 'Export failed');
+                  }
                 }}
                 size="sm"
                 variant="outline"

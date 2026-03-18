@@ -667,41 +667,17 @@ const FinanceDashboard = ({ user, onLogout }) => {
   // Export invoices to Excel
   const handleExportInvoices = async () => {
     try {
-      const response = await axiosInstance.get('/finance/invoices/export');
-      const data = response.data;
-      
-      // Convert to CSV
-      if (data.length === 0) {
-        toast.error('No invoices to export');
-        return;
-      }
-      
-      const headers = Object.keys(data[0]);
-      const csvRows = [headers.join(',')];
-      
-      for (const row of data) {
-        const values = headers.map(h => {
-          const val = row[h];
-          // Escape commas, quotes and newlines
-          if (val === null || val === undefined) return '';
-          const strVal = String(val);
-          if (strVal.includes(',') || strVal.includes('"') || strVal.includes('\n')) {
-            return `"${strVal.replace(/"/g, '""')}"`;
-          }
-          return strVal;
-        });
-        csvRows.push(values.join(','));
-      }
-      
-      const csvContent = csvRows.join('\n');
-      
-      // Download
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const response = await axiosInstance.get('/finance/invoices/export', {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `invoices_${new Date().toISOString().split('T')[0]}.csv`;
+      link.href = url;
+      link.setAttribute('download', `invoices_${new Date().toISOString().split('T')[0]}.xlsx`);
+      document.body.appendChild(link);
       link.click();
-      
+      link.remove();
+      window.URL.revokeObjectURL(url);
       toast.success('Invoices exported successfully');
     } catch (error) {
       toast.error('Failed to export invoices');

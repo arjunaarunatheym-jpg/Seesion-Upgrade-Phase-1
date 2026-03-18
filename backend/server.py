@@ -9161,7 +9161,7 @@ async def export_invoices(
     status: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Export invoices data for Excel download"""
+    """Export invoices data as actual Excel (.xlsx) file"""
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -9185,40 +9185,77 @@ async def export_invoices(
                 cn_by_invoice[inv_id] = []
             cn_by_invoice[inv_id].append(cn)
     
-    # Format for Excel export with user's requested headers
-    export_data = []
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from io import BytesIO
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Invoices"
+    
+    # Header style
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="2563EB", end_color="2563EB", fill_type="solid")
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin')
+    )
+    
+    headers = ["Bil", "Date", "Invoice Number", "Bill To", "Programme", "Company Name", 
+               "Venue", "No of Participants", "Invoice Value (RM)", "Invoice Status", 
+               "Payment Status", "Credit Note No & Value"]
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', wrap_text=True)
+        cell.border = thin_border
+    
     bil = 1
     for inv in invoices:
-        # Get payment status
         payment = payment_by_invoice.get(inv.get("id"))
         payment_status = "Paid" if payment else "Unpaid"
         
-        # Get credit notes
         inv_credit_notes = cn_by_invoice.get(inv.get("id"), [])
         cn_info = ""
         if inv_credit_notes:
-            cn_parts = []
-            for cn in inv_credit_notes:
-                cn_parts.append(f"{cn.get('cn_number', 'CN')}: RM{cn.get('amount', 0)}")
+            cn_parts = [f"{cn.get('cn_number', 'CN')}: RM{cn.get('amount', 0)}" for cn in inv_credit_notes]
             cn_info = "; ".join(cn_parts)
         
-        export_data.append({
-            "Bil": bil,
-            "Date": str(inv.get("created_at", ""))[:10] if inv.get("created_at") else "",
-            "Invoice Number": inv.get("invoice_number", ""),
-            "Bill To": inv.get("bill_to_name") or inv.get("company_name", ""),
-            "Programme": inv.get("programme_name", ""),
-            "Company Name": inv.get("company_name", ""),
-            "Venue": inv.get("venue", ""),
-            "No of Participants": inv.get("pax", 0),
-            "Invoice Value (RM)": inv.get("total_amount", 0),
-            "Invoice Status": inv.get("status", "").replace("_", " ").title(),
-            "Payment Status": payment_status,
-            "Credit Note No & Value": cn_info
-        })
+        row = bil + 1
+        ws.cell(row=row, column=1, value=bil).border = thin_border
+        ws.cell(row=row, column=2, value=str(inv.get("created_at", ""))[:10] if inv.get("created_at") else "").border = thin_border
+        ws.cell(row=row, column=3, value=inv.get("invoice_number", "")).border = thin_border
+        ws.cell(row=row, column=4, value=inv.get("bill_to_name") or inv.get("company_name", "")).border = thin_border
+        ws.cell(row=row, column=5, value=inv.get("programme_name", "")).border = thin_border
+        ws.cell(row=row, column=6, value=inv.get("company_name", "")).border = thin_border
+        ws.cell(row=row, column=7, value=inv.get("venue", "")).border = thin_border
+        ws.cell(row=row, column=8, value=inv.get("pax", 0)).border = thin_border
+        ws.cell(row=row, column=9, value=inv.get("total_amount", 0)).border = thin_border
+        ws.cell(row=row, column=10, value=inv.get("status", "").replace("_", " ").title()).border = thin_border
+        ws.cell(row=row, column=11, value=payment_status).border = thin_border
+        ws.cell(row=row, column=12, value=cn_info).border = thin_border
         bil += 1
     
-    return export_data
+    # Auto-fit column widths
+    for col in ws.columns:
+        max_length = 0
+        column_letter = col[0].column_letter
+        for cell in col:
+            if cell.value:
+                max_length = max(max_length, len(str(cell.value)))
+        ws.column_dimensions[column_letter].width = min(max_length + 2, 40)
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="invoices_{datetime.now().strftime("%Y-%m-%d")}.xlsx"'}
+    )
 
 @api_router.get("/finance/invoices/{invoice_id}")
 async def get_invoice(invoice_id: str, current_user: User = Depends(get_current_user)):
