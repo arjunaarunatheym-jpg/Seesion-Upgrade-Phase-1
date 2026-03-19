@@ -384,7 +384,7 @@ async def get_credit_notes(current_user: User = Depends(get_current_user)):
 
 @router.post("/credit-notes")
 async def create_credit_note(cn_data: dict, current_user: User = Depends(get_current_user)):
-    """Create a credit note (e.g., for HRDCorp 4% deduction)"""
+    """Create a credit note manually (e.g., for HRDCorp 4% deduction) - also handles retroactive creation"""
     if current_user.role not in ["admin", "super_admin", "finance", "coordinator"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -399,21 +399,38 @@ async def create_credit_note(cn_data: dict, current_user: User = Depends(get_cur
         "cn_number": cn_number,
         "invoice_id": invoice_id,
         "invoice_number": invoice.get("invoice_number") if invoice else None,
-        "session_id": cn_data.get("session_id"),
+        "session_id": cn_data.get("session_id") or (invoice.get("session_id") if invoice else None),
+        "session_name": cn_data.get("session_name") or (invoice.get("session_name") or invoice.get("programme_name") if invoice else None),
         "company_id": cn_data.get("company_id") or (invoice.get("company_id") if invoice else None),
         "company_name": cn_data.get("company_name") or (invoice.get("company_name") if invoice else None),
+        "bill_to_name": cn_data.get("bill_to_name") or (invoice.get("bill_to_name") if invoice else None),
+        "bill_to_address": cn_data.get("bill_to_address") or (invoice.get("bill_to_address") if invoice else None),
         "reason": cn_data.get("reason", "HRDCorp Levy Deduction"),
-        "description": cn_data.get("description", "4% HRDCorp levy deducted from payment"),
+        "description": cn_data.get("description") or f"{cn_data.get('percentage', 4)}% deduction",
+        "base_amount": float(invoice.get("total_amount", 0)) if invoice else 0,
         "amount": float(cn_data.get("amount", 0)),
         "percentage": float(cn_data.get("percentage", 4)),
         "status": "draft",
         "created_by": current_user.id,
         "created_at": now.isoformat(),
-        "updated_at": now.isoformat()
+        "updated_at": now.isoformat(),
+        "cn_date": cn_data.get("cn_date") or now.strftime("%Y-%m-%d")
     }
     
     await db.credit_notes.insert_one(credit_note)
+    credit_note.pop("_id", None)
     await log_finance_action("credit_note", credit_note["id"], "created", current_user.id, after_value=credit_note)
+    
+    # Auto-post to journal
+    try:
+        await post_credit_note_issued(
+            credit_note=credit_note,
+            invoice=invoice,
+            user_id=current_user.id,
+            user_name=current_user.full_name
+        )
+    except Exception as e:
+        print(f"Credit note journal auto-post error: {str(e)}")
     
     return {"message": "Credit note created", "cn_number": cn_number, "id": credit_note["id"]}
 
