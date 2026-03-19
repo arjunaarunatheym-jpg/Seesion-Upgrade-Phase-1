@@ -272,13 +272,24 @@ async def get_profit_loss_report(
     
     for m in range(1, 13):
         md = monthly_data[m]
-        md["income"]["total"] = md["income"]["invoices"] + md["income"]["manual"]
-        md["expenses"]["total"] = sum([md["expenses"]["payroll"], md["expenses"]["session_workers"],
+        md["income"]["invoices"] = round(md["income"]["invoices"], 2)
+        md["income"]["manual"] = round(md["income"]["manual"], 2)
+        md["income"]["total"] = round(md["income"]["invoices"] + md["income"]["manual"], 2)
+        md["expenses"]["payroll"] = round(md["expenses"]["payroll"], 2)
+        md["expenses"]["session_workers"] = round(md["expenses"]["session_workers"], 2)
+        md["expenses"]["marketing_commissions"] = round(md["expenses"]["marketing_commissions"], 2)
+        md["expenses"]["session_expenses"] = round(md["expenses"]["session_expenses"], 2)
+        md["expenses"]["petty_cash"] = round(md["expenses"]["petty_cash"], 2)
+        md["expenses"]["manual"] = round(md["expenses"]["manual"], 2)
+        md["expenses"]["total"] = round(sum([md["expenses"]["payroll"], md["expenses"]["session_workers"],
                                        md["expenses"]["marketing_commissions"], md["expenses"]["session_expenses"],
-                                       md["expenses"]["petty_cash"], md["expenses"]["manual"]])
-        md["net_profit"] = md["income"]["total"] - md["expenses"]["total"]
+                                       md["expenses"]["petty_cash"], md["expenses"]["manual"]]), 2)
+        md["net_profit"] = round(md["income"]["total"] - md["expenses"]["total"], 2)
         ytd_income += md["income"]["total"]
         ytd_expenses += md["expenses"]["total"]
+    
+    ytd_income = round(ytd_income, 2)
+    ytd_expenses = round(ytd_expenses, 2)
     
     return {
         "year": year,
@@ -286,16 +297,16 @@ async def get_profit_loss_report(
         "ytd_summary": {
             "total_income": ytd_income,
             "total_expenses": ytd_expenses,
-            "net_profit": ytd_income - ytd_expenses,
+            "net_profit": round(ytd_income - ytd_expenses, 2),
             "profit_margin": round((ytd_income - ytd_expenses) / ytd_income * 100, 2) if ytd_income > 0 else 0
         },
         "expense_breakdown": {
-            "payroll": sum(md["expenses"]["payroll"] for md in monthly_data.values()),
-            "session_workers": sum(md["expenses"]["session_workers"] for md in monthly_data.values()),
-            "marketing_commissions": sum(md["expenses"]["marketing_commissions"] for md in monthly_data.values()),
-            "session_expenses": sum(md["expenses"]["session_expenses"] for md in monthly_data.values()),
-            "petty_cash": sum(md["expenses"]["petty_cash"] for md in monthly_data.values()),
-            "manual": sum(md["expenses"]["manual"] for md in monthly_data.values())
+            "payroll": round(sum(md["expenses"]["payroll"] for md in monthly_data.values()), 2),
+            "session_workers": round(sum(md["expenses"]["session_workers"] for md in monthly_data.values()), 2),
+            "marketing_commissions": round(sum(md["expenses"]["marketing_commissions"] for md in monthly_data.values()), 2),
+            "session_expenses": round(sum(md["expenses"]["session_expenses"] for md in monthly_data.values()), 2),
+            "petty_cash": round(sum(md["expenses"]["petty_cash"] for md in monthly_data.values()), 2),
+            "manual": round(sum(md["expenses"]["manual"] for md in monthly_data.values()), 2)
         }
     }
 
@@ -466,29 +477,37 @@ async def get_profit_loss_by_programme(
     total_direct_expenses = 0
     
     for prog_id, data in programme_data.items():
-        data["expenses"]["total"] = sum([data["expenses"]["trainer_fees"], data["expenses"]["coordinator_fees"],
-                                         data["expenses"]["marketing_commissions"], data["expenses"]["session_expenses"]])
-        data["gross_profit"] = data["income"] - data["expenses"]["total"]
+        data["income"] = round(data["income"], 2)
+        data["expenses"]["trainer_fees"] = round(data["expenses"]["trainer_fees"], 2)
+        data["expenses"]["coordinator_fees"] = round(data["expenses"]["coordinator_fees"], 2)
+        data["expenses"]["marketing_commissions"] = round(data["expenses"]["marketing_commissions"], 2)
+        data["expenses"]["session_expenses"] = round(data["expenses"]["session_expenses"], 2)
+        data["expenses"]["total"] = round(sum([data["expenses"]["trainer_fees"], data["expenses"]["coordinator_fees"],
+                                         data["expenses"]["marketing_commissions"], data["expenses"]["session_expenses"]]), 2)
+        data["gross_profit"] = round(data["income"] - data["expenses"]["total"], 2)
         data["gross_margin_pct"] = round((data["gross_profit"] / data["income"] * 100), 2) if data["income"] > 0 else 0
         total_income += data["income"]
         total_direct_expenses += data["expenses"]["total"]
     
+    total_income = round(total_income, 2)
+    total_direct_expenses = round(total_direct_expenses, 2)
+    
     payslips = await db.hr_payslips.find({"year": year}, {"_id": 0}).to_list(1000)
-    overhead_payroll = sum(float(ps.get("gross_salary", 0)) + float(ps.get("epf_employer", 0)) + 
-                          float(ps.get("socso_employer", 0)) + float(ps.get("eis_employer", 0)) for ps in payslips)
+    overhead_payroll = round(sum(float(ps.get("gross_salary", 0)) + float(ps.get("epf_employer", 0)) + 
+                          float(ps.get("socso_employer", 0)) + float(ps.get("eis_employer", 0)) for ps in payslips), 2)
     
     petty_cash = await db.petty_cash_transactions.find({"date": {"$gte": start_date, "$lte": end_date}, "type": "expense", "status": "approved"}, {"_id": 0}).to_list(1000)
-    overhead_petty_cash = sum(float(pc.get("amount", 0)) for pc in petty_cash)
+    overhead_petty_cash = round(sum(float(pc.get("amount", 0)) for pc in petty_cash), 2)
     
     manual_expenses = await db.manual_expenses.find({"date": {"$gte": start_date, "$lte": end_date}}, {"_id": 0}).to_list(1000)
-    overhead_manual = sum(float(exp.get("amount", 0)) for exp in manual_expenses)
+    overhead_manual = round(sum(float(exp.get("amount", 0)) for exp in manual_expenses), 2)
     
     manual_income = await db.manual_income.find({"date": {"$gte": start_date, "$lte": end_date}}, {"_id": 0}).to_list(1000)
-    other_income = sum(float(inc.get("amount", 0)) for inc in manual_income)
+    other_income = round(sum(float(inc.get("amount", 0)) for inc in manual_income), 2)
     
-    total_overhead = overhead_payroll + overhead_petty_cash + overhead_manual
-    total_expenses = total_direct_expenses + total_overhead
-    net_profit = total_income + other_income - total_expenses
+    total_overhead = round(overhead_payroll + overhead_petty_cash + overhead_manual, 2)
+    total_expenses = round(total_direct_expenses + total_overhead, 2)
+    net_profit = round(total_income + other_income - total_expenses, 2)
     
     active_programmes = [data for data in programme_data.values() if data["income"] > 0 or data["expenses"]["total"] > 0]
     active_programmes.sort(key=lambda x: x["income"], reverse=True)
@@ -497,15 +516,15 @@ async def get_profit_loss_by_programme(
         "year": year,
         "programmes": active_programmes,
         "summary": {
-            "total_programme_income": total_income,
-            "other_income": other_income,
-            "total_income": total_income + other_income,
-            "total_direct_costs": total_direct_expenses,
-            "gross_profit": total_income - total_direct_expenses,
+            "total_programme_income": round(total_income, 2),
+            "other_income": round(other_income, 2),
+            "total_income": round(total_income + other_income, 2),
+            "total_direct_costs": round(total_direct_expenses, 2),
+            "gross_profit": round(total_income - total_direct_expenses, 2),
             "gross_margin_pct": round((total_income - total_direct_expenses) / total_income * 100, 2) if total_income > 0 else 0,
             "overhead": {"payroll": overhead_payroll, "petty_cash": overhead_petty_cash, "manual": overhead_manual, "total": total_overhead},
-            "total_expenses": total_expenses,
-            "net_profit": net_profit,
+            "total_expenses": round(total_expenses, 2),
+            "net_profit": round(net_profit, 2),
             "net_margin_pct": round(net_profit / (total_income + other_income) * 100, 2) if (total_income + other_income) > 0 else 0
         }
     }
@@ -953,6 +972,11 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
     # Sort by date
     gl_entries.sort(key=lambda x: x["date"])
     
+    # Round all amounts to 2 decimal places
+    for entry in gl_entries:
+        entry["debit"] = round(entry["debit"], 2)
+        entry["credit"] = round(entry["credit"], 2)
+    
     # Summary by account
     account_summary = {}
     for entry in gl_entries:
@@ -962,9 +986,14 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
         account_summary[code]["total_debit"] += entry["debit"]
         account_summary[code]["total_credit"] += entry["credit"]
     
+    # Round summary totals
+    for code in account_summary:
+        account_summary[code]["total_debit"] = round(account_summary[code]["total_debit"], 2)
+        account_summary[code]["total_credit"] = round(account_summary[code]["total_credit"], 2)
+    
     return {
         "year": year, "month": month,
         "entries": gl_entries,
         "account_summary": sorted(account_summary.values(), key=lambda x: x["account_code"]),
-        "totals": {"total_debit": sum(e["debit"] for e in gl_entries), "total_credit": sum(e["credit"] for e in gl_entries)}
+        "totals": {"total_debit": round(sum(e["debit"] for e in gl_entries), 2), "total_credit": round(sum(e["credit"] for e in gl_entries), 2)}
     }

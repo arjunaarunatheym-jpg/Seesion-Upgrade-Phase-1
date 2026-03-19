@@ -230,16 +230,16 @@ const ProfitLossLedger = () => {
                   <td>${e.account_code}</td>
                   <td>${e.account_name}</td>
                   <td>${e.description}</td>
-                  <td class="text-right debit">${e.debit > 0 ? e.debit.toLocaleString('en-MY', { minimumFractionDigits: 2 }) : ''}</td>
-                  <td class="text-right credit">${e.credit > 0 ? e.credit.toLocaleString('en-MY', { minimumFractionDigits: 2 }) : ''}</td>
+                  <td class="text-right debit">${e.debit > 0 ? e.debit.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}</td>
+                  <td class="text-right credit">${e.credit > 0 ? e.credit.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}</td>
                 </tr>
               `).join('')}
             </tbody>
             <tfoot>
               <tr class="totals-row">
                 <td colspan="6" class="text-right">TOTALS:</td>
-                <td class="text-right">${generalLedger.totals?.total_debit?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-                <td class="text-right">${generalLedger.totals?.total_credit?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                <td class="text-right">${generalLedger.totals?.total_debit?.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td class="text-right">${generalLedger.totals?.total_credit?.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               </tr>
               <tr>
                 <td colspan="8" class="text-center ${generalLedger.totals?.is_balanced ? 'balanced' : 'unbalanced'}">
@@ -267,9 +267,9 @@ const ProfitLossLedger = () => {
                   <td>${tb.account_code}</td>
                   <td>${tb.account_name}</td>
                   <td>${tb.account_type}</td>
-                  <td class="text-right">${tb.debit > 0 ? tb.debit.toLocaleString('en-MY', { minimumFractionDigits: 2 }) : '-'}</td>
-                  <td class="text-right">${tb.credit > 0 ? tb.credit.toLocaleString('en-MY', { minimumFractionDigits: 2 }) : '-'}</td>
-                  <td class="text-right" style="font-weight: bold; ${tb.net >= 0 ? 'color: #dc2626;' : 'color: #16a34a;'}">${tb.net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                  <td class="text-right">${tb.debit > 0 ? tb.debit.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                  <td class="text-right">${tb.credit > 0 ? tb.credit.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</td>
+                  <td class="text-right" style="font-weight: bold; ${tb.net >= 0 ? 'color: #dc2626;' : 'color: #16a34a;'}">${tb.net.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -391,7 +391,7 @@ const ProfitLossLedger = () => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const formatCurrency = (val) => `RM ${(val || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`;
+  const formatCurrency = (val) => `RM ${(val || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   if (loading) {
     return (

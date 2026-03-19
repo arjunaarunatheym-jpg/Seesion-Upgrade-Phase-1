@@ -11059,9 +11059,9 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
             
             # Calculate marketing commission
             if comm.get("commission_type") == "percentage":
-                calculated_amount = profit_before_marketing * (comm.get("commission_rate", 0) / 100)
+                calculated_amount = round(profit_before_marketing * (comm.get("commission_rate", 0) / 100), 2)
             else:
-                calculated_amount = comm.get("fixed_amount") or 0.0
+                calculated_amount = round(comm.get("fixed_amount") or 0.0, 2)
         
         # Update the stored value if it differs (keep DB in sync)
         if abs(calculated_amount - (comm.get("calculated_amount") or 0)) > 0.01:
@@ -11569,9 +11569,9 @@ async def save_marketing_commission(session_id: str, marketing_data: dict, curre
     fixed_amount = float(marketing_data.get("fixed_amount", 0))
     
     if commission_type == "percentage":
-        calculated_amount = profit_before_marketing * commission_rate / 100
+        calculated_amount = round(profit_before_marketing * commission_rate / 100, 2)
     else:
-        calculated_amount = fixed_amount
+        calculated_amount = round(fixed_amount, 2)
     
     # Get session start_date for P&L filtering
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0, "start_date": 1, "invoice_id": 1})
