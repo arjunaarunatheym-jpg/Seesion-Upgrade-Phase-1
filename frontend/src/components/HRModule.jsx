@@ -1139,10 +1139,13 @@ const HRModule = () => {
           </DialogHeader>
           {viewPayslip && (
             <div className="space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded">
+              <div className="grid grid-cols-2 gap-3 p-4 bg-gray-50 rounded text-sm">
                 <div><strong>Employee ID:</strong> {viewPayslip.employee_id}</div>
-                <div><strong>Designation:</strong> {viewPayslip.designation}</div>
-                <div><strong>EPF No:</strong> {viewPayslip.epf_number}</div>
+                <div><strong>Designation:</strong> {viewPayslip.designation || '-'}</div>
+                <div><strong>Department:</strong> {viewPayslip.department || '-'}</div>
+                <div><strong>EPF No:</strong> {viewPayslip.epf_number || '-'}</div>
+                <div><strong>SOCSO No:</strong> {viewPayslip.socso_number || '-'}</div>
+                <div><strong>Bank:</strong> {viewPayslip.bank_name || '-'} | Acc: {viewPayslip.bank_account || '-'}</div>
                 <div><strong>Age:</strong> {viewPayslip.age} years</div>
               </div>
               

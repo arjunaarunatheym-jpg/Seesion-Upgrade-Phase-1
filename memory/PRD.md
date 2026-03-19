@@ -31,61 +31,44 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 
 ## API Endpoints (Key)
 - `/api/auth/login` - User authentication
-- `/api/finance/invoices` - Invoice CRUD operations
-- `/api/finance/pnl-journal` - **NEW** Journal-based Auditor P&L endpoint
-- `/api/finance/pnl-journal/drilldown/{account_code}` - **NEW** Drilldown into P&L accounts
-- `/api/finance/pnl-journal/export` - **NEW** Export P&L to Excel
+- `/api/finance/pnl-journal` - Journal-based Auditor P&L endpoint
+- `/api/finance/pnl-journal/drilldown/{account_code}` - Drilldown into P&L accounts
+- `/api/finance/pnl-journal/export` - Export P&L to Excel
 - `/api/accounting/chart-of-accounts` - Unified COA source of truth
 - `/api/accounting/upgrade-coa` - COA migration endpoint
-- `/api/finance/session/{session_id}/additional-invoice` - Create linked invoices
-- `/api/marketing/quotations/{id}/download-pdf` - PDF generation with rich text
-- `/api/settings/indemnity-sections` - Admin-managed indemnity content
-- `/api/settings/feedback-questions` - GET/POST feedback questions (Admin)
-- `/api/sessions/{session_id}/export-template` - Download Excel template
-- `/api/sessions/{session_id}/import-data` - Import Excel data
-- `/api/marketing/leads` - Lead CRUD
-- `/api/notifications/settings` - Email notification settings CRUD
-- `/api/notifications/broadcast` - Send broadcast emails
-- `/api/superadmin/dashboard` - Super Admin dashboard stats
+- `/api/hr/payslips/generate` - Generate payslip with full staff info, YTD, journal posting
+- `/api/hr/payslips/{id}` - GET/PUT/DELETE payslip (with journal entry management)
 
 ## Current Status (Mar 2026)
 
 ### Recently Completed (Mar 19, 2026)
 - **3-Phase Finance Reporting Overhaul — COMPLETE**
-  - Phase A: Unified Chart of Accounts (46 accounts) with `statement_type` and `pnl_section` fields
-  - Phase B: New journal-based P&L endpoint (`/api/finance/pnl-journal`) with date filters, drill-down, Excel export
-  - Phase C: Auditor P&L tab in Finance Portal with summary cards, filter controls, drill-down dialog, print, Excel export
-  - Fixed critical bug: `pnl-journal` endpoint return statement was misplaced as dead code
-  - Added missing `<TabsContent>` for Auditor P&L in `ProfitLossLedger.jsx`
-  - Fixed drilldown month filter to correctly pass date range params
+  - Phase A: Unified COA (46 accounts) with statement_type and pnl_section fields
+  - Phase B: Journal-based P&L endpoint with filters, drill-down, Excel export
+  - Phase C: Auditor P&L tab with summary cards, filters, drill-down dialog, print/export
+  - Fixed critical bug: pnl-journal endpoint return statement was misplaced
   - All 14 backend tests passed, frontend verified (iteration_21)
 
-### Previously Completed
-- CEO P&L Multi-Invoice Fix, Journal Reference Improvement
-- Pay Advice Generation Fix, Calendar View for All Staff
-- Marketing "My Sessions" Tab, Smart Email Dispatcher
-- Email & Notifications System, Auto-Lead for Returning Clients
-- Revenue Recognition Fix, Marketing Pipeline Month/Year Grouping
-- Excel Import/Export Refinement, Certificate Template Designer
-- Super Admin Portal, Credit Notes Month/Year Grouping
-- Fixed broken exports (Marketing CSV, Invoice Excel)
-- Payment recording and credit note flow overhaul
-- 2-decimal financial precision fix
-- Printable branded P&L statement (CEO view)
-- Year-over-Year Comparison tab
-- Print COA feature
-- Removed ~667 lines duplicate HR code from server.py
+- **Payslip System Overhaul — COMPLETE**
+  - Fixed root cause: Duplicate endpoints in routes/hr.py (simplified) vs server.py (complete) — routes/hr.py was taking priority but missing staff info, YTD, journal posting
+  - Updated routes/hr.py with complete payslip generation including: designation, department, EPF/SOCSO numbers, bank info, YTD calculations, journal posting
+  - Added Edit Payslip endpoint (PUT /api/hr/payslips/{id}) with staff info refresh, amount editing, gross/nett recalculation, YTD recalculation, journal re-posting
+  - Added journal entry voiding on payslip delete
+  - Fixed post_payroll() field name mismatches (nett_pay vs net_pay, full_name vs employee_name)
+  - Removed ~377 lines of duplicate payslip code from server.py
+  - Added Edit button + dialog to frontend with live calculation preview
+  - Backdating works — generate payslips for any past month/year
+  - All tested via curl + frontend screenshots + testing agent (iteration_22)
 
 ### Upcoming (P0/P1)
-- Trainer Contract Workflow — Generate & email freelance contract for trainers
-- `server.py` refactoring — Move remaining endpoints to modular route files
-- Post-Training Evaluation System — Automated evaluation forms
+- Trainer Contract Workflow
+- Post-Training Evaluation System
 - Automated Certificate Generation Workflow
-- SaaS Monetization — Stripe integration for tiered subscription plans
+- SaaS Monetization (Stripe Integration)
+- server.py continued refactoring
 
 ### Backlog (P2)
 - Journal entry "Unknown" descriptions fix
-- Payables Excel export verification
 - Convert to Native App (Capacitor)
 - Privacy Policy Page
 - Client Portal / Trainer Portal
@@ -103,14 +86,13 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 │   │   ├── finance_reports.py     # Journal-based P&L, export, drilldown, subledgers, GL
 │   │   ├── finance_payments.py    # Payment recording, credit notes
 │   │   ├── finance_invoices.py    # Invoice CRUD, Excel export
+│   │   ├── hr.py                  # Complete HR/Payroll (payslip CRUD with journals)
 │   │   ├── marketing.py           # Quotation + lead notifications
 │   │   ├── sessions_new.py        # Session management
-│   │   ├── notifications.py       # Notification settings + broadcast
-│   │   └── hr.py                  # HR/Payroll routes
+│   │   └── notifications.py       # Notification settings + broadcast
 │   ├── utils/
 │   │   └── email_notifications.py # Smart email dispatcher
-│   ├── models/                    # Pydantic models
-│   └── server.py                  # Main FastAPI app (still contains tech debt)
+│   └── server.py                  # Main FastAPI app (reduced tech debt)
 └── frontend/
     └── src/
         ├── components/
@@ -120,12 +102,10 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
         │   │   ├── YoYComparisonTab.jsx  # Year-over-year comparison
         │   │   └── GeneralLedgerTab.jsx  # General Ledger view
         │   ├── finance/                  # Finance sub-components
+        │   ├── HRModule.jsx              # HR & Payroll with Edit payslip dialog
         │   └── ProfitLossLedger.jsx      # Container for all P&L tabs
-        ├── pages/
-        │   └── FinanceDashboard.jsx      # Finance Portal page
-        └── utils/
-            ├── printPnL.js               # Print P&L utility
-            └── printReceipt.js           # Print receipt utility
+        └── pages/
+            └── FinanceDashboard.jsx      # Finance Portal page
 ```
 
 ## Test Credentials
