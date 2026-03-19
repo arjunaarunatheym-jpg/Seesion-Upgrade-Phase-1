@@ -16,6 +16,7 @@ import {
   BookOpen, Printer, FileSpreadsheet
 } from 'lucide-react';
 import { CEOPnLTab } from './ledger/CEOPnLTab';
+import { YoYComparisonTab } from './ledger/YoYComparisonTab';
 import { GeneralLedgerTab } from './ledger/GeneralLedgerTab';
 import { TrainerSubledgerTab } from './ledger/TrainerSubledgerTab';
 import { MarketingSubledgerTab } from './ledger/MarketingSubledgerTab';
@@ -498,6 +499,10 @@ const ProfitLossLedger = () => {
             <Briefcase className="w-4 h-4 mr-1" />
             CEO P&L
           </TabsTrigger>
+          <TabsTrigger value="yoy-comparison" className="text-purple-600">
+            <TrendingUp className="w-4 h-4 mr-1" />
+            YoY Comparison
+          </TabsTrigger>
           <TabsTrigger value="general-ledger" className="text-emerald-600">
             <BookOpen className="w-4 h-4 mr-1" />
             General Ledger
@@ -588,6 +593,14 @@ const ProfitLossLedger = () => {
             expandedRows={expandedRows}
             toggleRow={toggleRow}
             formatCurrency={formatCurrency}
+            companySettings={companySettings}
+          />
+        </TabsContent>
+
+        {/* Year-over-Year Comparison Tab */}
+        <TabsContent value="yoy-comparison">
+          <YoYComparisonTab
+            selectedYear={selectedYear}
             companySettings={companySettings}
           />
         </TabsContent>

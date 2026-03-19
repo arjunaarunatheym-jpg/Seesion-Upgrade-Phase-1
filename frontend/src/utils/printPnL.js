@@ -302,3 +302,176 @@ export const printPnLStatement = async (pnlData, companySettings, logoUrl) => {
   `);
   printWindow.document.close();
 };
+
+
+export const printYoYComparison = async (currentData, prevData, currentYear, prevYear, companySettings, logoUrl) => {
+  const settings = companySettings || {};
+  const primaryColor = settings.primary_color || '#1a365d';
+  const secondaryColor = settings.secondary_color || '#4472C4';
+  const tagline = settings.tagline || 'Towards a Nation of Safe Drivers';
+
+  const fmt = (val) => `RM ${(val || 0).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const fmtPct = (curr, prev) => {
+    const diff = (curr || 0) - (prev || 0);
+    const pct = prev ? ((diff / Math.abs(prev)) * 100).toFixed(1) : (curr ? '100.0' : '0.0');
+    return { diff, pct, sign: diff >= 0 ? '+' : '' };
+  };
+
+  const curr = currentData?.summary || {};
+  const prev = prevData?.summary || {};
+  const currProgs = currentData?.programmes || [];
+  const prevProgs = prevData?.programmes || [];
+
+  const headerCustomFields = (settings.invoice_custom_fields || [])
+    .filter(f => f.position === 'Header' || f.position === 'header')
+    .map(f => ` &bull; ${f.label}: ${f.value}`)
+    .join('');
+
+  const allProgNames = [...new Set([...currProgs.map(p => p.programme_name), ...prevProgs.map(p => p.programme_name)])];
+
+  const makeRow = (label, currVal, prevVal, opts = {}) => {
+    const v = fmtPct(currVal, prevVal);
+    const isGood = opts.inverse ? v.diff <= 0 : v.diff >= 0;
+    const diffColor = isGood ? '#16a34a' : '#dc2626';
+    return `
+      <tr style="${opts.bold ? 'font-weight:bold;' : ''}${opts.highlight ? `background:${secondaryColor}10; border-top:2px solid ${secondaryColor};` : ''}${opts.indent ? 'color:#666;' : ''}">
+        <td style="padding:6px 12px;${opts.indent ? 'padding-left:30px;' : ''}">${label}</td>
+        <td class="text-right" style="padding:6px 12px;">${fmt(currVal)}</td>
+        <td class="text-right" style="padding:6px 12px; color:#777;">${fmt(prevVal)}</td>
+        <td class="text-right" style="padding:6px 12px; color:${diffColor};">${v.sign}${fmt(v.diff).replace('RM ','')}</td>
+        <td class="text-right" style="padding:6px 12px; color:${diffColor};">${v.sign}${v.pct}%</td>
+      </tr>`;
+  };
+
+  const dividerRow = (label) => `<tr style="background:#f5f5f5;"><td colspan="5" style="padding:4px 12px;font-size:9px;font-weight:bold;color:#666;text-transform:uppercase;letter-spacing:1px;">${label}</td></tr>`;
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>P&L Comparison ${currentYear} vs ${prevYear}</title>
+      <style>
+        @page { size: A4; margin: 15mm; }
+        @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; font-size: 11px; padding: 25px; max-width: 210mm; margin: 0 auto; line-height: 1.5; color: #333; }
+        .header { display: flex; align-items: center; gap: 20px; padding-bottom: 15px; border-bottom: 3px solid ${primaryColor}; margin-bottom: 20px; }
+        .logo-img { width: 100px; height: auto; }
+        .company-details { flex: 1; }
+        .company-name { font-size: 18px; font-weight: bold; color: ${primaryColor}; margin-bottom: 5px; }
+        .company-info { font-size: 11px; color: #444; line-height: 1.5; }
+        .doc-title { font-size: 20px; font-weight: bold; text-align: center; color: ${primaryColor}; margin: 15px 0; padding: 10px; background: #f0f4f8; }
+        .doc-subtitle { text-align: center; font-size: 13px; color: #555; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+        th { background: ${secondaryColor}; color: white; font-weight: bold; font-size: 10px; text-transform: uppercase; padding: 8px 12px; text-align: left; }
+        th.text-right, td.text-right { text-align: right; }
+        td { border-bottom: 1px solid #eee; }
+        .section-title { font-size: 13px; font-weight: bold; color: ${primaryColor}; padding: 8px 12px; background: #f0f4f8; border-left: 4px solid ${secondaryColor}; margin: 16px 0 8px; }
+        .net-row td { background: ${primaryColor}; color: white; font-weight: bold; font-size: 13px; padding: 10px 12px; }
+        .footer { margin-top: 30px; font-size: 9px; color: #777; padding-top: 12px; border-top: 1px solid #ddd; text-align: center; }
+        .tagline { font-style: italic; color: ${primaryColor}; font-size: 12px; text-align: center; margin-top: 15px; padding-top: 12px; border-top: 1px solid #eee; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        ${logoUrl ? `<img src="${logoUrl}" class="logo-img" alt="Logo" />` : ''}
+        <div class="company-details">
+          <div class="company-name">${settings.company_name || 'MDDRC SDN BHD'}</div>
+          <div class="company-info">
+            ${settings.company_reg_no ? `(${settings.company_reg_no})` : ''}
+            ${settings.address_line1 ? ` &bull; ${settings.address_line1}` : ''}${settings.address_line2 ? `, ${settings.address_line2}` : ''}<br>
+            ${settings.city || ''}${settings.postcode ? ` ${settings.postcode}` : ''}${settings.state ? `, ${settings.state}` : ''}
+            ${settings.phone ? ` &bull; Tel: ${settings.phone}` : ''}${settings.email ? ` &bull; ${settings.email}` : ''}
+            ${headerCustomFields}
+          </div>
+        </div>
+      </div>
+
+      <div class="doc-title">PROFIT & LOSS STATEMENT — YEAR-OVER-YEAR COMPARISON</div>
+      <div class="doc-subtitle">${currentYear} vs ${prevYear}</div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width:35%;">Description</th>
+            <th class="text-right" style="width:18%;">${currentYear}</th>
+            <th class="text-right" style="width:18%;">${prevYear}</th>
+            <th class="text-right" style="width:16%;">Variance (RM)</th>
+            <th class="text-right" style="width:13%;">Variance (%)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${dividerRow('REVENUE')}
+          ${makeRow('Training Programme Income', curr.total_programme_income, prev.total_programme_income)}
+          ${makeRow('Other Income', curr.other_income, prev.other_income)}
+          ${makeRow('Total Revenue', curr.total_income, prev.total_income, { bold: true })}
+
+          ${dividerRow('DIRECT COSTS')}
+          ${makeRow('Total Direct Costs', curr.total_direct_costs, prev.total_direct_costs, { bold: true, inverse: true })}
+          ${makeRow('Gross Profit', curr.gross_profit, prev.gross_profit, { bold: true, highlight: true })}
+
+          ${dividerRow('OPERATING EXPENSES')}
+          ${makeRow('Payroll', curr.overhead?.payroll, prev.overhead?.payroll, { indent: true, inverse: true })}
+          ${makeRow('Petty Cash', curr.overhead?.petty_cash, prev.overhead?.petty_cash, { indent: true, inverse: true })}
+          ${makeRow('Other Expenses', curr.overhead?.manual, prev.overhead?.manual, { indent: true, inverse: true })}
+          ${makeRow('Total Operating Expenses', curr.overhead?.total, prev.overhead?.total, { bold: true, inverse: true })}
+
+          ${dividerRow('BOTTOM LINE')}
+          ${makeRow('Total Expenses', curr.total_expenses, prev.total_expenses, { bold: true, inverse: true })}
+          <tr class="net-row">
+            <td style="padding:10px 12px;">NET PROFIT</td>
+            <td class="text-right" style="padding:10px 12px;">${fmt(curr.net_profit)}</td>
+            <td class="text-right" style="padding:10px 12px;">${fmt(prev.net_profit)}</td>
+            <td class="text-right" style="padding:10px 12px;">${fmtPct(curr.net_profit, prev.net_profit).sign}${fmt(fmtPct(curr.net_profit, prev.net_profit).diff).replace('RM ','')}</td>
+            <td class="text-right" style="padding:10px 12px;">${fmtPct(curr.net_profit, prev.net_profit).sign}${fmtPct(curr.net_profit, prev.net_profit).pct}%</td>
+          </tr>
+        </tbody>
+      </table>
+
+      ${allProgNames.length > 0 ? `
+      <div class="section-title">PROGRAMME-WISE COMPARISON</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Programme</th>
+            <th class="text-right">${currentYear} Revenue</th>
+            <th class="text-right">${prevYear} Revenue</th>
+            <th class="text-right">Change</th>
+            <th class="text-right">${currentYear} Profit</th>
+            <th class="text-right">${prevYear} Profit</th>
+            <th class="text-right">Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${allProgNames.map(name => {
+            const c = currProgs.find(p => p.programme_name === name) || {};
+            const p = prevProgs.find(pp => pp.programme_name === name) || {};
+            const rv = fmtPct(c.income, p.income);
+            const pv = fmtPct(c.gross_profit, p.gross_profit);
+            return `<tr>
+              <td style="padding:5px 8px;font-size:10px;">${name || 'Other'}</td>
+              <td class="text-right" style="padding:5px 8px;font-size:10px;">${fmt(c.income)}</td>
+              <td class="text-right" style="padding:5px 8px;font-size:10px;color:#777;">${fmt(p.income)}</td>
+              <td class="text-right" style="padding:5px 8px;font-size:10px;color:${rv.diff >= 0 ? '#16a34a' : '#dc2626'};">${rv.sign}${rv.pct}%</td>
+              <td class="text-right" style="padding:5px 8px;font-size:10px;">${fmt(c.gross_profit)}</td>
+              <td class="text-right" style="padding:5px 8px;font-size:10px;color:#777;">${fmt(p.gross_profit)}</td>
+              <td class="text-right" style="padding:5px 8px;font-size:10px;color:${pv.diff >= 0 ? '#16a34a' : '#dc2626'};">${pv.sign}${pv.pct}%</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      ` : ''}
+
+      <div class="footer">
+        <p>This statement is system-generated by ${settings.company_name || 'MDDRC'} Training Management System.</p>
+        <p>Generated on: ${new Date().toLocaleString('en-MY')}</p>
+      </div>
+      <div class="tagline">"${tagline}"</div>
+
+      <script>window.onload = function() { setTimeout(function() { window.print(); }, 500); };</script>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+};
