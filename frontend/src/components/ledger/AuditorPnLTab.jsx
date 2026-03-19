@@ -54,8 +54,16 @@ const AuditorPnLTab = ({ selectedYear, companySettings }) => {
     setDrilldownOpen(true);
     try {
       let params = '';
-      if (filterMode === 'range' && dateFrom && dateTo) params = `date_from=${dateFrom}&date_to=${dateTo}`;
-      else params = `year=${selectedYear}`;
+      if (filterMode === 'range' && dateFrom && dateTo) {
+        params = `date_from=${dateFrom}&date_to=${dateTo}`;
+      } else if (filterMode === 'month' && filterMonth) {
+        const m = parseInt(filterMonth);
+        const start = `${selectedYear}-${String(m).padStart(2, '0')}-01`;
+        const end = m === 12 ? `${selectedYear}-12-31` : `${selectedYear}-${String(m + 1).padStart(2, '0')}-01`;
+        params = `date_from=${start}&date_to=${end}`;
+      } else {
+        params = `year=${selectedYear}`;
+      }
       const res = await axiosInstance.get(`/finance/pnl-journal/drilldown/${accountCode}?${params}`);
       setDrilldownData(res.data);
     } catch (err) {

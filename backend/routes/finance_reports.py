@@ -1161,6 +1161,33 @@ async def get_journal_based_pnl(
         if code not in coa_map:
             warnings.append(f"Account {code} used in journals but not in Chart of Accounts")
     
+    # Check for unbalanced entries
+    for je in journal_entries:
+        total_d = sum(float(l.get("debit", 0)) for l in je.get("lines", []))
+        total_c = sum(float(l.get("credit", 0)) for l in je.get("lines", []))
+        if abs(total_d - total_c) > 0.01:
+            warnings.append(f"Unbalanced journal {je.get('journal_no')}: DR {total_d} != CR {total_c}")
+    
+    return {
+        "period": period_label,
+        "date_from": start_date,
+        "date_to": end_date,
+        "posted_only": posted_only,
+        "journal_count": len(journal_entries),
+        "sections": sections,
+        "summary": {
+            "total_revenue": sections["revenue"]["total"],
+            "other_income": sections["other_income"]["total"],
+            "total_income": total_revenue,
+            "cost_of_sales": total_cos,
+            "gross_profit": gross_profit,
+            "gross_margin_pct": round((gross_profit / sections["revenue"]["total"] * 100), 2) if sections["revenue"]["total"] > 0 else 0,
+            "operating_expenses": total_opex,
+            "net_profit": net_profit,
+            "net_margin_pct": round((net_profit / total_revenue * 100), 2) if total_revenue > 0 else 0,
+        },
+        "warnings": warnings[:20],
+    }
 
 
 @router.get("/pnl-journal/export")
@@ -1261,34 +1288,6 @@ async def export_pnl_journal_excel(
     
     return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="PnL_{pnl_data["period"].replace(" ", "_")}.xlsx"'})
-
-    # Check for unbalanced entries
-    for je in journal_entries:
-        total_d = sum(float(l.get("debit", 0)) for l in je.get("lines", []))
-        total_c = sum(float(l.get("credit", 0)) for l in je.get("lines", []))
-        if abs(total_d - total_c) > 0.01:
-            warnings.append(f"Unbalanced journal {je.get('journal_no')}: DR {total_d} != CR {total_c}")
-    
-    return {
-        "period": period_label,
-        "date_from": start_date,
-        "date_to": end_date,
-        "posted_only": posted_only,
-        "journal_count": len(journal_entries),
-        "sections": sections,
-        "summary": {
-            "total_revenue": sections["revenue"]["total"],
-            "other_income": sections["other_income"]["total"],
-            "total_income": total_revenue,
-            "cost_of_sales": total_cos,
-            "gross_profit": gross_profit,
-            "gross_margin_pct": round((gross_profit / sections["revenue"]["total"] * 100), 2) if sections["revenue"]["total"] > 0 else 0,
-            "operating_expenses": total_opex,
-            "net_profit": net_profit,
-            "net_margin_pct": round((net_profit / total_revenue * 100), 2) if total_revenue > 0 else 0,
-        },
-        "warnings": warnings[:20],
-    }
 
 
 @router.get("/pnl-journal/drilldown/{account_code}")

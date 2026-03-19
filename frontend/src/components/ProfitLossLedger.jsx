@@ -602,6 +602,11 @@ const ProfitLossLedger = () => {
           />
         </TabsContent>
 
+        {/* Auditor P&L Tab */}
+        <TabsContent value="auditor-pnl">
+          <AuditorPnLTab selectedYear={selectedYear} companySettings={companySettings} />
+        </TabsContent>
+
         {/* Year-over-Year Comparison Tab */}
         <TabsContent value="yoy-comparison">
           <YoYComparisonTab
