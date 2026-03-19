@@ -32,6 +32,11 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 ## API Endpoints (Key)
 - `/api/auth/login` - User authentication
 - `/api/finance/invoices` - Invoice CRUD operations
+- `/api/finance/pnl-journal` - **NEW** Journal-based Auditor P&L endpoint
+- `/api/finance/pnl-journal/drilldown/{account_code}` - **NEW** Drilldown into P&L accounts
+- `/api/finance/pnl-journal/export` - **NEW** Export P&L to Excel
+- `/api/accounting/chart-of-accounts` - Unified COA source of truth
+- `/api/accounting/upgrade-coa` - COA migration endpoint
 - `/api/finance/session/{session_id}/additional-invoice` - Create linked invoices
 - `/api/marketing/quotations/{id}/download-pdf` - PDF generation with rich text
 - `/api/settings/indemnity-sections` - Admin-managed indemnity content
@@ -41,96 +46,86 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - `/api/marketing/leads` - Lead CRUD
 - `/api/notifications/settings` - Email notification settings CRUD
 - `/api/notifications/broadcast` - Send broadcast emails
-- `/api/notifications/broadcast-history` - Broadcast history
-- `/api/notifications/recipients` - Deduplicated staff recipients
-- `/api/notifications/events` - Available notification events
 - `/api/superadmin/dashboard` - Super Admin dashboard stats
 
 ## Current Status (Mar 2026)
 
-### Recently Completed (Mar 16, 2026)
-- ✅ **CEO P&L Multi-Invoice Fix** — Revenue now correctly captures ALL invoices for sessions with multiple invoices (was only showing the first). Fixed by using `invoice.session_id` directly instead of legacy `session.invoice_id` mapping.
-- ✅ **"undefined" Programme Name Fix** — Sessions with deleted/orphaned programmes now show their session name instead of "undefined". Added dynamic fallback for missing programmes.
-- ✅ **Journal Reference Improvement** — Expense journal entries now show invoice numbers (e.g., `TF-INV/MDDRC/2026/01/0001`) instead of cryptic UUIDs (`TF-eabe85db`), making it easy to trace expenses to invoices.
-- ✅ **Pay Advice Generation Fix** — Fixed duplicate route conflict where stub endpoints in `routes/hr.py` intercepted requests before the full implementation in `server.py`. Bulk generate now properly creates pay advice for all staff.
-- ✅ **Calendar View for All Staff** — All sessions visible to all roles
-- ✅ **Marketing "My Sessions" Tab** — Read-only view with current/past toggle
-- ✅ **Smart Email Dispatcher** — Complete contextual email routing
-  - Core `send_smart_notification()` function with TO/CC/REPLY-TO support
-  - 14 event-specific notification functions with hardcoded routing rules:
-    - Quotation for Approval → TO: Admin | REPLY-TO: Marketer
-    - Quotation Approved → TO: Marketer | CC: Admin
-    - Quotation Rejected → TO: Marketer
-    - Quotation Sent to Client → TO: Client | CC: Admin | REPLY-TO: Marketer
-    - Quotation Accepted → TO: Admin | CC: Finance
-    - Quotation Declined → TO: Admin
-    - Discount Request → TO: Admin | REPLY-TO: Marketer
-    - Invoice Issued → TO: Client contact | CC: Admin + Finance
-    - Payment Received → TO: Admin + Finance
-    - Session Completed → TO: Admin | CC: Coordinator + Trainers
-    - New Lead → TO: Admin
-    - Lead Stage Change → TO: Admin
-    - Lead Won → TO: Admin | CC: Finance
-    - Lead Lost → TO: Admin
-  - All email triggers wired into marketing, finance, and session routes
-  - Tested: 23/23 backend tests passed (iteration_19)
+### Recently Completed (Mar 19, 2026)
+- **3-Phase Finance Reporting Overhaul — COMPLETE**
+  - Phase A: Unified Chart of Accounts (46 accounts) with `statement_type` and `pnl_section` fields
+  - Phase B: New journal-based P&L endpoint (`/api/finance/pnl-journal`) with date filters, drill-down, Excel export
+  - Phase C: Auditor P&L tab in Finance Portal with summary cards, filter controls, drill-down dialog, print, Excel export
+  - Fixed critical bug: `pnl-journal` endpoint return statement was misplaced as dead code
+  - Added missing `<TabsContent>` for Auditor P&L in `ProfitLossLedger.jsx`
+  - Fixed drilldown month filter to correctly pass date range params
+  - All 14 backend tests passed, frontend verified (iteration_21)
 
-- ✅ **Email & Notifications System** — Full notification management
-  - Notification Rules: 10 configurable events with per-event toggle, role/staff/custom email recipients
-  - Broadcast/Greetings: Send emails to groups with attachment support
-  - Broadcast History: View sent broadcasts with recipient counts
-  - Resend integration (domain verification needed for external emails)
+### Previously Completed
+- CEO P&L Multi-Invoice Fix, Journal Reference Improvement
+- Pay Advice Generation Fix, Calendar View for All Staff
+- Marketing "My Sessions" Tab, Smart Email Dispatcher
+- Email & Notifications System, Auto-Lead for Returning Clients
+- Revenue Recognition Fix, Marketing Pipeline Month/Year Grouping
+- Excel Import/Export Refinement, Certificate Template Designer
+- Super Admin Portal, Credit Notes Month/Year Grouping
+- Fixed broken exports (Marketing CSV, Invoice Excel)
+- Payment recording and credit note flow overhaul
+- 2-decimal financial precision fix
+- Printable branded P&L statement (CEO view)
+- Year-over-Year Comparison tab
+- Print COA feature
+- Removed ~667 lines duplicate HR code from server.py
 
-- ✅ **Auto-Lead for Returning Clients**
-- ✅ **Revenue Recognition Fix** — Cash-basis (payment received)
-- ✅ **Marketing Pipeline Month/Year Grouping**
-- ✅ **Excel Import/Export Refinement** — 5-sheet template, raw marks, feedback
-- ✅ **Coordinator Session Visibility Bug Fix**
-- ✅ **Admin Session Mark Complete**
-- ✅ **Invoice Revert Status**
-- ✅ **Credit Notes Month/Year Grouping**
-- ✅ **Certificate Template Designer**
-- ✅ **Super Admin Portal**
-
-### Upcoming (P1)
+### Upcoming (P0/P1)
 - Trainer Contract Workflow — Generate & email freelance contract for trainers
 - `server.py` refactoring — Move remaining endpoints to modular route files
-- SaaS Monetization — Stripe integration for tiered subscription plans
 - Post-Training Evaluation System — Automated evaluation forms
 - Automated Certificate Generation Workflow
-- Native App Conversion — Capacitor with push notifications & camera
-- Privacy Policy Page — `/privacy-policy`
-- Collapsible UI tables (Payables, Users, Invoices)
+- SaaS Monetization — Stripe integration for tiered subscription plans
 
 ### Backlog (P2)
 - Journal entry "Unknown" descriptions fix
-- PDF data integrity fixes (valid_until date, names)
 - Payables Excel export verification
-- Client Portal for customers
-- Trainer Portal for trainers
+- Convert to Native App (Capacitor)
+- Privacy Policy Page
+- Client Portal / Trainer Portal
 - Enhanced Data Management tables with search/pagination
 - WYSIWYG PDF Template Editor
-- Collapsible table UI in Admin Dashboard (P3)
+- Collapsible table UI in Admin Dashboard
+- Cash Basis P&L report
 
 ## Architecture
 ```
 /app/
 ├── backend/
-│   ├── routes/          # Modular API routes
-│   │   ├── marketing.py        # Quotation + lead notifications wired
-│   │   ├── finance_invoices.py # Invoice issued notification wired
-│   │   ├── finance_payments.py # Payment received notification wired
-│   │   ├── sessions_new.py     # Session completed notification wired
-│   │   └── notifications.py    # Notification settings + broadcast
+│   ├── routes/
+│   │   ├── accounting.py          # COA source of truth, journal posting, migration
+│   │   ├── finance_reports.py     # Journal-based P&L, export, drilldown, subledgers, GL
+│   │   ├── finance_payments.py    # Payment recording, credit notes
+│   │   ├── finance_invoices.py    # Invoice CRUD, Excel export
+│   │   ├── marketing.py           # Quotation + lead notifications
+│   │   ├── sessions_new.py        # Session management
+│   │   ├── notifications.py       # Notification settings + broadcast
+│   │   └── hr.py                  # HR/Payroll routes
 │   ├── utils/
-│   │   └── email_notifications.py  # Smart email dispatcher (14 functions)
-│   ├── models/          # Pydantic models
-│   └── server.py        # Main FastAPI app
+│   │   └── email_notifications.py # Smart email dispatcher
+│   ├── models/                    # Pydantic models
+│   └── server.py                  # Main FastAPI app (still contains tech debt)
 └── frontend/
     └── src/
-        ├── components/  # UI components
-        ├── pages/       # Dashboard pages
-        └── utils/       # Print utilities
+        ├── components/
+        │   ├── ledger/
+        │   │   ├── AuditorPnLTab.jsx     # Journal-based P&L with drill-down
+        │   │   ├── CEOPnLTab.jsx         # Programme-based P&L
+        │   │   ├── YoYComparisonTab.jsx  # Year-over-year comparison
+        │   │   └── GeneralLedgerTab.jsx  # General Ledger view
+        │   ├── finance/                  # Finance sub-components
+        │   └── ProfitLossLedger.jsx      # Container for all P&L tabs
+        ├── pages/
+        │   └── FinanceDashboard.jsx      # Finance Portal page
+        └── utils/
+            ├── printPnL.js               # Print P&L utility
+            └── printReceipt.js           # Print receipt utility
 ```
 
 ## Test Credentials
