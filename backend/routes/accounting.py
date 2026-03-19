@@ -1127,9 +1127,9 @@ async def post_payroll(
     
     payslip_id = payslip.get("id")
     
-    # Get payslip amounts
+    # Get payslip amounts (nett_pay with double-t is the field name in payslips collection)
     gross_salary = round_money(float(payslip.get("gross_salary") or payslip.get("basic_salary") or 0))
-    net_pay = round_money(float(payslip.get("net_pay") or 0))
+    net_pay = round_money(float(payslip.get("nett_pay") or payslip.get("net_pay") or 0))
     
     epf_employee = round_money(float(payslip.get("epf_employee") or 0))
     epf_employer = round_money(float(payslip.get("epf_employer") or 0))
@@ -1147,7 +1147,7 @@ async def post_payroll(
     month = payslip.get("month", 1)
     payroll_date = f"{year}-{str(month).zfill(2)}-28"  # Use 28th as standard payroll date
     
-    employee_name = payslip.get("employee_name", "Unknown Employee")
+    employee_name = payslip.get("full_name") or payslip.get("employee_name") or "Unknown Employee"
     
     lines = []
     

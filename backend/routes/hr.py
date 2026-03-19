@@ -500,7 +500,7 @@ async def get_payslips(staff_id: Optional[str] = None, period_id: Optional[str] 
 
 @router.post("/payslips/generate")
 async def generate_payslip(data: dict, current_user: User = Depends(get_current_user)):
-    """Generate a payslip for a staff member"""
+    """Generate a payslip for a staff member with full details, YTD, and journal posting"""
     if current_user.role not in ["admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -521,60 +521,148 @@ async def generate_payslip(data: dict, current_user: User = Depends(get_current_
     # Check existing
     existing = await db.payslips.find_one({"staff_id": staff_id, "year": year, "month": month})
     if existing:
-        raise HTTPException(status_code=400, detail="Payslip already exists for this period")
+        raise HTTPException(status_code=400, detail="Payslip already exists for this period. Delete it first to regenerate.")
     
-    # Calculate age and statutory
+    # Check if payroll period is closed
+    period = await db.payroll_periods.find_one({"year": year, "month": month}, {"_id": 0})
+    if period and period.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="Cannot generate payslip for closed period")
+    
+    # Calculate age
     age = calculate_age_from_nric(nric, f"{year}-{month:02d}-01") if nric else 30
     
-    basic_salary = data.get("basic_salary") or staff.get("basic_salary", 0)
-    total_allowances = sum([
-        data.get("housing_allowance") or staff.get("housing_allowance", 0),
-        data.get("transport_allowance") or staff.get("transport_allowance", 0),
-        data.get("meal_allowance") or staff.get("meal_allowance", 0),
-        data.get("phone_allowance") or staff.get("phone_allowance", 0),
-        data.get("other_allowance") or staff.get("other_allowance", 0)
-    ])
+    # Earnings - use provided values or fall back to staff defaults
+    basic_salary = data.get("basic_salary") if data.get("basic_salary") is not None else staff.get("basic_salary", 0)
+    housing_allowance = data.get("housing_allowance") if data.get("housing_allowance") is not None else staff.get("housing_allowance", 0)
+    transport_allowance = data.get("transport_allowance") if data.get("transport_allowance") is not None else staff.get("transport_allowance", 0)
+    meal_allowance = data.get("meal_allowance") if data.get("meal_allowance") is not None else staff.get("meal_allowance", 0)
+    phone_allowance = data.get("phone_allowance") if data.get("phone_allowance") is not None else staff.get("phone_allowance", 0)
+    other_allowance = data.get("other_allowance") if data.get("other_allowance") is not None else staff.get("other_allowance", 0)
+    total_allowances = housing_allowance + transport_allowance + meal_allowance + phone_allowance + other_allowance
     
     overtime = data.get("overtime", 0)
     bonus = data.get("bonus", 0)
-    gross_salary = basic_salary + total_allowances + overtime + bonus
+    commission = data.get("commission", 0)
+    other_earnings = data.get("other_earnings", 0)
     
+    gross_salary = basic_salary + total_allowances + overtime + bonus + commission + other_earnings
+    
+    # Statutory calculations
     epf = calculate_epf(basic_salary, age, staff.get("employee_epf_rate"), staff.get("employer_epf_rate"))
     socso = calculate_socso(gross_salary, age)
     eis = calculate_eis(gross_salary, age)
     
-    total_deductions = epf["employee_amount"] + socso["employee_amount"] + eis["employee_amount"] + data.get("pcb", 0)
-    nett_pay = gross_salary - total_deductions
+    # Allow overriding auto-calculated values
+    epf_employee = data.get("epf_employee") if data.get("epf_employee") is not None else epf["employee_amount"]
+    epf_employer = data.get("epf_employer") if data.get("epf_employer") is not None else epf["employer_amount"]
+    socso_employee = data.get("socso_employee") if data.get("socso_employee") is not None else socso["employee_amount"]
+    socso_employer = data.get("socso_employer") if data.get("socso_employer") is not None else socso["employer_amount"]
+    eis_employee = data.get("eis_employee") if data.get("eis_employee") is not None else eis["employee_amount"]
+    eis_employer = data.get("eis_employer") if data.get("eis_employer") is not None else eis["employer_amount"]
+    
+    pcb = data.get("pcb", 0)
+    loan_deduction = data.get("loan_deduction", 0)
+    other_deductions = data.get("other_deductions", 0)
+    
+    total_deductions = round(epf_employee + socso_employee + eis_employee + pcb + loan_deduction + other_deductions, 2)
+    nett_pay = round(gross_salary - total_deductions, 2)
+    
+    # YTD calculation
+    ytd_data = await db.payslips.aggregate([
+        {"$match": {"staff_id": staff_id, "year": year, "month": {"$lt": month}}},
+        {"$group": {
+            "_id": None,
+            "ytd_gross": {"$sum": "$gross_salary"},
+            "ytd_epf_employee": {"$sum": "$epf_employee"},
+            "ytd_epf_employer": {"$sum": "$epf_employer"},
+            "ytd_socso_employee": {"$sum": "$socso_employee"},
+            "ytd_socso_employer": {"$sum": "$socso_employer"},
+            "ytd_eis_employee": {"$sum": "$eis_employee"},
+            "ytd_eis_employer": {"$sum": "$eis_employer"},
+            "ytd_pcb": {"$sum": "$pcb"},
+            "ytd_nett": {"$sum": "$nett_pay"}
+        }}
+    ]).to_list(1)
+    ytd = ytd_data[0] if ytd_data else {}
     
     payslip = {
         "id": str(uuid.uuid4()),
         "staff_id": staff_id,
+        "period_id": period["id"] if period else None,
         "year": year,
         "month": month,
         "period_name": f"{year}-{str(month).zfill(2)}",
+        
+        # Staff info snapshot
+        "employee_id": staff.get("employee_id"),
         "full_name": staff.get("full_name"),
         "nric": nric,
+        "designation": staff.get("designation"),
+        "department": staff.get("department"),
+        "epf_number": staff.get("epf_number"),
+        "socso_number": staff.get("socso_number"),
+        "tax_number": staff.get("tax_number"),
+        "bank_name": staff.get("bank_name"),
+        "bank_account": staff.get("bank_account"),
+        "age": age,
+        
+        # Earnings
         "basic_salary": basic_salary,
+        "housing_allowance": housing_allowance,
+        "transport_allowance": transport_allowance,
+        "meal_allowance": meal_allowance,
+        "phone_allowance": phone_allowance,
+        "other_allowance": other_allowance,
         "total_allowances": total_allowances,
         "overtime": overtime,
         "bonus": bonus,
+        "commission": commission,
+        "other_earnings": other_earnings,
         "gross_salary": gross_salary,
-        "epf_employee": epf["employee_amount"],
-        "epf_employer": epf["employer_amount"],
-        "socso_employee": socso["employee_amount"],
-        "socso_employer": socso["employer_amount"],
-        "eis_employee": eis["employee_amount"],
-        "eis_employer": eis["employer_amount"],
-        "pcb": data.get("pcb", 0),
+        
+        # Deductions
+        "epf_employee": epf_employee,
+        "epf_employer": epf_employer,
+        "epf_employee_rate": epf["employee_rate"],
+        "epf_employer_rate": epf["employer_rate"],
+        "socso_employee": socso_employee,
+        "socso_employer": socso_employer,
+        "eis_employee": eis_employee,
+        "eis_employer": eis_employer,
+        "pcb": pcb,
+        "loan_deduction": loan_deduction,
+        "other_deductions": other_deductions,
         "total_deductions": total_deductions,
+        
         "nett_pay": nett_pay,
+        
+        # YTD (including current month)
+        "ytd_gross": round(ytd.get("ytd_gross", 0) + gross_salary, 2),
+        "ytd_epf_employee": round(ytd.get("ytd_epf_employee", 0) + epf_employee, 2),
+        "ytd_epf_employer": round(ytd.get("ytd_epf_employer", 0) + epf_employer, 2),
+        "ytd_socso_employee": round(ytd.get("ytd_socso_employee", 0) + socso_employee, 2),
+        "ytd_socso_employer": round(ytd.get("ytd_socso_employer", 0) + socso_employer, 2),
+        "ytd_eis_employee": round(ytd.get("ytd_eis_employee", 0) + eis_employee, 2),
+        "ytd_eis_employer": round(ytd.get("ytd_eis_employer", 0) + eis_employer, 2),
+        "ytd_pcb": round(ytd.get("ytd_pcb", 0) + pcb, 2),
+        "ytd_nett": round(ytd.get("ytd_nett", 0) + nett_pay, 2),
+        
         "is_locked": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "created_by": current_user.email
     }
     
     await db.payslips.insert_one(payslip)
-    return {"id": payslip["id"], "message": "Payslip generated", "nett_pay": nett_pay}
+    
+    # Post payroll journal entry
+    try:
+        from routes.accounting import post_payroll
+        await post_payroll(payslip, user_id=current_user.id, user_name=current_user.full_name)
+    except Exception as e:
+        import logging
+        logging.warning(f"Failed to post payroll journal entry: {e}")
+    
+    return {"id": payslip["id"], "message": "Payslip generated successfully", "nett_pay": nett_pay}
 
 
 @router.get("/payslips/{payslip_id}")
@@ -591,7 +679,7 @@ async def get_payslip(payslip_id: str, current_user: User = Depends(get_current_
 
 @router.delete("/payslips/{payslip_id}")
 async def delete_payslip(payslip_id: str, current_user: User = Depends(get_current_user)):
-    """Delete a payslip"""
+    """Delete a payslip and void its associated journal entry"""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only Admin can delete payslips")
     
@@ -599,10 +687,157 @@ async def delete_payslip(payslip_id: str, current_user: User = Depends(get_curre
     if not payslip:
         raise HTTPException(status_code=404, detail="Payslip not found")
     if payslip.get("is_locked"):
-        raise HTTPException(status_code=400, detail="Cannot delete locked payslip")
+        raise HTTPException(status_code=400, detail="Cannot delete locked payslip. Period is closed.")
+    
+    # Void associated journal entry
+    try:
+        journal = await db.journal_entries.find_one({
+            "source_module": "payroll",
+            "source_id": payslip_id,
+            "status": {"$ne": "voided"}
+        })
+        if journal:
+            now = datetime.now(timezone.utc).isoformat()
+            await db.journal_entries.update_one(
+                {"id": journal["id"]},
+                {"$set": {
+                    "status": "voided",
+                    "voided_by": current_user.id,
+                    "voided_by_name": current_user.full_name,
+                    "voided_at": now,
+                    "void_reason": f"Payslip deleted by {current_user.full_name}"
+                }}
+            )
+    except Exception as e:
+        import logging
+        logging.warning(f"Failed to void payroll journal entry: {e}")
     
     await db.payslips.delete_one({"id": payslip_id})
-    return {"message": "Payslip deleted"}
+    return {"message": "Payslip and associated journal entry deleted"}
+
+
+@router.put("/payslips/{payslip_id}")
+async def update_payslip(payslip_id: str, data: dict, current_user: User = Depends(get_current_user)):
+    """Update a payslip - edit amounts, refresh staff info, recalculate, and re-post journal"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Finance can edit payslips")
+    
+    payslip = await db.payslips.find_one({"id": payslip_id}, {"_id": 0})
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+    
+    if payslip.get("is_locked"):
+        raise HTTPException(status_code=400, detail="Cannot edit locked payslip. Period is closed.")
+    
+    # If refresh_staff_info requested, pull latest from hr_staff
+    if data.get("refresh_staff_info"):
+        staff = await db.hr_staff.find_one({"id": payslip["staff_id"]}, {"_id": 0})
+        if staff:
+            payslip["designation"] = staff.get("designation", "")
+            payslip["department"] = staff.get("department", "")
+            payslip["epf_number"] = staff.get("epf_number", "")
+            payslip["socso_number"] = staff.get("socso_number", "")
+            payslip["tax_number"] = staff.get("tax_number", "")
+            payslip["bank_name"] = staff.get("bank_name", "")
+            payslip["bank_account"] = staff.get("bank_account", "")
+            payslip["full_name"] = staff.get("full_name", payslip.get("full_name", ""))
+            nric = staff.get("nric", "")
+            if not nric and staff.get("user_id"):
+                user = await db.users.find_one({"id": staff["user_id"]}, {"_id": 0, "id_number": 1})
+                nric = user.get("id_number", "") if user else ""
+            payslip["nric"] = nric or payslip.get("nric", "")
+    
+    # Update editable fields
+    editable_fields = [
+        "basic_salary", "housing_allowance", "transport_allowance", "meal_allowance",
+        "phone_allowance", "other_allowance", "overtime", "bonus", "commission",
+        "other_earnings", "epf_employee", "epf_employer", "socso_employee",
+        "socso_employer", "eis_employee", "eis_employer", "pcb",
+        "loan_deduction", "other_deductions"
+    ]
+    for field in editable_fields:
+        if field in data and data[field] is not None:
+            payslip[field] = float(data[field])
+    
+    # Recalculate derived values
+    basic = float(payslip.get("basic_salary", 0))
+    total_allowances = sum(float(payslip.get(f, 0)) for f in [
+        "housing_allowance", "transport_allowance", "meal_allowance",
+        "phone_allowance", "other_allowance"
+    ])
+    overtime_val = float(payslip.get("overtime", 0))
+    bonus_val = float(payslip.get("bonus", 0))
+    commission_val = float(payslip.get("commission", 0))
+    other_earnings_val = float(payslip.get("other_earnings", 0))
+    
+    gross_salary = round(basic + total_allowances + overtime_val + bonus_val + commission_val + other_earnings_val, 2)
+    
+    total_deductions = round(sum(float(payslip.get(f, 0)) for f in [
+        "epf_employee", "socso_employee", "eis_employee", "pcb",
+        "loan_deduction", "other_deductions"
+    ]), 2)
+    
+    nett_pay = round(gross_salary - total_deductions, 2)
+    
+    payslip["total_allowances"] = round(total_allowances, 2)
+    payslip["gross_salary"] = gross_salary
+    payslip["total_deductions"] = total_deductions
+    payslip["nett_pay"] = nett_pay
+    
+    # Recalculate YTD
+    year = payslip.get("year")
+    month = payslip.get("month")
+    ytd_data = await db.payslips.aggregate([
+        {"$match": {"staff_id": payslip["staff_id"], "year": year, "month": {"$lt": month}, "id": {"$ne": payslip_id}}},
+        {"$group": {
+            "_id": None,
+            "ytd_gross": {"$sum": "$gross_salary"},
+            "ytd_epf_employee": {"$sum": "$epf_employee"},
+            "ytd_epf_employer": {"$sum": "$epf_employer"},
+            "ytd_pcb": {"$sum": "$pcb"},
+            "ytd_nett": {"$sum": "$nett_pay"}
+        }}
+    ]).to_list(1)
+    ytd = ytd_data[0] if ytd_data else {}
+    payslip["ytd_gross"] = round(ytd.get("ytd_gross", 0) + gross_salary, 2)
+    payslip["ytd_epf_employee"] = round(ytd.get("ytd_epf_employee", 0) + float(payslip.get("epf_employee", 0)), 2)
+    payslip["ytd_epf_employer"] = round(ytd.get("ytd_epf_employer", 0) + float(payslip.get("epf_employer", 0)), 2)
+    payslip["ytd_pcb"] = round(ytd.get("ytd_pcb", 0) + float(payslip.get("pcb", 0)), 2)
+    payslip["ytd_nett"] = round(ytd.get("ytd_nett", 0) + nett_pay, 2)
+    
+    payslip["updated_at"] = datetime.now(timezone.utc).isoformat()
+    payslip["updated_by"] = current_user.email
+    
+    # Update in DB
+    await db.payslips.update_one({"id": payslip_id}, {"$set": payslip})
+    
+    # Void old journal entry and create new one
+    try:
+        from routes.accounting import post_payroll
+        old_journal = await db.journal_entries.find_one({
+            "source_module": "payroll",
+            "source_id": payslip_id,
+            "status": {"$ne": "voided"}
+        })
+        if old_journal:
+            now = datetime.now(timezone.utc).isoformat()
+            await db.journal_entries.update_one(
+                {"id": old_journal["id"]},
+                {"$set": {
+                    "status": "voided",
+                    "voided_by": current_user.id,
+                    "voided_by_name": current_user.full_name,
+                    "voided_at": now,
+                    "void_reason": f"Payslip edited by {current_user.full_name}"
+                }}
+            )
+        await post_payroll(payslip, user_id=current_user.id, user_name=current_user.full_name)
+    except Exception as e:
+        import logging
+        logging.warning(f"Failed to update payroll journal entry: {e}")
+    
+    return {"message": "Payslip updated successfully", "nett_pay": nett_pay}
+
 
 
 # =====================================================

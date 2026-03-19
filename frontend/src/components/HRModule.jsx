@@ -58,6 +58,9 @@ const HRModule = () => {
   });
   const [viewPayslip, setViewPayslip] = useState(null);
   const [printPayslip, setPrintPayslip] = useState(null);
+  const [editPayslipOpen, setEditPayslipOpen] = useState(false);
+  const [editPayslipData, setEditPayslipData] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
   
   // Pay advice state
   const [payAdviceList, setPayAdviceList] = useState([]);
@@ -354,14 +357,71 @@ const HRModule = () => {
   };
 
   const handleDeletePayslip = async (id) => {
-    if (!window.confirm('Delete this payslip?')) return;
+    if (!window.confirm('Delete this payslip and its journal entry?')) return;
     try {
       await axiosInstance.delete(`/hr/payslips/${id}`);
-      toast.success('Payslip deleted');
+      toast.success('Payslip and journal entry deleted');
       loadData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to delete payslip');
     }
+  };
+
+  const openEditPayslip = (ps) => {
+    setEditPayslipData({ ...ps });
+    setEditPayslipOpen(true);
+  };
+
+  const handleEditPayslipSave = async () => {
+    if (!editPayslipData) return;
+    setEditSaving(true);
+    try {
+      const payload = {
+        basic_salary: editPayslipData.basic_salary,
+        housing_allowance: editPayslipData.housing_allowance,
+        transport_allowance: editPayslipData.transport_allowance,
+        meal_allowance: editPayslipData.meal_allowance,
+        phone_allowance: editPayslipData.phone_allowance,
+        other_allowance: editPayslipData.other_allowance,
+        overtime: editPayslipData.overtime,
+        bonus: editPayslipData.bonus,
+        commission: editPayslipData.commission,
+        other_earnings: editPayslipData.other_earnings,
+        epf_employee: editPayslipData.epf_employee,
+        epf_employer: editPayslipData.epf_employer,
+        socso_employee: editPayslipData.socso_employee,
+        socso_employer: editPayslipData.socso_employer,
+        eis_employee: editPayslipData.eis_employee,
+        eis_employer: editPayslipData.eis_employer,
+        pcb: editPayslipData.pcb,
+        loan_deduction: editPayslipData.loan_deduction,
+        other_deductions: editPayslipData.other_deductions,
+      };
+      await axiosInstance.put(`/hr/payslips/${editPayslipData.id}`, payload);
+      toast.success('Payslip updated and journal entry re-posted');
+      setEditPayslipOpen(false);
+      setEditPayslipData(null);
+      loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update payslip');
+    }
+    setEditSaving(false);
+  };
+
+  const handleRefreshStaffInfo = async () => {
+    if (!editPayslipData) return;
+    setEditSaving(true);
+    try {
+      await axiosInstance.put(`/hr/payslips/${editPayslipData.id}`, { refresh_staff_info: true });
+      toast.success('Staff info refreshed on payslip');
+      // Reload the payslip data
+      const res = await axiosInstance.get(`/hr/payslips/${editPayslipData.id}`);
+      setEditPayslipData(res.data);
+      loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to refresh staff info');
+    }
+    setEditSaving(false);
   };
 
   // Pay Advice
@@ -637,11 +697,16 @@ const HRModule = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         {ps.is_locked && <Lock className="w-4 h-4 text-gray-400" />}
-                        <Button size="sm" variant="outline" onClick={() => setViewPayslip(ps)}>
+                        <Button size="sm" variant="outline" onClick={() => setViewPayslip(ps)} data-testid={`view-payslip-${ps.id}`}>
                           <Eye className="w-4 h-4 mr-1" /> View
                         </Button>
                         {!ps.is_locked && (
-                          <Button size="sm" variant="destructive" onClick={() => handleDeletePayslip(ps.id)}>
+                          <Button size="sm" variant="outline" onClick={() => openEditPayslip(ps)} data-testid={`edit-payslip-${ps.id}`}>
+                            <Edit className="w-4 h-4 mr-1" /> Edit
+                          </Button>
+                        )}
+                        {!ps.is_locked && (
+                          <Button size="sm" variant="destructive" onClick={() => handleDeletePayslip(ps.id)} data-testid={`delete-payslip-${ps.id}`}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         )}
@@ -1130,6 +1195,172 @@ const HRModule = () => {
                   <div>YTD EPF (Employer): RM {viewPayslip.ytd_epf_employer?.toLocaleString()}</div>
                   <div>YTD PCB: RM {viewPayslip.ytd_pcb?.toLocaleString()}</div>
                 </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Payslip Dialog */}
+      <Dialog open={editPayslipOpen} onOpenChange={(open) => { if (!open) { setEditPayslipOpen(false); setEditPayslipData(null); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Payslip</DialogTitle>
+            <DialogDescription>
+              {editPayslipData?.full_name} — {editPayslipData ? `${getMonthName(editPayslipData.month)} ${editPayslipData.year}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          {editPayslipData && (
+            <div className="space-y-4 py-2">
+              {/* Staff Info Section */}
+              <div className="p-3 bg-gray-50 rounded border">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="font-semibold text-sm">Staff Info (snapshot)</h4>
+                  <Button size="sm" variant="outline" onClick={handleRefreshStaffInfo} disabled={editSaving} data-testid="refresh-staff-info-btn">
+                    <RefreshCw className={`w-3 h-3 mr-1 ${editSaving ? 'animate-spin' : ''}`} /> Refresh from Staff Record
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-xs text-gray-600">
+                  <div>Position: <strong>{editPayslipData.designation || '-'}</strong></div>
+                  <div>Department: <strong>{editPayslipData.department || '-'}</strong></div>
+                  <div>EPF No: <strong>{editPayslipData.epf_number || '-'}</strong></div>
+                  <div>SOCSO No: <strong>{editPayslipData.socso_number || '-'}</strong></div>
+                  <div>Bank: <strong>{editPayslipData.bank_name || '-'}</strong></div>
+                  <div>Account: <strong>{editPayslipData.bank_account || '-'}</strong></div>
+                </div>
+              </div>
+
+              {/* Earnings */}
+              <div>
+                <h4 className="font-semibold text-sm text-green-600 mb-2">Earnings</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Basic Salary</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.basic_salary || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, basic_salary: parseFloat(e.target.value) || 0 })} data-testid="edit-basic-salary" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Housing Allowance</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.housing_allowance || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, housing_allowance: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Transport Allowance</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.transport_allowance || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, transport_allowance: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Meal Allowance</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.meal_allowance || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, meal_allowance: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Phone Allowance</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.phone_allowance || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, phone_allowance: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Other Allowance</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.other_allowance || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, other_allowance: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Overtime</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.overtime || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, overtime: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Bonus</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.bonus || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, bonus: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Commission</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.commission || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, commission: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Other Earnings</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.other_earnings || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, other_earnings: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Deductions */}
+              <div>
+                <h4 className="font-semibold text-sm text-red-600 mb-2">Deductions</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">EPF Employee</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.epf_employee || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, epf_employee: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">EPF Employer</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.epf_employer || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, epf_employer: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">SOCSO Employee</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.socso_employee || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, socso_employee: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">SOCSO Employer</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.socso_employer || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, socso_employer: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">EIS Employee</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.eis_employee || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, eis_employee: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">EIS Employer</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.eis_employer || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, eis_employer: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">PCB / Income Tax</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.pcb || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, pcb: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Loan Deduction</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.loan_deduction || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, loan_deduction: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Other Deductions</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.other_deductions || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, other_deductions: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Live calculation preview */}
+              <div className="p-3 bg-green-50 rounded border border-green-200">
+                <div className="flex justify-between text-sm">
+                  <span>Gross Salary:</span>
+                  <span className="font-semibold">RM {((editPayslipData.basic_salary || 0) + (editPayslipData.housing_allowance || 0) + (editPayslipData.transport_allowance || 0) + (editPayslipData.meal_allowance || 0) + (editPayslipData.phone_allowance || 0) + (editPayslipData.other_allowance || 0) + (editPayslipData.overtime || 0) + (editPayslipData.bonus || 0) + (editPayslipData.commission || 0) + (editPayslipData.other_earnings || 0)).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-sm text-red-600">
+                  <span>Total Deductions:</span>
+                  <span>- RM {((editPayslipData.epf_employee || 0) + (editPayslipData.socso_employee || 0) + (editPayslipData.eis_employee || 0) + (editPayslipData.pcb || 0) + (editPayslipData.loan_deduction || 0) + (editPayslipData.other_deductions || 0)).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between text-base font-bold text-green-700 border-t pt-1 mt-1">
+                  <span>Nett Pay:</span>
+                  <span>RM {(((editPayslipData.basic_salary || 0) + (editPayslipData.housing_allowance || 0) + (editPayslipData.transport_allowance || 0) + (editPayslipData.meal_allowance || 0) + (editPayslipData.phone_allowance || 0) + (editPayslipData.other_allowance || 0) + (editPayslipData.overtime || 0) + (editPayslipData.bonus || 0) + (editPayslipData.commission || 0) + (editPayslipData.other_earnings || 0)) - ((editPayslipData.epf_employee || 0) + (editPayslipData.socso_employee || 0) + (editPayslipData.eis_employee || 0) + (editPayslipData.pcb || 0) + (editPayslipData.loan_deduction || 0) + (editPayslipData.other_deductions || 0))).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => { setEditPayslipOpen(false); setEditPayslipData(null); }}>Cancel</Button>
+                <Button onClick={handleEditPayslipSave} disabled={editSaving} className="bg-blue-600 hover:bg-blue-700" data-testid="save-edit-payslip-btn">
+                  {editSaving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
+                  Save & Re-post Journal
+                </Button>
               </div>
             </div>
           )}
