@@ -29,6 +29,10 @@ class PaymentCreate(BaseModel):
     payment_method: str
     reference_number: Optional[str] = None
     notes: Optional[str] = None
+    create_credit_note: Optional[bool] = False
+    deduction_percentage: Optional[float] = None
+    deduction_amount: Optional[float] = None
+    deduction_reason: Optional[str] = None
 
 
 class BackdateCreditNoteRequest(BaseModel):
@@ -158,6 +162,76 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     await db.payments.insert_one(payment)
     payment.pop("_id", None)
     
+    # ============ CREATE CREDIT NOTE IF REQUESTED ============
+    credit_note_created = None
+    if payment_data.create_credit_note and (payment_data.deduction_percentage or payment_data.deduction_amount):
+        try:
+            if payment_data.deduction_amount and payment_data.deduction_amount > 0:
+                deduction_amount = payment_data.deduction_amount
+                deduction_percentage = (deduction_amount / invoice.get("total_amount", 1)) * 100
+            elif payment_data.deduction_percentage and payment_data.deduction_percentage > 0:
+                deduction_percentage = payment_data.deduction_percentage
+                deduction_amount = (invoice.get("total_amount", 0) * deduction_percentage) / 100
+            else:
+                deduction_amount = 0
+                deduction_percentage = 0
+            
+            if deduction_amount > 0:
+                now = get_malaysia_time()
+                year = now.year
+                month = now.month
+                last_cn = await db.credit_notes.find_one(
+                    {"cn_number": {"$regex": f"^CN/MDDRC/{year}/{month:02d}/"}},
+                    sort=[("cn_number", -1)]
+                )
+                if last_cn:
+                    last_num = int(last_cn["cn_number"].split("/")[-1])
+                    cn_number = f"CN/MDDRC/{year}/{month:02d}/{str(last_num + 1).zfill(4)}"
+                else:
+                    cn_number = f"CN/MDDRC/{year}/{month:02d}/0001"
+                
+                credit_note = {
+                    "id": str(uuid.uuid4()),
+                    "cn_number": cn_number,
+                    "invoice_id": payment_data.invoice_id,
+                    "invoice_number": invoice.get("invoice_number"),
+                    "session_id": invoice.get("session_id"),
+                    "session_name": invoice.get("session_name") or invoice.get("programme_name"),
+                    "company_id": invoice.get("company_id"),
+                    "company_name": invoice.get("bill_to_name") or invoice.get("company_name"),
+                    "bill_to_name": invoice.get("bill_to_name"),
+                    "bill_to_address": invoice.get("bill_to_address"),
+                    "reason": payment_data.deduction_reason or "HRDCorp Levy Deduction",
+                    "description": f"{deduction_percentage:.1f}% deduction",
+                    "base_amount": invoice.get("total_amount", 0),
+                    "percentage": deduction_percentage,
+                    "amount": round(deduction_amount, 2),
+                    "status": "draft",
+                    "created_by": current_user.id,
+                    "created_at": get_malaysia_time().isoformat(),
+                    "cn_date": payment_data.payment_date
+                }
+                
+                await db.credit_notes.insert_one(credit_note)
+                credit_note.pop("_id", None)
+                credit_note_created = credit_note
+                
+                await log_finance_action("credit_note", credit_note["id"], "created", current_user.id, after_value=credit_note)
+                
+                # Auto-post credit note to journal
+                try:
+                    await post_credit_note_issued(
+                        credit_note=credit_note,
+                        invoice=invoice,
+                        user_id=current_user.id,
+                        user_name=current_user.full_name
+                    )
+                except Exception as e:
+                    print(f"Credit note accounting auto-post error: {str(e)}")
+        except Exception as e:
+            print(f"Error creating credit note: {e}")
+    # ============ END CREDIT NOTE ============
+    
     all_payments = await db.payments.find({"invoice_id": payment_data.invoice_id}, {"_id": 0}).to_list(100)
     total_paid = sum(p.get("amount", 0) for p in all_payments)
     
@@ -189,7 +263,10 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
         print(f"Payment notification error: {str(e)}")
     # ============ END EMAIL NOTIFICATION ============
     
-    return payment
+    result = {**payment}
+    if credit_note_created:
+        result["credit_note"] = credit_note_created
+    return result
 
 
 @router.get("/payments/{payment_id}/receipt")

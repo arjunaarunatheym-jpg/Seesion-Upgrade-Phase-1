@@ -3,19 +3,38 @@
  * Follows the same branding pattern as printInvoice.js
  */
 
-export const printReceipt = async (payment, companySettings) => {
+export const printReceipt = async (payment, companySettings, axiosInstance) => {
   const settings = companySettings || {};
   
   const primaryColor = settings.primary_color || '#1a365d';
   const secondaryColor = settings.secondary_color || '#4472C4';
   const tagline = settings.tagline || 'Towards a Nation of Safe Drivers';
   
-  // Build logo URL
+  // Build logo URL - use backend URL for API-served logos
   let logoUrl = '';
   if (settings.logo_url) {
-    logoUrl = settings.logo_url.startsWith('http') 
-      ? settings.logo_url 
-      : `${window.location.origin}${settings.logo_url}`;
+    if (settings.logo_url.startsWith('http')) {
+      logoUrl = settings.logo_url;
+    } else {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || window.location.origin;
+      logoUrl = `${backendUrl}${settings.logo_url.startsWith('/') ? '' : '/'}${settings.logo_url}`;
+    }
+  }
+
+  // Fetch invoice data for bill_to info and credit notes
+  let billToName = payment.company_name || '-';
+  let creditNotes = [];
+  if (axiosInstance && payment.invoice_id) {
+    try {
+      const invRes = await axiosInstance.get(`/finance/invoices/${payment.invoice_id}`);
+      const inv = invRes.data;
+      billToName = inv.bill_to_name || inv.company_name || payment.company_name || '-';
+      // Fetch credit notes for this invoice
+      try {
+        const cnRes = await axiosInstance.get('/finance/credit-notes');
+        creditNotes = (cnRes.data || []).filter(cn => cn.invoice_id === payment.invoice_id);
+      } catch (e) { /* ignore */ }
+    } catch (e) { /* ignore */ }
   }
 
   const paymentMethodLabel = {
@@ -202,7 +221,7 @@ export const printReceipt = async (payment, companySettings) => {
       <div class="details-grid">
         <div class="detail-box">
           <div class="detail-label">Receipt For</div>
-          <div class="detail-value" style="font-weight: bold;">${payment.company_name || '-'}</div>
+          <div class="detail-value" style="font-weight: bold;">${billToName}</div>
         </div>
         <div class="detail-box">
           <div class="detail-label">Invoice Number</div>
@@ -248,6 +267,13 @@ export const printReceipt = async (payment, companySettings) => {
       <div class="notes-box">
         <div class="detail-label">Notes</div>
         <div>${payment.notes}</div>
+      </div>
+      ` : ''}
+
+      ${creditNotes.length > 0 ? `
+      <div class="notes-box" style="border-color: #fca5a5; background: #fef2f2;">
+        <div class="detail-label" style="color: #dc2626;">Credit Note(s) Applied</div>
+        ${creditNotes.map(cn => `<div style="margin-top: 4px;">${cn.cn_number} — RM ${Number(cn.amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })} (${cn.reason || 'Deduction'})</div>`).join('')}
       </div>
       ` : ''}
 

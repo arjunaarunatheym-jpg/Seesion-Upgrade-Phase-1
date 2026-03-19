@@ -20,7 +20,9 @@ const initialPaymentForm = {
   reference_number: '',
   notes: '',
   create_cn: false,
+  cn_mode: 'percentage', // 'percentage' or 'amount'
   cn_percentage: '4',
+  cn_amount: '',
   cn_reason: 'HRDCorp Levy Deduction'
 };
 
@@ -69,7 +71,8 @@ const PaymentsTab = ({
         reference_number: paymentForm.reference_number,
         notes: paymentForm.notes,
         create_credit_note: paymentForm.create_cn,
-        deduction_percentage: paymentForm.create_cn ? parseFloat(paymentForm.cn_percentage) : null,
+        deduction_percentage: paymentForm.create_cn && paymentForm.cn_mode === 'percentage' ? parseFloat(paymentForm.cn_percentage) : null,
+        deduction_amount: paymentForm.create_cn && paymentForm.cn_mode === 'amount' ? parseFloat(paymentForm.cn_amount) : null,
         deduction_reason: paymentForm.create_cn ? paymentForm.cn_reason : null
       });
       
@@ -89,7 +92,7 @@ const PaymentsTab = ({
   const handlePrintReceipt = async (payment) => {
     try {
       const { printReceipt } = await import('../../utils/printReceipt');
-      printReceipt(payment, companySettings);
+      printReceipt(payment, companySettings, axiosInstance);
     } catch (error) {
       console.error("Print error:", error);
       toast.error("Failed to generate receipt");
@@ -193,27 +196,66 @@ const PaymentsTab = ({
                 Create Credit Note (e.g., HRDCorp deduction)
               </Label>
             </div>
-            {paymentForm.create_cn && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-sm">Deduction %</Label>
-                  <Input 
-                    type="number" 
-                    value={paymentForm.cn_percentage}
-                    onChange={(e) => setPaymentForm({...paymentForm, cn_percentage: e.target.value})}
-                    placeholder="4"
-                  />
+            {paymentForm.create_cn && (() => {
+              const selectedInvoice = invoices.find(inv => inv.id === paymentForm.invoice_id);
+              const invoiceTotal = selectedInvoice?.total_amount || 0;
+              const calcAmount = paymentForm.cn_mode === 'percentage' 
+                ? ((invoiceTotal * parseFloat(paymentForm.cn_percentage || 0)) / 100).toFixed(2)
+                : parseFloat(paymentForm.cn_amount || 0).toFixed(2);
+              const calcPct = paymentForm.cn_mode === 'amount' && invoiceTotal > 0
+                ? ((parseFloat(paymentForm.cn_amount || 0) / invoiceTotal) * 100).toFixed(2)
+                : paymentForm.cn_percentage;
+              
+              return (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <Button 
+                      type="button" size="sm" variant={paymentForm.cn_mode === 'percentage' ? 'default' : 'outline'}
+                      onClick={() => setPaymentForm({...paymentForm, cn_mode: 'percentage'})}
+                      className="text-xs"
+                    >By Percentage (%)</Button>
+                    <Button 
+                      type="button" size="sm" variant={paymentForm.cn_mode === 'amount' ? 'default' : 'outline'}
+                      onClick={() => setPaymentForm({...paymentForm, cn_mode: 'amount'})}
+                      className="text-xs"
+                    >By Amount (RM)</Button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {paymentForm.cn_mode === 'percentage' ? (
+                      <div>
+                        <Label className="text-sm">Deduction %</Label>
+                        <Input 
+                          type="number" 
+                          value={paymentForm.cn_percentage}
+                          onChange={(e) => setPaymentForm({...paymentForm, cn_percentage: e.target.value})}
+                          placeholder="4"
+                        />
+                        {invoiceTotal > 0 && <p className="text-xs text-gray-500 mt-1">= RM {calcAmount}</p>}
+                      </div>
+                    ) : (
+                      <div>
+                        <Label className="text-sm">Deduction Amount (RM)</Label>
+                        <Input 
+                          type="number" 
+                          value={paymentForm.cn_amount}
+                          onChange={(e) => setPaymentForm({...paymentForm, cn_amount: e.target.value})}
+                          placeholder="300"
+                        />
+                        {invoiceTotal > 0 && <p className="text-xs text-gray-500 mt-1">= {calcPct}% of RM {invoiceTotal.toLocaleString()}</p>}
+                      </div>
+                    )}
+                    <div>
+                      <Label className="text-sm">Reason</Label>
+                      <Input 
+                        value={paymentForm.cn_reason}
+                        onChange={(e) => setPaymentForm({...paymentForm, cn_reason: e.target.value})}
+                        placeholder="HRDCorp Levy"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-sm">Reason</Label>
-                  <Input 
-                    value={paymentForm.cn_reason}
-                    onChange={(e) => setPaymentForm({...paymentForm, cn_reason: e.target.value})}
-                    placeholder="HRDCorp Levy"
-                  />
-                </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
           
           <div className="flex gap-2">
