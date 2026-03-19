@@ -19,10 +19,10 @@ import {
   BookOpen, FileText, Calculator, BarChart3, 
   Plus, RefreshCw, Check, X, Eye, Loader2,
   ArrowUpRight, ArrowDownRight, Calendar, Filter,
-  Download, ChevronDown, ChevronRight, Building2
+  Download, ChevronDown, ChevronRight, Building2, Printer
 } from 'lucide-react';
 
-const AccountingTab = () => {
+const AccountingTab = ({ companySettings }) => {
   const [activeSubTab, setActiveSubTab] = useState('coa');
   const [loading, setLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -468,6 +468,89 @@ const AccountingTab = () => {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Chart of Accounts</CardTitle>
                 <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => {
+                    const settings = companySettings || {};
+                    const primaryColor = settings.primary_color || '#1a365d';
+                    const secondaryColor = settings.secondary_color || '#4472C4';
+                    const tagline = settings.tagline || 'Towards a Nation of Safe Drivers';
+                    let logoUrl = '';
+                    if (settings.logo_url) {
+                      logoUrl = settings.logo_url.startsWith('http') ? settings.logo_url 
+                        : `${process.env.REACT_APP_BACKEND_URL}${settings.logo_url.startsWith('/') ? '' : '/'}${settings.logo_url}`;
+                    }
+                    const headerCustomFields = (settings.invoice_custom_fields || [])
+                      .filter(f => f.position === 'Header' || f.position === 'header')
+                      .map(f => ` &bull; ${f.label}: ${f.value}`)
+                      .join('');
+                    const types = ['Asset', 'Liability', 'Equity', 'Income', 'Expense'];
+                    const typeColors = { Asset: '#2563eb', Liability: '#dc2626', Equity: '#7c3aed', Income: '#16a34a', Expense: '#ea580c' };
+                    const w = window.open('', '_blank');
+                    w.document.write(`<!DOCTYPE html><html><head><title>Chart of Accounts</title>
+                    <style>
+                      @page { size: A4; margin: 15mm; }
+                      @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
+                      * { box-sizing: border-box; margin: 0; padding: 0; }
+                      body { font-family: Arial, sans-serif; font-size: 11px; padding: 25px; max-width: 210mm; margin: 0 auto; line-height: 1.5; color: #333; }
+                      .header { display: flex; align-items: center; gap: 20px; padding-bottom: 15px; border-bottom: 3px solid ${primaryColor}; margin-bottom: 20px; }
+                      .logo-img { width: 100px; height: auto; }
+                      .company-details { flex: 1; }
+                      .company-name { font-size: 18px; font-weight: bold; color: ${primaryColor}; margin-bottom: 5px; }
+                      .company-info { font-size: 11px; color: #444; line-height: 1.5; }
+                      .doc-title { font-size: 20px; font-weight: bold; text-align: center; color: ${primaryColor}; margin: 15px 0; padding: 10px; background: #f0f4f8; }
+                      .section-title { font-size: 13px; font-weight: bold; padding: 8px 12px; margin: 16px 0 6px; border-left: 4px solid; }
+                      table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+                      th { background: ${secondaryColor}; color: white; font-weight: bold; font-size: 10px; text-transform: uppercase; padding: 6px 10px; text-align: left; }
+                      td { padding: 5px 10px; font-size: 10px; border-bottom: 1px solid #eee; }
+                      .code { font-family: monospace; font-weight: bold; }
+                      .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: bold; }
+                      .active { background: #dcfce7; color: #166534; }
+                      .inactive { background: #f3f4f6; color: #6b7280; }
+                      .footer { margin-top: 30px; font-size: 9px; color: #777; padding-top: 12px; border-top: 1px solid #ddd; text-align: center; }
+                      .tagline { font-style: italic; color: ${primaryColor}; font-size: 12px; text-align: center; margin-top: 15px; padding-top: 12px; border-top: 1px solid #eee; }
+                    </style></head><body>
+                    <div class="header">
+                      ${logoUrl ? `<img src="${logoUrl}" class="logo-img" alt="Logo" />` : ''}
+                      <div class="company-details">
+                        <div class="company-name">${settings.company_name || 'MDDRC SDN BHD'}</div>
+                        <div class="company-info">
+                          ${settings.company_reg_no ? `(${settings.company_reg_no})` : ''}
+                          ${settings.address_line1 ? ` &bull; ${settings.address_line1}` : ''}${settings.address_line2 ? `, ${settings.address_line2}` : ''}<br>
+                          ${settings.city || ''}${settings.postcode ? ` ${settings.postcode}` : ''}${settings.state ? `, ${settings.state}` : ''}
+                          ${settings.phone ? ` &bull; Tel: ${settings.phone}` : ''}${settings.email ? ` &bull; ${settings.email}` : ''}
+                          ${headerCustomFields}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="doc-title">CHART OF ACCOUNTS</div>
+                    ${types.map(type => {
+                      const accs = (groupedAccounts[type] || []);
+                      if (accs.length === 0) return '';
+                      return `
+                        <div class="section-title" style="border-color: ${typeColors[type]}; color: ${typeColors[type]};">${type.toUpperCase()} (${accs.length} accounts)</div>
+                        <table>
+                          <thead><tr><th style="width:15%;">Code</th><th style="width:40%;">Account Name</th><th style="width:25%;">Category</th><th style="width:10%;">Normal</th><th style="width:10%;">Status</th></tr></thead>
+                          <tbody>
+                            ${accs.map(a => `<tr>
+                              <td class="code">${a.account_code}</td>
+                              <td>${a.account_name}</td>
+                              <td style="color:#666;">${a.account_category || '-'}</td>
+                              <td>${a.normal_balance}</td>
+                              <td><span class="badge ${a.is_active ? 'active' : 'inactive'}">${a.is_active ? 'Active' : 'Inactive'}</span></td>
+                            </tr>`).join('')}
+                          </tbody>
+                        </table>`;
+                    }).join('')}
+                    <div class="footer">
+                      <p>Chart of Accounts — ${settings.company_name || 'MDDRC'} Training Management System</p>
+                      <p>Generated on: ${new Date().toLocaleString('en-MY')}</p>
+                    </div>
+                    <div class="tagline">"${tagline}"</div>
+                    <script>window.onload = function() { setTimeout(function() { window.print(); }, 500); };</script>
+                    </body></html>`);
+                    w.document.close();
+                  }} data-testid="print-coa-btn">
+                    <Printer className="w-4 h-4 mr-1" /> Print COA
+                  </Button>
                   <Button variant="outline" size="sm" onClick={loadAccounts}>
                     <RefreshCw className="w-4 h-4 mr-1" /> Refresh
                   </Button>

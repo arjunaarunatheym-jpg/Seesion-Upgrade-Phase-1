@@ -1974,7 +1974,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
 
           {/* Accounting Tab */}
           <TabsContent value="accounting">
-            <AccountingTab />
+            <AccountingTab companySettings={companySettings} />
           </TabsContent>
         </Tabs>
       </main>
