@@ -31,6 +31,7 @@ const ProfitLossLedger = () => {
   const [marketingSubledger, setMarketingSubledger] = useState(null);
   const [payrollSubledger, setPayrollSubledger] = useState(null);
   const [generalLedger, setGeneralLedger] = useState(null);
+  const [companySettings, setCompanySettings] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedRows, setExpandedRows] = useState({});
   
@@ -72,6 +73,8 @@ const ProfitLossLedger = () => {
 
   useEffect(() => {
     loadData();
+    // Load company settings for print
+    axiosInstance.get('/company-settings').then(res => setCompanySettings(res.data)).catch(() => {});
   }, [selectedYear]);
 
   useEffect(() => {
@@ -585,6 +588,7 @@ const ProfitLossLedger = () => {
             expandedRows={expandedRows}
             toggleRow={toggleRow}
             formatCurrency={formatCurrency}
+            companySettings={companySettings}
           />
         </TabsContent>
 

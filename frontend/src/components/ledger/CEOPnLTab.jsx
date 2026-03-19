@@ -5,7 +5,8 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Loader2, Briefcase, ChevronDown, ChevronRight } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Loader2, Briefcase, ChevronDown, ChevronRight, Printer } from 'lucide-react';
 
 const CEOPnLTab = ({
   selectedYear,
@@ -13,15 +14,39 @@ const CEOPnLTab = ({
   expandedRows,
   toggleRow,
   formatCurrency,
+  companySettings,
 }) => {
+  const handlePrintPnL = async () => {
+    try {
+      const { printPnLStatement } = await import('../../utils/printPnL');
+      const settings = companySettings || {};
+      let logoUrl = '';
+      if (settings.logo_url) {
+        logoUrl = settings.logo_url.startsWith('http') ? settings.logo_url 
+          : `${process.env.REACT_APP_BACKEND_URL}${settings.logo_url.startsWith('/') ? '' : '/'}${settings.logo_url}`;
+      }
+      printPnLStatement(programmeData, settings, logoUrl);
+    } catch (error) {
+      console.error("Print P&L error:", error);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Briefcase className="w-5 h-5 text-blue-600" />
-          CEO P&L View - {selectedYear}
-        </CardTitle>
-        <CardDescription>Profitability by programme with margins and insights</CardDescription>
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Briefcase className="w-5 h-5 text-blue-600" />
+              CEO P&L View - {selectedYear}
+            </CardTitle>
+            <CardDescription>Profitability by programme with margins and insights</CardDescription>
+          </div>
+          <Button onClick={handlePrintPnL} variant="outline" className="flex items-center gap-2" data-testid="print-pnl-btn">
+            <Printer className="w-4 h-4" />
+            Print P&L Statement
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {!programmeData ? (
