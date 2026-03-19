@@ -40,6 +40,8 @@ class ChartOfAccountCreate(BaseModel):
     parent_code: Optional[str] = None
     description: Optional[str] = None
     normal_balance: str = Field(default="debit", pattern="^(debit|credit)$")
+    statement_type: Optional[str] = Field(default=None, pattern="^(profit_and_loss|balance_sheet)$")
+    pnl_section: Optional[str] = Field(default=None, pattern="^(revenue|cost_of_sales|operating_expense|other_income|other_expense)$")
 
 
 class ChartOfAccountUpdate(BaseModel):
@@ -48,6 +50,8 @@ class ChartOfAccountUpdate(BaseModel):
     account_category: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
+    statement_type: Optional[str] = None
+    pnl_section: Optional[str] = None
 
 
 class JournalLine(BaseModel):
@@ -1252,44 +1256,63 @@ async def initialize_accounting_system():
     
     # Default Chart of Accounts
     default_coa = [
-        # ASSETS (1000-1999)
-        {"account_code": "1000", "account_name": "Cash at Bank", "account_type": "Asset", "account_category": "Bank", "normal_balance": "debit", "is_system": True},
-        {"account_code": "1001", "account_name": "Petty Cash", "account_type": "Asset", "account_category": "Bank", "normal_balance": "debit", "is_system": True},
-        {"account_code": "1100", "account_name": "Accounts Receivable", "account_type": "Asset", "account_category": "AR", "normal_balance": "debit", "is_system": True},
-        {"account_code": "1200", "account_name": "Prepaid Expenses", "account_type": "Asset", "account_category": "Current Asset", "normal_balance": "debit", "is_system": False},
+        # ASSETS (1000-1999) — Balance Sheet
+        {"account_code": "1000", "account_name": "Cash at Bank", "account_type": "Asset", "account_category": "Bank", "normal_balance": "debit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "1001", "account_name": "Petty Cash", "account_type": "Asset", "account_category": "Bank", "normal_balance": "debit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "1100", "account_name": "Accounts Receivable", "account_type": "Asset", "account_category": "AR", "normal_balance": "debit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "1200", "account_name": "Prepaid Expenses", "account_type": "Asset", "account_category": "Current Asset", "normal_balance": "debit", "is_system": False, "statement_type": "balance_sheet", "pnl_section": None},
         
-        # LIABILITIES (2000-2999)
-        {"account_code": "2100", "account_name": "Accounts Payable", "account_type": "Liability", "account_category": "AP", "normal_balance": "credit", "is_system": True},
-        {"account_code": "2200", "account_name": "SST Payable", "account_type": "Liability", "account_category": "Tax Liability", "normal_balance": "credit", "is_system": True},
-        {"account_code": "2300", "account_name": "Deferred Revenue", "account_type": "Liability", "account_category": "Deferred", "normal_balance": "credit", "is_system": True},
-        {"account_code": "2400", "account_name": "EPF Payable", "account_type": "Liability", "account_category": "Payroll Liability", "normal_balance": "credit", "is_system": True},
-        {"account_code": "2450", "account_name": "SOCSO Payable", "account_type": "Liability", "account_category": "Payroll Liability", "normal_balance": "credit", "is_system": True},
-        {"account_code": "2460", "account_name": "EIS Payable", "account_type": "Liability", "account_category": "Payroll Liability", "normal_balance": "credit", "is_system": True},
-        {"account_code": "2470", "account_name": "PCB Payable", "account_type": "Liability", "account_category": "Payroll Liability", "normal_balance": "credit", "is_system": True},
-        {"account_code": "2500", "account_name": "Accrued Expenses", "account_type": "Liability", "account_category": "Current Liability", "normal_balance": "credit", "is_system": False},
+        # LIABILITIES (2000-2999) — Balance Sheet
+        {"account_code": "2100", "account_name": "Accounts Payable", "account_type": "Liability", "account_category": "AP", "normal_balance": "credit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "2200", "account_name": "SST Payable", "account_type": "Liability", "account_category": "Tax Liability", "normal_balance": "credit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "2300", "account_name": "Deferred Revenue", "account_type": "Liability", "account_category": "Deferred", "normal_balance": "credit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "2400", "account_name": "EPF Payable", "account_type": "Liability", "account_category": "Payroll Liability", "normal_balance": "credit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "2450", "account_name": "SOCSO Payable", "account_type": "Liability", "account_category": "Payroll Liability", "normal_balance": "credit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "2460", "account_name": "EIS Payable", "account_type": "Liability", "account_category": "Payroll Liability", "normal_balance": "credit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "2470", "account_name": "PCB Payable", "account_type": "Liability", "account_category": "Payroll Liability", "normal_balance": "credit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "2500", "account_name": "Accrued Expenses", "account_type": "Liability", "account_category": "Current Liability", "normal_balance": "credit", "is_system": False, "statement_type": "balance_sheet", "pnl_section": None},
         
-        # EQUITY (3000-3999)
-        {"account_code": "3000", "account_name": "Opening Balance Equity", "account_type": "Equity", "account_category": "Equity", "normal_balance": "credit", "is_system": True},
-        {"account_code": "3100", "account_name": "Retained Earnings", "account_type": "Equity", "account_category": "Equity", "normal_balance": "credit", "is_system": True},
+        # EQUITY (3000-3999) — Balance Sheet
+        {"account_code": "3000", "account_name": "Opening Balance Equity", "account_type": "Equity", "account_category": "Equity", "normal_balance": "credit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
+        {"account_code": "3100", "account_name": "Retained Earnings", "account_type": "Equity", "account_category": "Equity", "normal_balance": "credit", "is_system": True, "statement_type": "balance_sheet", "pnl_section": None},
         
-        # INCOME (4000-4999)
-        {"account_code": "4000", "account_name": "Training Revenue", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "is_system": True},
-        {"account_code": "4100", "account_name": "Other Income", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "is_system": False},
+        # REVENUE (4000-4099) — P&L: Revenue
+        {"account_code": "4000", "account_name": "Training Revenue", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "is_system": True, "statement_type": "profit_and_loss", "pnl_section": "revenue"},
+        {"account_code": "4001", "account_name": "Defensive Driving Training Income", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "revenue"},
+        {"account_code": "4002", "account_name": "Defensive Riding Training Income", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "revenue"},
+        {"account_code": "4003", "account_name": "Safety Talk Income", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "revenue"},
+        {"account_code": "4004", "account_name": "Consultancy Income", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "revenue"},
+        {"account_code": "4100", "account_name": "Other Income", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "other_income"},
         
-        # EXPENSES (5000-6999)
-        {"account_code": "5000", "account_name": "Trainer Fees", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": True},
-        {"account_code": "5100", "account_name": "Coordinator Fees", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": True},
-        {"account_code": "5200", "account_name": "Marketing Commission", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": True},
-        {"account_code": "5300", "account_name": "Training Materials", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": False},
-        {"account_code": "5400", "account_name": "Venue & Logistics", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": False},
-        {"account_code": "5500", "account_name": "Transportation", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": False},
-        {"account_code": "6000", "account_name": "Salary & Wages", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": True},
-        {"account_code": "6100", "account_name": "EPF Employer Contribution", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": True},
-        {"account_code": "6200", "account_name": "SOCSO Employer Contribution", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": True},
-        {"account_code": "6300", "account_name": "EIS Employer Contribution", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": True},
-        {"account_code": "6400", "account_name": "Office Expenses", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False},
-        {"account_code": "6500", "account_name": "Utilities", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False},
-        {"account_code": "6600", "account_name": "Petty Cash Expenses", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False},
+        # COST OF SALES / DIRECT COSTS (5000-5999) — P&L: Cost of Sales
+        {"account_code": "5000", "account_name": "Trainer Fees", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": True, "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5001", "account_name": "Assistant Trainer Fees", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5100", "account_name": "Coordinator Fees", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": True, "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5200", "account_name": "Marketing Commission", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": True, "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5300", "account_name": "Training Materials", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5400", "account_name": "Venue Rental - Training", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5500", "account_name": "Fuel and Vehicle Usage", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5510", "account_name": "Toll and Travel - Direct", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5600", "account_name": "Accommodation - Direct", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5700", "account_name": "Meals - Direct", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        
+        # OPERATING EXPENSES (6000-6999) — P&L: Operating Expense
+        {"account_code": "6000", "account_name": "Office Salaries", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": True, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6100", "account_name": "EPF Employer Contribution", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": True, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6200", "account_name": "SOCSO Employer Contribution", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": True, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6300", "account_name": "EIS Employer Contribution", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": True, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6400", "account_name": "Office Expenses", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6410", "account_name": "Office Rental", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6500", "account_name": "Utilities", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6510", "account_name": "Internet and Phone", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6600", "account_name": "Petty Cash Expenses", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6700", "account_name": "Marketing Expenses", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6800", "account_name": "Software Subscription", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6900", "account_name": "Bank Charges", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6910", "account_name": "Professional Fees", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6920", "account_name": "Repairs and Maintenance", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6930", "account_name": "General Transport", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6999", "account_name": "Other Operating Expenses", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
     ]
     
     now = get_malaysia_time().isoformat()
@@ -1366,6 +1389,114 @@ async def initialize_accounting_system():
         )
     
     return {"message": "Accounting system initialized", "accounts": len(default_coa)}
+
+
+
+@router.post("/upgrade-coa")
+async def upgrade_coa(current_user: User = Depends(get_current_user)):
+    """Upgrade existing COA: add statement_type, pnl_section fields, and new accounts.
+    Safe to run multiple times - only adds what's missing."""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    now = get_malaysia_time().isoformat()
+    updated = 0
+    added = 0
+    
+    # 1. Auto-assign statement_type and pnl_section to existing accounts
+    pnl_mapping = {
+        # Revenue
+        "4000": ("profit_and_loss", "revenue"), "4001": ("profit_and_loss", "revenue"),
+        "4002": ("profit_and_loss", "revenue"), "4003": ("profit_and_loss", "revenue"),
+        "4004": ("profit_and_loss", "revenue"),
+        "4100": ("profit_and_loss", "other_income"),
+        # Cost of Sales (5xxx)
+        "5000": ("profit_and_loss", "cost_of_sales"), "5001": ("profit_and_loss", "cost_of_sales"),
+        "5100": ("profit_and_loss", "cost_of_sales"), "5200": ("profit_and_loss", "cost_of_sales"),
+        "5300": ("profit_and_loss", "cost_of_sales"), "5400": ("profit_and_loss", "cost_of_sales"),
+        "5500": ("profit_and_loss", "cost_of_sales"), "5510": ("profit_and_loss", "cost_of_sales"),
+        "5600": ("profit_and_loss", "cost_of_sales"), "5700": ("profit_and_loss", "cost_of_sales"),
+        # Operating Expenses (6xxx)
+        "6000": ("profit_and_loss", "operating_expense"), "6100": ("profit_and_loss", "operating_expense"),
+        "6200": ("profit_and_loss", "operating_expense"), "6300": ("profit_and_loss", "operating_expense"),
+        "6400": ("profit_and_loss", "operating_expense"), "6410": ("profit_and_loss", "operating_expense"),
+        "6500": ("profit_and_loss", "operating_expense"), "6510": ("profit_and_loss", "operating_expense"),
+        "6600": ("profit_and_loss", "operating_expense"), "6700": ("profit_and_loss", "operating_expense"),
+        "6800": ("profit_and_loss", "operating_expense"), "6900": ("profit_and_loss", "operating_expense"),
+        "6910": ("profit_and_loss", "operating_expense"), "6920": ("profit_and_loss", "operating_expense"),
+        "6930": ("profit_and_loss", "operating_expense"), "6999": ("profit_and_loss", "operating_expense"),
+    }
+    
+    all_accounts = await db.chart_of_accounts.find({}, {"_id": 0}).to_list(500)
+    for acc in all_accounts:
+        code = acc.get("account_code", "")
+        needs_update = {}
+        
+        # Assign from mapping if known
+        if code in pnl_mapping:
+            st, ps = pnl_mapping[code]
+            if acc.get("statement_type") != st:
+                needs_update["statement_type"] = st
+            if acc.get("pnl_section") != ps:
+                needs_update["pnl_section"] = ps
+        else:
+            # Auto-assign by code range
+            if not acc.get("statement_type"):
+                if code.startswith(("1", "2", "3")):
+                    needs_update["statement_type"] = "balance_sheet"
+                elif code.startswith(("4", "5", "6")):
+                    needs_update["statement_type"] = "profit_and_loss"
+            if not acc.get("pnl_section") and code.startswith(("4", "5", "6")):
+                if code.startswith("4") and code >= "4100":
+                    needs_update["pnl_section"] = "other_income"
+                elif code.startswith("4"):
+                    needs_update["pnl_section"] = "revenue"
+                elif code.startswith("5"):
+                    needs_update["pnl_section"] = "cost_of_sales"
+                elif code.startswith("6"):
+                    needs_update["pnl_section"] = "operating_expense"
+        
+        if needs_update:
+            needs_update["updated_at"] = now
+            await db.chart_of_accounts.update_one({"account_code": code}, {"$set": needs_update})
+            updated += 1
+    
+    # 2. Add new accounts that don't exist yet
+    new_accounts = [
+        {"account_code": "4001", "account_name": "Defensive Driving Training Income", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "statement_type": "profit_and_loss", "pnl_section": "revenue"},
+        {"account_code": "4002", "account_name": "Defensive Riding Training Income", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "statement_type": "profit_and_loss", "pnl_section": "revenue"},
+        {"account_code": "4003", "account_name": "Safety Talk Income", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "statement_type": "profit_and_loss", "pnl_section": "revenue"},
+        {"account_code": "4004", "account_name": "Consultancy Income", "account_type": "Income", "account_category": "Revenue", "normal_balance": "credit", "statement_type": "profit_and_loss", "pnl_section": "revenue"},
+        {"account_code": "5001", "account_name": "Assistant Trainer Fees", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5510", "account_name": "Toll and Travel - Direct", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5600", "account_name": "Accommodation - Direct", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "5700", "account_name": "Meals - Direct", "account_type": "Expense", "account_category": "Direct Cost", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "cost_of_sales"},
+        {"account_code": "6410", "account_name": "Office Rental", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6510", "account_name": "Internet and Phone", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6700", "account_name": "Marketing Expenses", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6800", "account_name": "Software Subscription", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6900", "account_name": "Bank Charges", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6910", "account_name": "Professional Fees", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6920", "account_name": "Repairs and Maintenance", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6930", "account_name": "General Transport", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6999", "account_name": "Other Operating Expenses", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+    ]
+    
+    existing_codes = {a.get("account_code") for a in all_accounts}
+    for acc in new_accounts:
+        if acc["account_code"] not in existing_codes:
+            acc["id"] = str(uuid.uuid4())
+            acc["is_active"] = True
+            acc["is_system"] = False
+            acc["description"] = ""
+            acc["parent_code"] = None
+            acc["created_by"] = current_user.id
+            acc["created_at"] = now
+            acc["updated_at"] = now
+            await db.chart_of_accounts.insert_one(acc)
+            added += 1
+    
+    return {"message": f"COA upgraded. Updated {updated} existing accounts, added {added} new accounts.", "updated": updated, "added": added}
 
 
 # ============ CHART OF ACCOUNTS ENDPOINTS ============

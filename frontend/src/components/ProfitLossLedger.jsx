@@ -13,10 +13,11 @@ import {
   TrendingUp, TrendingDown, DollarSign, Calendar, Plus, Trash2, 
   Loader2, Download, PieChart, BarChart3, ArrowUpRight, ArrowDownRight,
   Users, Briefcase, UserCheck, Building2, ChevronDown, ChevronRight,
-  BookOpen, Printer, FileSpreadsheet
+  BookOpen, Printer, FileSpreadsheet, FileText
 } from 'lucide-react';
 import { CEOPnLTab } from './ledger/CEOPnLTab';
 import { YoYComparisonTab } from './ledger/YoYComparisonTab';
+import { AuditorPnLTab } from './ledger/AuditorPnLTab';
 import { GeneralLedgerTab } from './ledger/GeneralLedgerTab';
 import { TrainerSubledgerTab } from './ledger/TrainerSubledgerTab';
 import { MarketingSubledgerTab } from './ledger/MarketingSubledgerTab';
@@ -498,6 +499,10 @@ const ProfitLossLedger = () => {
           <TabsTrigger value="ceo-pnl" className="text-blue-600">
             <Briefcase className="w-4 h-4 mr-1" />
             CEO P&L
+          </TabsTrigger>
+          <TabsTrigger value="auditor-pnl" className="text-indigo-600">
+            <FileText className="w-4 h-4 mr-1" />
+            Auditor P&L
           </TabsTrigger>
           <TabsTrigger value="yoy-comparison" className="text-purple-600">
             <TrendingUp className="w-4 h-4 mr-1" />

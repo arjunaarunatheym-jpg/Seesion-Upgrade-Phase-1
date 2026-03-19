@@ -997,3 +997,349 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
         "account_summary": sorted(account_summary.values(), key=lambda x: x["account_code"]),
         "totals": {"total_debit": round(sum(e["debit"] for e in gl_entries), 2), "total_credit": round(sum(e["credit"] for e in gl_entries), 2)}
     }
+
+
+# ==================== PHASE B: JOURNAL-BASED P&L ====================
+
+@router.get("/pnl-journal")
+async def get_journal_based_pnl(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    posted_only: Optional[bool] = True,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    AUDITOR-GRADE Profit & Loss Statement derived entirely from posted journal entries.
+    Groups by account code using the DB Chart of Accounts with pnl_section classification.
+    
+    Supports: date range, year, month filters.
+    Returns: structured P&L with drill-down data per account.
+    """
+    if current_user.role not in ["admin", "super_admin", "finance", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # 1. Determine date range
+    from datetime import datetime
+    if date_from and date_to:
+        start_date = date_from
+        end_date = date_to
+        period_label = f"{date_from} to {date_to}"
+    elif year and month:
+        start_date = f"{year}-{month:02d}-01"
+        if month == 12:
+            end_date = f"{year}-12-31"
+        else:
+            end_date = f"{year}-{month+1:02d}-01"
+        period_label = f"{datetime(year, month, 1).strftime('%B %Y')}"
+    elif year:
+        start_date = f"{year}-01-01"
+        end_date = f"{year}-12-31"
+        period_label = f"Year {year}"
+    else:
+        year = get_malaysia_time().year
+        start_date = f"{year}-01-01"
+        end_date = f"{year}-12-31"
+        period_label = f"Year {year}"
+    
+    # 2. Load COA from DB (single source of truth)
+    coa_list = await db.chart_of_accounts.find({"is_active": True}, {"_id": 0}).to_list(500)
+    coa_map = {a["account_code"]: a for a in coa_list}
+    
+    # 3. Query posted journal entries in date range
+    je_query = {"date": {"$gte": start_date, "$lte": end_date}}
+    if posted_only:
+        je_query["status"] = "posted"
+    
+    journal_entries = await db.journal_entries.find(je_query, {"_id": 0}).to_list(50000)
+    
+    # 4. Aggregate balances by account code from journal lines
+    account_balances = {}  # code -> {debit_total, credit_total, entries: [...]}
+    unclassified_entries = []
+    
+    for je in journal_entries:
+        for line in je.get("lines", []):
+            code = line.get("account_code", "")
+            debit = round(float(line.get("debit", 0)), 2)
+            credit = round(float(line.get("credit", 0)), 2)
+            
+            if code not in account_balances:
+                account_balances[code] = {"debit_total": 0, "credit_total": 0, "entries": [], "entry_count": 0}
+            
+            account_balances[code]["debit_total"] = round(account_balances[code]["debit_total"] + debit, 2)
+            account_balances[code]["credit_total"] = round(account_balances[code]["credit_total"] + credit, 2)
+            account_balances[code]["entry_count"] += 1
+            account_balances[code]["entries"].append({
+                "journal_no": je.get("journal_no"),
+                "date": je.get("date"),
+                "description": je.get("description", ""),
+                "line_memo": line.get("memo", ""),
+                "debit": debit,
+                "credit": credit,
+                "source_module": je.get("source_module"),
+                "source_reference": je.get("source_reference"),
+            })
+    
+    # 5. Build P&L sections from COA classification
+    sections = {
+        "revenue": {"label": "Revenue", "accounts": [], "total": 0},
+        "cost_of_sales": {"label": "Cost of Sales / Direct Costs", "accounts": [], "total": 0},
+        "other_income": {"label": "Other Income", "accounts": [], "total": 0},
+        "operating_expense": {"label": "Operating Expenses", "accounts": [], "total": 0},
+        "other_expense": {"label": "Other Expenses", "accounts": [], "total": 0},
+    }
+    
+    for code, bal in account_balances.items():
+        acct = coa_map.get(code)
+        if not acct:
+            # Account not in COA — classify by code range
+            if code.startswith("4"):
+                pnl_section = "revenue" if code < "4100" else "other_income"
+            elif code.startswith("5"):
+                pnl_section = "cost_of_sales"
+            elif code.startswith("6"):
+                pnl_section = "operating_expense"
+            else:
+                continue  # Balance sheet account — skip for P&L
+            acct = {"account_code": code, "account_name": f"Unknown ({code})", "pnl_section": pnl_section, "normal_balance": "credit" if code.startswith("4") else "debit"}
+        
+        pnl_section = acct.get("pnl_section")
+        statement_type = acct.get("statement_type")
+        
+        if not pnl_section:
+            if statement_type == "balance_sheet":
+                continue  # Skip balance sheet accounts
+            # Fallback classification
+            if acct.get("account_type") == "Income":
+                pnl_section = "revenue"
+            elif acct.get("account_category") == "Direct Cost":
+                pnl_section = "cost_of_sales"
+            elif acct.get("account_category") == "Operating Expense":
+                pnl_section = "operating_expense"
+            else:
+                continue
+        
+        if pnl_section not in sections:
+            continue
+        
+        # Calculate balance based on normal_balance
+        normal = acct.get("normal_balance", "debit")
+        if normal == "credit":
+            amount = round(bal["credit_total"] - bal["debit_total"], 2)
+        else:
+            amount = round(bal["debit_total"] - bal["credit_total"], 2)
+        
+        if amount == 0 and bal["entry_count"] == 0:
+            continue
+        
+        sections[pnl_section]["accounts"].append({
+            "account_code": code,
+            "account_name": acct.get("account_name", code),
+            "amount": amount,
+            "debit_total": bal["debit_total"],
+            "credit_total": bal["credit_total"],
+            "entry_count": bal["entry_count"],
+            "entries": bal["entries"][:50],  # Limit drill-down entries
+        })
+        sections[pnl_section]["total"] = round(sections[pnl_section]["total"] + amount, 2)
+    
+    # Sort accounts within sections by code
+    for sec in sections.values():
+        sec["accounts"].sort(key=lambda a: a["account_code"])
+    
+    # 6. Calculate P&L totals
+    total_revenue = round(sections["revenue"]["total"] + sections["other_income"]["total"], 2)
+    total_cos = round(sections["cost_of_sales"]["total"], 2)
+    gross_profit = round(sections["revenue"]["total"] - total_cos, 2)
+    total_opex = round(sections["operating_expense"]["total"] + sections["other_expense"]["total"], 2)
+    net_profit = round(total_revenue - total_cos - total_opex, 2)
+    
+    # 7. Data quality warnings
+    warnings = []
+    for code in account_balances:
+        if code not in coa_map:
+            warnings.append(f"Account {code} used in journals but not in Chart of Accounts")
+    
+
+
+@router.get("/pnl-journal/export")
+async def export_pnl_journal_excel(
+    date_from: Optional[str] = None, date_to: Optional[str] = None,
+    year: Optional[int] = None, month: Optional[int] = None,
+    posted_only: Optional[bool] = True,
+    current_user: User = Depends(get_current_user)
+):
+    """Export journal-based P&L to Excel"""
+    if current_user.role not in ["admin", "super_admin", "finance", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from io import BytesIO
+    from datetime import datetime as dt
+    
+    # Reuse the P&L logic
+    pnl_data = await get_journal_based_pnl(date_from=date_from, date_to=date_to, year=year, month=month, posted_only=posted_only, current_user=current_user)
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "P&L Statement"
+    
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="1a365d", end_color="1a365d", fill_type="solid")
+    section_font = Font(bold=True, size=11)
+    total_font = Font(bold=True, size=12)
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    
+    # Title
+    ws.merge_cells('A1:C1')
+    ws['A1'] = f"PROFIT & LOSS STATEMENT — {pnl_data['period']}"
+    ws['A1'].font = Font(bold=True, size=14, color="1a365d")
+    ws.merge_cells('A2:C2')
+    ws['A2'] = f"{'Posted Only' if posted_only else 'Including Drafts'} | {pnl_data['journal_count']} Journal Entries"
+    ws['A2'].font = Font(size=10, color="666666")
+    
+    row = 4
+    for col, header in enumerate(['Code', 'Account Name', 'Amount (RM)'], 1):
+        cell = ws.cell(row=row, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = thin_border
+    
+    section_order = ['revenue', 'other_income', 'cost_of_sales', 'operating_expense', 'other_expense']
+    section_colors = {'revenue': '16a34a', 'other_income': '0d9488', 'cost_of_sales': 'ea580c', 'operating_expense': 'dc2626', 'other_expense': '9333ea'}
+    calc_rows = {
+        'other_income': ('TOTAL INCOME', pnl_data['summary']['total_income'], '16a34a'),
+        'cost_of_sales': ('GROSS PROFIT', pnl_data['summary']['gross_profit'], '2563eb'),
+    }
+    
+    row += 1
+    for sec_key in section_order:
+        sec = pnl_data['sections'].get(sec_key, {})
+        if not sec.get('accounts'):
+            continue
+        
+        # Section header
+        ws.cell(row=row, column=1, value=sec['label'].upper()).font = Font(bold=True, color=section_colors.get(sec_key, '333333'))
+        row += 1
+        
+        for a in sec.get('accounts', []):
+            ws.cell(row=row, column=1, value=a['account_code']).border = thin_border
+            ws.cell(row=row, column=2, value=a['account_name']).border = thin_border
+            ws.cell(row=row, column=3, value=a['amount']).border = thin_border
+            ws.cell(row=row, column=3).number_format = '#,##0.00'
+            row += 1
+        
+        ws.cell(row=row, column=2, value=f"Subtotal {sec['label']}").font = Font(bold=True)
+        ws.cell(row=row, column=3, value=sec['total']).font = Font(bold=True)
+        ws.cell(row=row, column=3).number_format = '#,##0.00'
+        row += 1
+        
+        if sec_key in calc_rows:
+            label, val, color = calc_rows[sec_key]
+            ws.cell(row=row, column=2, value=label).font = Font(bold=True, color=color, size=12)
+            ws.cell(row=row, column=3, value=val).font = Font(bold=True, color=color, size=12)
+            ws.cell(row=row, column=3).number_format = '#,##0.00'
+            row += 1
+        
+        row += 1
+    
+    # Net Profit
+    ws.cell(row=row, column=2, value='NET PROFIT BEFORE TAX').font = Font(bold=True, size=13, color="1a365d")
+    ws.cell(row=row, column=3, value=pnl_data['summary']['net_profit']).font = Font(bold=True, size=13, color="1a365d")
+    ws.cell(row=row, column=3).number_format = '#,##0.00'
+    
+    ws.column_dimensions['A'].width = 12
+    ws.column_dimensions['B'].width = 40
+    ws.column_dimensions['C'].width = 20
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="PnL_{pnl_data["period"].replace(" ", "_")}.xlsx"'})
+
+    # Check for unbalanced entries
+    for je in journal_entries:
+        total_d = sum(float(l.get("debit", 0)) for l in je.get("lines", []))
+        total_c = sum(float(l.get("credit", 0)) for l in je.get("lines", []))
+        if abs(total_d - total_c) > 0.01:
+            warnings.append(f"Unbalanced journal {je.get('journal_no')}: DR {total_d} != CR {total_c}")
+    
+    return {
+        "period": period_label,
+        "date_from": start_date,
+        "date_to": end_date,
+        "posted_only": posted_only,
+        "journal_count": len(journal_entries),
+        "sections": sections,
+        "summary": {
+            "total_revenue": sections["revenue"]["total"],
+            "other_income": sections["other_income"]["total"],
+            "total_income": total_revenue,
+            "cost_of_sales": total_cos,
+            "gross_profit": gross_profit,
+            "gross_margin_pct": round((gross_profit / sections["revenue"]["total"] * 100), 2) if sections["revenue"]["total"] > 0 else 0,
+            "operating_expenses": total_opex,
+            "net_profit": net_profit,
+            "net_margin_pct": round((net_profit / total_revenue * 100), 2) if total_revenue > 0 else 0,
+        },
+        "warnings": warnings[:20],
+    }
+
+
+@router.get("/pnl-journal/drilldown/{account_code}")
+async def pnl_drilldown(
+    account_code: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    year: Optional[int] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Drill-down: Show all journal entries for a specific account code in a date range."""
+    if current_user.role not in ["admin", "super_admin", "finance", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if date_from and date_to:
+        start_date, end_date = date_from, date_to
+    elif year:
+        start_date, end_date = f"{year}-01-01", f"{year}-12-31"
+    else:
+        y = get_malaysia_time().year
+        start_date, end_date = f"{y}-01-01", f"{y}-12-31"
+    
+    journal_entries = await db.journal_entries.find(
+        {"date": {"$gte": start_date, "$lte": end_date}, "status": "posted", "lines.account_code": account_code},
+        {"_id": 0}
+    ).sort("date", 1).to_list(5000)
+    
+    result = []
+    for je in journal_entries:
+        for line in je.get("lines", []):
+            if line.get("account_code") == account_code:
+                result.append({
+                    "journal_no": je.get("journal_no"),
+                    "date": je.get("date"),
+                    "description": je.get("description"),
+                    "line_memo": line.get("memo", ""),
+                    "debit": round(float(line.get("debit", 0)), 2),
+                    "credit": round(float(line.get("credit", 0)), 2),
+                    "source_module": je.get("source_module"),
+                    "source_reference": je.get("source_reference"),
+                    "source_id": je.get("source_id"),
+                })
+    
+    acct = await db.chart_of_accounts.find_one({"account_code": account_code}, {"_id": 0})
+    
+    return {
+        "account_code": account_code,
+        "account_name": acct.get("account_name") if acct else account_code,
+        "date_from": start_date,
+        "date_to": end_date,
+        "entries": result,
+        "total_debit": round(sum(e["debit"] for e in result), 2),
+        "total_credit": round(sum(e["credit"] for e in result), 2),
+    }
