@@ -35,6 +35,17 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - Role-based access enforced: coordinator blocked from /finance, /admin
 - All 20/20 backend tests passed, all frontend flows verified (iteration_23)
 
+### Balance Sheet UI Enhancement — COMPLETE (Mar 20, 2026)
+- Verified Balance Sheet end-to-end: backend endpoint `/api/accounting/balance-sheet` returns correct data
+- Added Balanced/Unbalanced status badge (green/red)
+- Added account codes (1000, 2400, etc.) alongside account names
+- Added period label display ("As of March 2026")
+- Added Print button with professional print layout (company header, formatted tables)
+- Added `data-testid` attributes for all interactive and display elements
+- Added empty state messaging for sections with no data
+- Excel export confirmed working
+- Testing: 100% pass rate — Backend 19/19, Frontend 10/10 (iteration_24)
+
 ### Phase 1 Items Still Pending (Higher Risk — Need Careful Planning)
 - Remove 55 duplicate route definitions (24 in server.py, 31 cross-file)
 - Add `_id` exclusion to 96 MongoDB queries
@@ -69,7 +80,8 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - CI/CD pipeline
 
 ### Feature Backlog
-- (P0) Trainer Contract Workflow
+- (P0) Duplicate Route Refactor (user requested after finance work)
+- (P1) Trainer Contract Workflow
 - (P1) Post-Training Evaluation System
 - (P1) Automated Certificate Generation
 - (P1) SaaS Monetization (Stripe)
@@ -89,14 +101,19 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 └── frontend/
     └── src/
         ├── components/
-        │   ├── ErrorBoundary.jsx (NEW)
-        │   ├── ProtectedRoute.jsx (NEW)
+        │   ├── ErrorBoundary.jsx
+        │   ├── ProtectedRoute.jsx
         │   ├── ledger/ (P&L tabs)
-        │   ├── finance/ (sub-components)
+        │   ├── finance/ (AccountingTab, InvoicesTab, etc.)
         │   └── HRModule.jsx
         ├── pages/ (13 pages)
         └── App.js (route definitions)
 ```
+
+## Known Issues
+- Pre-existing 500 error on checklist template API (P2)
+- Historical journal entries show "Unknown" for some descriptions (P2)
+- 55 duplicate route definitions across server.py and route files (P0 - next)
 
 ## Test Credentials
 - Admin: arjuna@mddrc.com.my / Dana102229
