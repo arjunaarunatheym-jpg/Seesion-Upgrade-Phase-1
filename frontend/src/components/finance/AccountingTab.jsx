@@ -73,6 +73,10 @@ const AccountingTab = ({ companySettings }) => {
   
   // Periods state
   const [periods, setPeriods] = useState([]);
+  
+  // Backfill state
+  const [backfillRunning, setBackfillRunning] = useState(false);
+  const [backfillResult, setBackfillResult] = useState(null);
 
   // Check if initialized
   useEffect(() => {
@@ -199,6 +203,26 @@ const AccountingTab = ({ companySettings }) => {
       setPeriods(response.data.periods || []);
     } catch (error) {
       console.error('Failed to load periods:', error);
+    }
+  };
+
+  const runBackfill = async () => {
+    setBackfillRunning(true);
+    setBackfillResult(null);
+    try {
+      const response = await axiosInstance.post('/accounting/backfill');
+      setBackfillResult(response.data);
+      const created = response.data.results;
+      const totalCreated = (created.invoices?.created || 0) + (created.payments?.created || 0) + (created.credit_notes?.created || 0);
+      if (totalCreated > 0) {
+        toast.success(`Synced ${totalCreated} journal entries from historical transactions`);
+      } else {
+        toast.info('All transactions are already synced. No new entries created.');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to run backfill');
+    } finally {
+      setBackfillRunning(false);
     }
   };
 
@@ -513,10 +537,44 @@ const AccountingTab = ({ companySettings }) => {
               </CardTitle>
               <CardDescription>Double-entry accounting with full audit trail</CardDescription>
             </div>
-            <Badge variant="outline" className="bg-green-50 text-green-700">
-              Active
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={runBackfill} 
+                disabled={backfillRunning}
+                data-testid="backfill-sync-btn"
+              >
+                {backfillRunning ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                Sync Historical Transactions
+              </Button>
+              <Badge variant="outline" className="bg-green-50 text-green-700">
+                Active
+              </Badge>
+            </div>
           </div>
+          {backfillResult && (
+            <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm" data-testid="backfill-result">
+              <p className="font-semibold text-blue-800 mb-1">{backfillResult.message}</p>
+              <div className="grid grid-cols-3 gap-4 text-xs text-blue-700">
+                <div>
+                  <span className="font-medium">Invoices:</span> {backfillResult.results?.invoices?.created || 0} created, {backfillResult.results?.invoices?.skipped_duplicate || 0} already synced
+                  {(backfillResult.results?.invoices?.errors?.length > 0) && (
+                    <span className="text-red-600 block">{backfillResult.results.invoices.errors.length} error(s)</span>
+                  )}
+                </div>
+                <div>
+                  <span className="font-medium">Payments:</span> {backfillResult.results?.payments?.created || 0} created, {backfillResult.results?.payments?.skipped_duplicate || 0} already synced
+                </div>
+                <div>
+                  <span className="font-medium">Credit Notes:</span> {backfillResult.results?.credit_notes?.created || 0} created, {backfillResult.results?.credit_notes?.skipped_duplicate || 0} already synced
+                </div>
+              </div>
+              {backfillResult.note && (
+                <p className="text-xs text-blue-600 mt-1 italic">{backfillResult.note}</p>
+              )}
+            </div>
+          )}
         </CardHeader>
       </Card>
 

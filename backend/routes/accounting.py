@@ -1244,6 +1244,223 @@ async def post_payroll(
 # ============ END PHASE 2 AUTO-POSTING FUNCTIONS ============
 
 
+# ============ BACKFILL: SYNC HISTORICAL TRANSACTIONS ============
+
+@router.post("/backfill")
+async def backfill_journal_entries(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Backfill journal entries for all historical invoices, payments, and credit notes
+    that were created before the accounting engine was set up.
+    
+    Safe to re-run: uses idempotent create_auto_journal_entry (checks for duplicates).
+    
+    For transactions dated before accounting_start_date, uses the start date instead.
+    """
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    settings = await get_accounting_settings()
+    start_date = settings.get("accounting_start_date", "2026-01-01")
+    
+    results = {
+        "invoices": {"found": 0, "created": 0, "skipped_duplicate": 0, "errors": []},
+        "payments": {"found": 0, "created": 0, "skipped_duplicate": 0, "errors": []},
+        "credit_notes": {"found": 0, "created": 0, "skipped_duplicate": 0, "errors": []},
+    }
+    
+    def effective_date(original_date):
+        """Use accounting start date if original is before it"""
+        if not original_date or len(original_date) < 10:
+            return start_date
+        return original_date if original_date >= start_date else start_date
+    
+    # Ensure period is open for start_date
+    start_year = int(start_date[:4])
+    start_month = int(start_date[5:7])
+    existing_period = await db.accounting_periods.find_one(
+        {"year": start_year, "month": start_month}, {"_id": 0}
+    )
+    if not existing_period:
+        await db.accounting_periods.insert_one({
+            "year": start_year, "month": start_month,
+            "status": "open",
+            "created_at": get_malaysia_time().isoformat()
+        })
+    
+    # Also ensure current month period exists
+    now = get_malaysia_time()
+    current_period = await db.accounting_periods.find_one(
+        {"year": now.year, "month": now.month}, {"_id": 0}
+    )
+    if not current_period:
+        await db.accounting_periods.insert_one({
+            "year": now.year, "month": now.month,
+            "status": "open",
+            "created_at": now.isoformat()
+        })
+    
+    # ---- 1. BACKFILL INVOICES ----
+    invoices = await db.invoices.find(
+        {"status": {"$in": ["issued", "paid", "partial"]}},
+        {"_id": 0}
+    ).to_list(10000)
+    results["invoices"]["found"] = len(invoices)
+    
+    for inv in invoices:
+        try:
+            invoice_id = inv.get("id")
+            # Check if journal entry already exists
+            existing_je = await db.journal_entries.find_one({
+                "source_module": "invoice",
+                "source_id": invoice_id,
+                "status": {"$ne": "voided"}
+            })
+            if existing_je:
+                results["invoices"]["skipped_duplicate"] += 1
+                continue
+            
+            # Get session if linked
+            session = None
+            if inv.get("session_id"):
+                session = await db.sessions.find_one(
+                    {"id": inv["session_id"]}, {"_id": 0}
+                )
+            
+            # For paid invoices, force revenue recognition (not deferred)
+            # Training is done if payment was received
+            if inv.get("status") == "paid":
+                if session:
+                    session = {**session, "completion_status": "completed"}
+                else:
+                    session = {"completion_status": "completed"}
+            
+            # Override date for pre-start invoices
+            original_date = inv.get("invoice_date") or inv.get("created_at", "")[:10]
+            post_date = effective_date(original_date)
+            
+            # Temporarily patch the invoice date for the auto-post function
+            inv_copy = {**inv, "invoice_date": post_date}
+            
+            result = await post_invoice_issued(
+                invoice=inv_copy,
+                session=session,
+                user_id=current_user.id,
+                user_name=current_user.full_name
+            )
+            
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                results["invoices"]["created"] += 1
+            elif result.get("is_duplicate"):
+                results["invoices"]["skipped_duplicate"] += 1
+            elif result.get("error"):
+                results["invoices"]["errors"].append(
+                    f"{inv.get('invoice_number', invoice_id[:8])}: {result['error']}"
+                )
+        except Exception as e:
+            results["invoices"]["errors"].append(
+                f"{inv.get('invoice_number', 'Unknown')}: {str(e)}"
+            )
+    
+    # ---- 2. BACKFILL PAYMENTS ----
+    payments = await db.payments.find({}, {"_id": 0}).to_list(10000)
+    results["payments"]["found"] = len(payments)
+    
+    for pmt in payments:
+        try:
+            payment_id = pmt.get("id")
+            existing_je = await db.journal_entries.find_one({
+                "source_module": "payment",
+                "source_id": payment_id,
+                "status": {"$ne": "voided"}
+            })
+            if existing_je:
+                results["payments"]["skipped_duplicate"] += 1
+                continue
+            
+            original_date = pmt.get("payment_date") or pmt.get("created_at", "")[:10]
+            post_date = effective_date(original_date)
+            pmt_copy = {**pmt, "payment_date": post_date}
+            
+            invoice = None
+            if pmt.get("invoice_id"):
+                invoice = await db.invoices.find_one(
+                    {"id": pmt["invoice_id"]}, {"_id": 0}
+                )
+            
+            result = await post_payment_received(
+                payment=pmt_copy,
+                invoice=invoice,
+                user_id=current_user.id,
+                user_name=current_user.full_name
+            )
+            
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                results["payments"]["created"] += 1
+            elif result.get("is_duplicate"):
+                results["payments"]["skipped_duplicate"] += 1
+            elif result.get("error"):
+                results["payments"]["errors"].append(
+                    f"PMT-{payment_id[:8]}: {result['error']}"
+                )
+        except Exception as e:
+            results["payments"]["errors"].append(f"PMT-{pmt.get('id','?')[:8]}: {str(e)}")
+    
+    # ---- 3. BACKFILL CREDIT NOTES ----
+    credit_notes = await db.credit_notes.find(
+        {"status": {"$in": ["approved", "issued"]}},
+        {"_id": 0}
+    ).to_list(10000)
+    results["credit_notes"]["found"] = len(credit_notes)
+    
+    for cn in credit_notes:
+        try:
+            cn_id = cn.get("id")
+            existing_je = await db.journal_entries.find_one({
+                "source_module": "credit_note",
+                "source_id": cn_id,
+                "status": {"$ne": "voided"}
+            })
+            if existing_je:
+                results["credit_notes"]["skipped_duplicate"] += 1
+                continue
+            
+            original_date = cn.get("date") or cn.get("created_at", "")[:10]
+            post_date = effective_date(original_date)
+            cn_copy = {**cn, "date": post_date}
+            
+            result = await post_credit_note_issued(
+                credit_note=cn_copy,
+                user_id=current_user.id,
+                user_name=current_user.full_name
+            )
+            
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                results["credit_notes"]["created"] += 1
+            elif result.get("is_duplicate"):
+                results["credit_notes"]["skipped_duplicate"] += 1
+            elif result.get("error"):
+                results["credit_notes"]["errors"].append(
+                    f"{cn.get('credit_note_number', cn_id[:8])}: {result['error']}"
+                )
+        except Exception as e:
+            results["credit_notes"]["errors"].append(f"CN-{cn.get('id','?')[:8]}: {str(e)}")
+    
+    total_created = (
+        results["invoices"]["created"] +
+        results["payments"]["created"] +
+        results["credit_notes"]["created"]
+    )
+    
+    return {
+        "message": f"Backfill complete. {total_created} journal entries created.",
+        "results": results,
+        "accounting_start_date": start_date,
+        "note": f"Transactions dated before {start_date} were posted with date {start_date}"
+    }
+
+
 # ============ INITIALIZATION ============
 
 async def initialize_accounting_system():

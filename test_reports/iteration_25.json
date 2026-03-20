@@ -1,0 +1,111 @@
+{
+  "summary": "Iteration 25 - Backfill Journal Entries Testing Complete. All features verified: POST /api/accounting/backfill is idempotent (0 created, 8 skipped), P&L shows Training Revenue RM 27,840, Balance Sheet shows Accounts Receivable RM 27,840 and is balanced, Frontend 'Sync Historical Transactions' button works and displays result summary. Backend 14/14 tests PASSED. Frontend all critical flows working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/data-management/checklist-templates",
+        "issue": "Returns 500 - not related to accounting backfill (pre-existing issue)",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration25_backfill.py",
+    "/app/test_reports/pytest/iteration25_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration25_backfill.py"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 tests passed)",
+    "frontend": "100% (Backfill button, result display, P&L, Balance Sheet, all Accounting tabs verified)"
+  },
+  "test_credentials": "arjuna@mddrc.com.my / Dana102229",
+  "seed_data_creation": "None - backfill already ran previously, testing idempotency",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backfill feature is complete and idempotent. Re-running creates 0 new entries. All 4 invoices and 4 credit notes already synced. Navigate: Login > Dashboard > Finance Portal (direct URL /finance) > Accounting tab. The 'Sync Historical Transactions' button has data-testid='backfill-sync-btn', result has data-testid='backfill-result'.",
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  },
+  "feature_verification": {
+    "backend": {
+      "POST /api/accounting/backfill": "PASS - Returns 200, message, results object with found/created/skipped/errors",
+      "Backfill idempotency": "PASS - Re-running creates 0 new entries, 4 invoices + 4 credit notes skipped as duplicate",
+      "Backfill auth required": "PASS - Returns 401 'Not authenticated' without token",
+      "Backfill returns accounting_start_date": "PASS - Returns 2026-01-01",
+      "GET /api/accounting/profit-loss?year=2026": "PASS - Revenue 27,840, Expenses 3,103.65, Net Profit 24,736.35",
+      "P&L Training Revenue account (4000)": "PASS - Shows RM 27,840 (not in Deferred Revenue 2300)",
+      "GET /api/accounting/balance-sheet?year=2026&month=3": "PASS - Assets 25,455.90, Liab+Equity 25,455.90, is_balanced=true",
+      "Balance Sheet AR (1100)": "PASS - Accounts Receivable RM 27,840",
+      "Balance Sheet Current Year Earnings": "PASS - RM 24,736.35 (matches Net Profit)",
+      "GET /api/accounting/chart-of-accounts": "PASS - 46 accounts",
+      "GET /api/accounting/trial-balance": "PASS - Balanced (DR=CR=30,943.65)",
+      "GET /api/accounting/journal-entries": "PASS - 19 entries",
+      "GET /api/accounting/general-ledger/1100": "PASS - AR ledger with entries"
+    },
+    "frontend": {
+      "Finance Portal > Accounting tab": "PASS - Navigable via /finance URL",
+      "Sync Historical Transactions button (data-testid='backfill-sync-btn')": "PASS - Visible and clickable",
+      "Backfill result display (data-testid='backfill-result')": "PASS - Shows 'Backfill complete. 0 journal entries created.' with breakdown",
+      "Toast notification": "PASS - Shows 'All transactions are already synced. No new entries created.'",
+      "P&L tab": "PASS - Shows Training Revenue RM 27,840, Total Revenue, Expenses, Net Profit",
+      "Balance Sheet tab": "PASS - Shows AR RM 27,840, Balanced badge (green), Generate/Excel/Print buttons",
+      "Balance Sheet data-testid attributes": "PASS - bs-generate-btn, bs-asset-1100, balance-sheet-status-badge, bs-total-assets, bs-total-liabilities-equity all present",
+      "Chart of Accounts tab": "PASS - Lists all accounts with codes",
+      "Journal Entries tab": "PASS - Load button present",
+      "Trial Balance tab": "PASS - Accessible",
+      "General Ledger tab": "PASS - Accessible"
+    }
+  },
+  "backfill_response_sample": {
+    "message": "Backfill complete. 0 journal entries created.",
+    "results": {
+      "invoices": {"found": 4, "created": 0, "skipped_duplicate": 4, "errors": []},
+      "payments": {"found": 0, "created": 0, "skipped_duplicate": 0, "errors": []},
+      "credit_notes": {"found": 4, "created": 0, "skipped_duplicate": 4, "errors": []}
+    },
+    "accounting_start_date": "2026-01-01",
+    "note": "Transactions dated before 2026-01-01 were posted with date 2026-01-01"
+  },
+  "balance_sheet_sample_data": {
+    "period": "As of March 2026",
+    "assets": {
+      "accounts": [
+        {"account_code": "1000", "account_name": "Cash at Bank", "balance": -2384.1},
+        {"account_code": "1100", "account_name": "Accounts Receivable", "balance": 27840}
+      ],
+      "total": 25455.9
+    },
+    "liabilities": {
+      "accounts": [
+        {"account_code": "2400", "account_name": "EPF Payable", "balance": 648},
+        {"account_code": "2450", "account_name": "SOCSO Payable", "balance": 60.75},
+        {"account_code": "2460", "account_name": "EIS Payable", "balance": 10.8}
+      ],
+      "total": 719.55
+    },
+    "equity": {
+      "accounts": [],
+      "total": 24736.35,
+      "current_year_earnings": 24736.35
+    },
+    "total_liabilities_equity": 25455.9,
+    "is_balanced": true
+  },
+  "pnl_sample_data": {
+    "period": "Year 2026",
+    "revenue": {"total": 27840, "training_revenue_4000": 27840},
+    "expenses": {"total": 3103.65},
+    "net_profit": 24736.35
+  }
+}
