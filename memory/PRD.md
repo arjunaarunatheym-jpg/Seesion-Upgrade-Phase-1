@@ -11,37 +11,40 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 
 ## Current Status (Mar 2026)
 
+### Comprehensive Backfill System — COMPLETE (Mar 20, 2026)
+**Root cause fix**: Historical transactions created before the Accounting Engine had no journal entries.
+
+**What was built**:
+- `POST /api/accounting/backfill` handles **10 transaction types**: invoices, payments, credit notes, trainer fees, coordinator fees, session expenses, marketing commissions, manual income, manual expenses, petty cash
+- Uses **original transaction dates** (no longer forces pre-start dates to accounting start date)
+- Auto-opens accounting periods as needed
+- Idempotent: safe to re-run
+- Paid invoices always post to Training Revenue (4000), not Deferred Revenue
+- COA mapping: trainer→5000, coordinator→5100, marketing→5200, session expenses→5300-5700 by category, manual income→4100, manual expenses→6999, petty cash→6600
+
+**Date fix**: Dec 2025 invoices now correctly appear in 2025 P&L (not 2026).
+
+**Testing**: 100% — Backend 15/15, Frontend all flows (iteration_26)
+
 ### Balance Sheet UI Enhancement — COMPLETE
-- Balanced/Unbalanced badge, account codes, period label, Print button
-- Excel export working, data-testid coverage
+- Balanced/Unbalanced badge, account codes, period label, Print/Excel buttons
 - Testing: 100% (iteration_24)
 
-### Backfill / Sync Historical Transactions — COMPLETE (Mar 20, 2026)
-- **Root cause**: Invoices/payments created before Accounting Engine had no journal entries → Revenue showed RM 0
-- Built `POST /api/accounting/backfill` endpoint that retroactively creates journal entries for all existing invoices, payments, and credit notes
-- Handles pre-accounting-start-date transactions by posting with accounting start date
-- Paid invoices correctly mapped to Training Revenue (4000), not Deferred Revenue (2300)
-- Idempotent: safe to re-run, duplicates skipped automatically
-- Frontend: "Sync Historical Transactions" button with result summary in Accounting Engine header
-- After backfill: Revenue RM 27,840, Expenses RM 3,103.65, Net Profit RM 24,736.35
-- Balance Sheet: Assets RM 25,455.90 = Liabilities + Equity RM 25,455.90 (Balanced)
-- Testing: 100% — Backend 14/14, Frontend all flows verified (iteration_25)
-
 ### Production Audit Phase 1 — COMPLETE
-- DB indexes, JWT 24h expiry, ErrorBoundary, ProtectedRoute, CORS hardening
+- DB indexes, JWT 24h, ErrorBoundary, ProtectedRoute, CORS hardening
 
 ### Previous Session Completions
 - Payroll System Overhaul (edit, delete with void, journal auto-posting)
-- 3-Phase Finance Reporting (Auditor P&L, CEO P&L, YoY, Print COA)
+- Finance Reporting (Auditor P&L, CEO P&L, YoY, Print COA, Trial Balance)
 - Credit Note & Payment Flow Fix, Export Fixes
 
-## Design Principle: Always Include Backfill
-Per user request: any future improvement that adds auto-posting or new data processing must include a backfill mechanism for existing data.
+## Design Principle
+**Always include backfill**: Any future improvement that adds auto-posting or new data processing must include a backfill mechanism for existing data.
 
 ## Known Issues
 - Pre-existing 500 error on checklist template API (P2)
 - Historical journal entries show "Unknown" for some descriptions (P2)
-- P&L Ledger page (old system) still shows RM 0 — uses different data source than Accounting Engine P&L (P1, part of P&L unification)
+- P&L Ledger page (old system) uses different data source than Accounting Engine P&L (part of P&L unification task)
 
 ## Feature Backlog
 - (P0) Duplicate Route Refactor — 55 conflicting API endpoints
@@ -50,8 +53,7 @@ Per user request: any future improvement that adds auto-posting or new data proc
 - (P1) Post-Training Evaluation System
 - (P1) Automated Certificate Generation
 - (P1) SaaS Monetization (Stripe)
-- (P2) Client/Trainer Portals
-- (P2) Native App (Capacitor)
+- (P2) Client/Trainer Portals, Native App
 
 ## Test Credentials
 - Admin: arjuna@mddrc.com.my / Dana102229
