@@ -1393,7 +1393,7 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
-def create_access_token(data: dict, expires_delta: timedelta = timedelta(days=7)):
+def create_access_token(data: dict, expires_delta: timedelta = timedelta(hours=24)):
     to_encode = data.copy()
     # JWT expiration should remain in UTC for standard compliance
     expire = datetime.now(timezone.utc) + expires_delta
@@ -16738,7 +16738,7 @@ async def root_health_check():
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ.get('CORS_ORIGINS', '').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -16844,7 +16844,7 @@ async def setup_admin_account():
             await db.users.insert_one(admin_doc)
             logging.info(f"✅ Admin account created: {admin_email}")
         
-        logging.info(f"🔐 Admin credentials: {admin_email} / {admin_password}")
+        logging.info(f"Admin account ready: {admin_email}")
         
     except Exception as e:
         logging.error(f"❌ Failed to setup admin account: {str(e)}")

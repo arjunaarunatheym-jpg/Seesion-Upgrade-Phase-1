@@ -23,6 +23,8 @@ import FeedbackForm from "./pages/FeedbackForm";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "./context/ThemeContext";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
+import ErrorBoundary from "./components/ErrorBoundary";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
@@ -86,6 +88,7 @@ function App() {
 
   return (
     <ThemeProvider>
+      <ErrorBoundary>
       <div className="App">
         <BrowserRouter>
           <Routes>
@@ -98,7 +101,6 @@ function App() {
                 ) : user.role === "supervisor" || user.role === "pic_supervisor" ? (
                   <Navigate to="/supervisor" replace />
                 ) : (
-                  // All staff roles (admin, assistant_admin, coordinator, trainer, finance, marketing) go to calendar
                   <Navigate to="/calendar" replace />
                 )
               ) : (
@@ -119,27 +121,23 @@ function App() {
           <Route
             path="/calendar"
             element={
-              user && ["admin", "assistant_admin", "coordinator", "trainer", "marketing", "finance"].includes(user.role) ? (
+              <ProtectedRoute user={user} allowedRoles={["admin", "assistant_admin", "coordinator", "trainer", "marketing", "finance"]}>
                 <CalendarDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/admin"
             element={
-              user && (user.role === "admin" || user.email === "arjuna@mddrc.com.my") ? (
+              <ProtectedRoute user={user} allowedRoles={["admin"]}>
                 <AdminDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/super-admin"
             element={
-              user && user.email === "arjuna@mddrc.com.my" ? (
+              user && (user.role === "super_admin" || user.email === "arjuna@mddrc.com.my") ? (
                 <SuperAdminDashboard user={user} onLogout={handleLogout} />
               ) : (
                 <Navigate to="/login" replace />
@@ -149,91 +147,73 @@ function App() {
           <Route
             path="/participant"
             element={
-              user && user.role === "participant" ? (
+              <ProtectedRoute user={user} allowedRoles={["participant"]}>
                 <ParticipantDashboard user={user} onLogout={handleLogout} onUserUpdate={setUser} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/supervisor"
             element={
-              user && (user.role === "supervisor" || user.role === "pic_supervisor") ? (
+              <ProtectedRoute user={user} allowedRoles={["supervisor", "pic_supervisor"]}>
                 <SupervisorDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/trainer"
             element={
-              user && user.role === "trainer" ? (
+              <ProtectedRoute user={user} allowedRoles={["trainer"]}>
                 <TrainerDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/trainer-checklist/:sessionId/:participantId"
             element={
-              user && user.role === "trainer" ? (
+              <ProtectedRoute user={user} allowedRoles={["trainer"]}>
                 <TrainerChecklist user={user} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/trainer-dashboard"
             element={
-              user && user.role === "trainer" ? (
+              <ProtectedRoute user={user} allowedRoles={["trainer"]}>
                 <TrainerDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/coordinator"
             element={
-              user && user.role === "coordinator" ? (
+              <ProtectedRoute user={user} allowedRoles={["coordinator"]}>
                 <CoordinatorDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/assistant-admin"
             element={
-              user && user.role === "assistant_admin" ? (
+              <ProtectedRoute user={user} allowedRoles={["assistant_admin"]}>
                 <AssistantAdminDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/take-test/:testId/:sessionId"
             element={
-              user && user.role === "participant" ? (
+              <ProtectedRoute user={user} allowedRoles={["participant"]}>
                 <TakeTest />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/test-results/:resultId"
             element={
-              user && user.role === "participant" ? (
+              <ProtectedRoute user={user} allowedRoles={["participant"]}>
                 <TestResults />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
@@ -255,31 +235,25 @@ function App() {
           <Route
             path="/results-summary/:sessionId"
             element={
-              user && (user.role === "admin" || user.role === "coordinator" || user.role === "trainer") ? (
+              <ProtectedRoute user={user} allowedRoles={["admin", "coordinator", "trainer"]}>
                 <ResultsSummary />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/feedback/:sessionId"
             element={
-              user && user.role === "participant" ? (
+              <ProtectedRoute user={user} allowedRoles={["participant"]}>
                 <FeedbackForm user={user} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
             path="/finance"
             element={
-              user && (user.role === "finance" || user.role === "admin" || user.email === "arjuna@mddrc.com.my") ? (
+              <ProtectedRoute user={user} allowedRoles={["finance", "admin"]}>
                 <FinanceDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              </ProtectedRoute>
             }
           />
           <Route
@@ -307,6 +281,7 @@ function App() {
         <Toaster position="top-right" />
         <PWAInstallPrompt />
       </div>
+      </ErrorBoundary>
     </ThemeProvider>
   );
 }
