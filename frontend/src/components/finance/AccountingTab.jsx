@@ -556,23 +556,19 @@ const AccountingTab = ({ companySettings }) => {
           {backfillResult && (
             <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm" data-testid="backfill-result">
               <p className="font-semibold text-blue-800 mb-1">{backfillResult.message}</p>
-              <div className="grid grid-cols-3 gap-4 text-xs text-blue-700">
-                <div>
-                  <span className="font-medium">Invoices:</span> {backfillResult.results?.invoices?.created || 0} created, {backfillResult.results?.invoices?.skipped_duplicate || 0} already synced
-                  {(backfillResult.results?.invoices?.errors?.length > 0) && (
-                    <span className="text-red-600 block">{backfillResult.results.invoices.errors.length} error(s)</span>
-                  )}
-                </div>
-                <div>
-                  <span className="font-medium">Payments:</span> {backfillResult.results?.payments?.created || 0} created, {backfillResult.results?.payments?.skipped_duplicate || 0} already synced
-                </div>
-                <div>
-                  <span className="font-medium">Credit Notes:</span> {backfillResult.results?.credit_notes?.created || 0} created, {backfillResult.results?.credit_notes?.skipped_duplicate || 0} already synced
-                </div>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs text-blue-700">
+                {Object.entries(backfillResult.results || {}).map(([key, val]) => (
+                  val.found > 0 && (
+                    <div key={key}>
+                      <span className="font-medium capitalize">{key.replace(/_/g, ' ')}:</span>
+                      <span className="ml-1">{val.created} new, {val.skipped} synced</span>
+                      {(val.errors?.length > 0) && (
+                        <span className="text-red-600 block">{val.errors.length} error(s)</span>
+                      )}
+                    </div>
+                  )
+                ))}
               </div>
-              {backfillResult.note && (
-                <p className="text-xs text-blue-600 mt-1 italic">{backfillResult.note}</p>
-              )}
             </div>
           )}
         </CardHeader>

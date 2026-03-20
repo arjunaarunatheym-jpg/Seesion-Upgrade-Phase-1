@@ -316,7 +316,8 @@ async def create_auto_journal_entry(
     source_reference: str,
     lines: list,
     created_by_id: str = "system",
-    created_by_name: str = "System Auto-Post"
+    created_by_name: str = "System Auto-Post",
+    skip_date_check: bool = False
 ) -> dict:
     """
     Create and post a journal entry automatically from a source module.
@@ -351,10 +352,11 @@ async def create_auto_journal_entry(
         return {"error": f"Cannot post to closed period: {entry_date[:7]}", "journal_entry": None}
     
     # Check accounting start date
-    settings = await get_accounting_settings()
-    start_date = settings.get("accounting_start_date", "2026-01-01")
-    if entry_date < start_date:
-        return {"error": f"Date {entry_date} is before accounting start date {start_date}", "journal_entry": None}
+    if not skip_date_check:
+        settings = await get_accounting_settings()
+        start_date = settings.get("accounting_start_date", "2026-01-01")
+        if entry_date < start_date:
+            return {"error": f"Date {entry_date} is before accounting start date {start_date}", "journal_entry": None}
     
     # Validate and enrich lines
     enriched_lines = []
@@ -469,7 +471,8 @@ async def post_invoice_issued(
     invoice: dict,
     session: dict = None,
     user_id: str = "system",
-    user_name: str = "System"
+    user_name: str = "System",
+    skip_date_check: bool = False
 ) -> dict:
     """
     Create journal entry when invoice is issued.
@@ -554,7 +557,8 @@ async def post_invoice_issued(
         source_reference=invoice_number,
         lines=lines,
         created_by_id=user_id,
-        created_by_name=user_name
+        created_by_name=user_name,
+        skip_date_check=skip_date_check
     )
     
     # Store deferred revenue flag on invoice for later recognition
@@ -649,7 +653,8 @@ async def post_payment_received(
     payment: dict,
     invoice: dict = None,
     user_id: str = "system",
-    user_name: str = "System"
+    user_name: str = "System",
+    skip_date_check: bool = False
 ) -> dict:
     """
     Create journal entry when payment is received.
@@ -701,7 +706,8 @@ async def post_payment_received(
         source_reference=f"PMT-{payment_reference}",
         lines=lines,
         created_by_id=user_id,
-        created_by_name=user_name
+        created_by_name=user_name,
+        skip_date_check=skip_date_check
     )
     
     return result
@@ -712,7 +718,8 @@ async def post_payment_received(
 async def post_credit_note_issued(
     credit_note: dict,
     user_id: str = "system",
-    user_name: str = "System"
+    user_name: str = "System",
+    skip_date_check: bool = False
 ) -> dict:
     """
     Create journal entry when credit note is issued.
@@ -770,7 +777,8 @@ async def post_credit_note_issued(
         source_reference=cn_number,
         lines=lines,
         created_by_id=user_id,
-        created_by_name=user_name
+        created_by_name=user_name,
+        skip_date_check=skip_date_check
     )
     
     return result
@@ -1246,218 +1254,573 @@ async def post_payroll(
 
 # ============ BACKFILL: SYNC HISTORICAL TRANSACTIONS ============
 
+# Mapping session expense categories to COA accounts
+EXPENSE_CATEGORY_MAP = {
+    "venue": "5400", "logistics": "5400", "venue & logistics": "5400", "venue rental": "5400",
+    "materials": "5300", "training materials": "5300", "stationery": "5300", "printing": "5300",
+    "transport": "5500", "transportation": "5500", "vehicle": "5500",
+    "toll": "5510", "travel": "5510", "toll and travel": "5510", "mileage": "5510",
+    "accommodation": "5600", "hotel": "5600", "lodging": "5600",
+    "meals": "5700", "food": "5700", "f&b": "5700", "food & beverage": "5700", "catering": "5700",
+    "refreshment": "5700", "refreshments": "5700",
+}
+DEFAULT_EXPENSE_ACCOUNT = "5400"  # Default to Venue & Logistics
+
+
+async def ensure_period_open(date_str: str):
+    """Ensure the accounting period for a given date is open. Create if not exists."""
+    if not date_str or len(date_str) < 7:
+        return
+    year = int(date_str[:4])
+    month = int(date_str[5:7])
+    existing = await db.accounting_periods.find_one(
+        {"year": year, "month": month}, {"_id": 0}
+    )
+    if not existing:
+        await db.accounting_periods.insert_one({
+            "year": year, "month": month,
+            "status": "open",
+            "created_at": get_malaysia_time().isoformat()
+        })
+
+
+def get_expense_account(category: str) -> str:
+    """Map a session expense category to a COA account code."""
+    if not category:
+        return DEFAULT_EXPENSE_ACCOUNT
+    return EXPENSE_CATEGORY_MAP.get(category.lower().strip(), DEFAULT_EXPENSE_ACCOUNT)
+
+
 @router.post("/backfill")
 async def backfill_journal_entries(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Backfill journal entries for all historical invoices, payments, and credit notes
-    that were created before the accounting engine was set up.
+    Comprehensive backfill: creates journal entries for ALL historical transactions
+    that don't have them yet. Covers invoices, payments, credit notes, session expenses,
+    trainer fees, coordinator fees, marketing commissions, manual income/expenses, and petty cash.
     
-    Safe to re-run: uses idempotent create_auto_journal_entry (checks for duplicates).
-    
-    For transactions dated before accounting_start_date, uses the start date instead.
+    Safe to re-run (idempotent). Uses original transaction dates.
     """
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    settings = await get_accounting_settings()
-    start_date = settings.get("accounting_start_date", "2026-01-01")
+    # Build session date lookup (needed for session-linked expenses)
+    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "start_date": 1, "session_name": 1, "program_name": 1}).to_list(10000)
+    session_date_map = {}
+    session_name_map = {}
+    for s in sessions:
+        sid = s.get("id")
+        session_date_map[sid] = s.get("start_date", "")
+        session_name_map[sid] = s.get("session_name") or s.get("program_name") or sid[:8]
     
     results = {
-        "invoices": {"found": 0, "created": 0, "skipped_duplicate": 0, "errors": []},
-        "payments": {"found": 0, "created": 0, "skipped_duplicate": 0, "errors": []},
-        "credit_notes": {"found": 0, "created": 0, "skipped_duplicate": 0, "errors": []},
+        "invoices": {"found": 0, "created": 0, "skipped": 0, "errors": []},
+        "payments": {"found": 0, "created": 0, "skipped": 0, "errors": []},
+        "credit_notes": {"found": 0, "created": 0, "skipped": 0, "errors": []},
+        "trainer_fees": {"found": 0, "created": 0, "skipped": 0, "errors": []},
+        "coordinator_fees": {"found": 0, "created": 0, "skipped": 0, "errors": []},
+        "session_expenses": {"found": 0, "created": 0, "skipped": 0, "errors": []},
+        "marketing_commissions": {"found": 0, "created": 0, "skipped": 0, "errors": []},
+        "manual_income": {"found": 0, "created": 0, "skipped": 0, "errors": []},
+        "manual_expenses": {"found": 0, "created": 0, "skipped": 0, "errors": []},
+        "petty_cash": {"found": 0, "created": 0, "skipped": 0, "errors": []},
     }
     
-    def effective_date(original_date):
-        """Use accounting start date if original is before it"""
-        if not original_date or len(original_date) < 10:
-            return start_date
-        return original_date if original_date >= start_date else start_date
+    user_id = current_user.id
+    user_name = current_user.full_name
     
-    # Ensure period is open for start_date
-    start_year = int(start_date[:4])
-    start_month = int(start_date[5:7])
-    existing_period = await db.accounting_periods.find_one(
-        {"year": start_year, "month": start_month}, {"_id": 0}
-    )
-    if not existing_period:
-        await db.accounting_periods.insert_one({
-            "year": start_year, "month": start_month,
-            "status": "open",
-            "created_at": get_malaysia_time().isoformat()
-        })
-    
-    # Also ensure current month period exists
-    now = get_malaysia_time()
-    current_period = await db.accounting_periods.find_one(
-        {"year": now.year, "month": now.month}, {"_id": 0}
-    )
-    if not current_period:
-        await db.accounting_periods.insert_one({
-            "year": now.year, "month": now.month,
-            "status": "open",
-            "created_at": now.isoformat()
-        })
-    
-    # ---- 1. BACKFILL INVOICES ----
+    # ---- 1. INVOICES ----
     invoices = await db.invoices.find(
-        {"status": {"$in": ["issued", "paid", "partial"]}},
-        {"_id": 0}
+        {"status": {"$in": ["issued", "paid", "partial"]}}, {"_id": 0}
     ).to_list(10000)
     results["invoices"]["found"] = len(invoices)
     
     for inv in invoices:
         try:
             invoice_id = inv.get("id")
-            # Check if journal entry already exists
-            existing_je = await db.journal_entries.find_one({
-                "source_module": "invoice",
-                "source_id": invoice_id,
-                "status": {"$ne": "voided"}
+            existing = await db.journal_entries.find_one({
+                "source_module": "invoice", "source_id": invoice_id, "status": {"$ne": "voided"}
             })
-            if existing_je:
-                results["invoices"]["skipped_duplicate"] += 1
+            if existing:
+                results["invoices"]["skipped"] += 1
                 continue
             
-            # Get session if linked
             session = None
             if inv.get("session_id"):
-                session = await db.sessions.find_one(
-                    {"id": inv["session_id"]}, {"_id": 0}
-                )
+                session = await db.sessions.find_one({"id": inv["session_id"]}, {"_id": 0})
             
-            # For paid invoices, force revenue recognition (not deferred)
-            # Training is done if payment was received
+            # For paid invoices, force revenue recognition
             if inv.get("status") == "paid":
-                if session:
-                    session = {**session, "completion_status": "completed"}
-                else:
-                    session = {"completion_status": "completed"}
+                session = {**(session or {}), "completion_status": "completed"}
             
-            # Override date for pre-start invoices
             original_date = inv.get("invoice_date") or inv.get("created_at", "")[:10]
-            post_date = effective_date(original_date)
+            if not original_date or len(original_date) < 10:
+                original_date = get_malaysia_time().strftime("%Y-%m-%d")
             
-            # Temporarily patch the invoice date for the auto-post function
-            inv_copy = {**inv, "invoice_date": post_date}
+            await ensure_period_open(original_date)
+            inv_copy = {**inv, "invoice_date": original_date}
             
             result = await post_invoice_issued(
-                invoice=inv_copy,
-                session=session,
-                user_id=current_user.id,
-                user_name=current_user.full_name
+                invoice=inv_copy, session=session,
+                user_id=user_id, user_name=user_name,
+                skip_date_check=True
             )
             
             if result.get("journal_entry") and not result.get("is_duplicate"):
                 results["invoices"]["created"] += 1
             elif result.get("is_duplicate"):
-                results["invoices"]["skipped_duplicate"] += 1
+                results["invoices"]["skipped"] += 1
             elif result.get("error"):
-                results["invoices"]["errors"].append(
-                    f"{inv.get('invoice_number', invoice_id[:8])}: {result['error']}"
-                )
+                results["invoices"]["errors"].append(f"{inv.get('invoice_number', invoice_id[:8])}: {result['error']}")
         except Exception as e:
-            results["invoices"]["errors"].append(
-                f"{inv.get('invoice_number', 'Unknown')}: {str(e)}"
-            )
+            results["invoices"]["errors"].append(f"{inv.get('invoice_number', 'Unknown')}: {str(e)}")
     
-    # ---- 2. BACKFILL PAYMENTS ----
+    # ---- 2. PAYMENTS ----
     payments = await db.payments.find({}, {"_id": 0}).to_list(10000)
     results["payments"]["found"] = len(payments)
     
     for pmt in payments:
         try:
             payment_id = pmt.get("id")
-            existing_je = await db.journal_entries.find_one({
-                "source_module": "payment",
-                "source_id": payment_id,
-                "status": {"$ne": "voided"}
+            existing = await db.journal_entries.find_one({
+                "source_module": "payment", "source_id": payment_id, "status": {"$ne": "voided"}
             })
-            if existing_je:
-                results["payments"]["skipped_duplicate"] += 1
+            if existing:
+                results["payments"]["skipped"] += 1
                 continue
             
             original_date = pmt.get("payment_date") or pmt.get("created_at", "")[:10]
-            post_date = effective_date(original_date)
-            pmt_copy = {**pmt, "payment_date": post_date}
+            if not original_date or len(original_date) < 10:
+                original_date = get_malaysia_time().strftime("%Y-%m-%d")
+            await ensure_period_open(original_date)
+            pmt_copy = {**pmt, "payment_date": original_date}
             
             invoice = None
             if pmt.get("invoice_id"):
-                invoice = await db.invoices.find_one(
-                    {"id": pmt["invoice_id"]}, {"_id": 0}
-                )
+                invoice = await db.invoices.find_one({"id": pmt["invoice_id"]}, {"_id": 0})
             
             result = await post_payment_received(
-                payment=pmt_copy,
-                invoice=invoice,
-                user_id=current_user.id,
-                user_name=current_user.full_name
+                payment=pmt_copy, invoice=invoice,
+                user_id=user_id, user_name=user_name,
+                skip_date_check=True
             )
             
             if result.get("journal_entry") and not result.get("is_duplicate"):
                 results["payments"]["created"] += 1
             elif result.get("is_duplicate"):
-                results["payments"]["skipped_duplicate"] += 1
+                results["payments"]["skipped"] += 1
             elif result.get("error"):
-                results["payments"]["errors"].append(
-                    f"PMT-{payment_id[:8]}: {result['error']}"
-                )
+                results["payments"]["errors"].append(f"PMT-{payment_id[:8]}: {result['error']}")
         except Exception as e:
             results["payments"]["errors"].append(f"PMT-{pmt.get('id','?')[:8]}: {str(e)}")
     
-    # ---- 3. BACKFILL CREDIT NOTES ----
+    # ---- 3. CREDIT NOTES ----
     credit_notes = await db.credit_notes.find(
-        {"status": {"$in": ["approved", "issued"]}},
-        {"_id": 0}
+        {"status": {"$in": ["approved", "issued"]}}, {"_id": 0}
     ).to_list(10000)
     results["credit_notes"]["found"] = len(credit_notes)
     
     for cn in credit_notes:
         try:
             cn_id = cn.get("id")
-            existing_je = await db.journal_entries.find_one({
-                "source_module": "credit_note",
-                "source_id": cn_id,
-                "status": {"$ne": "voided"}
+            existing = await db.journal_entries.find_one({
+                "source_module": "credit_note", "source_id": cn_id, "status": {"$ne": "voided"}
             })
-            if existing_je:
-                results["credit_notes"]["skipped_duplicate"] += 1
+            if existing:
+                results["credit_notes"]["skipped"] += 1
                 continue
             
             original_date = cn.get("date") or cn.get("created_at", "")[:10]
-            post_date = effective_date(original_date)
-            cn_copy = {**cn, "date": post_date}
+            if not original_date or len(original_date) < 10:
+                original_date = get_malaysia_time().strftime("%Y-%m-%d")
+            await ensure_period_open(original_date)
+            cn_copy = {**cn, "date": original_date}
             
             result = await post_credit_note_issued(
-                credit_note=cn_copy,
-                user_id=current_user.id,
-                user_name=current_user.full_name
+                credit_note=cn_copy, user_id=user_id, user_name=user_name,
+                skip_date_check=True
             )
             
             if result.get("journal_entry") and not result.get("is_duplicate"):
                 results["credit_notes"]["created"] += 1
             elif result.get("is_duplicate"):
-                results["credit_notes"]["skipped_duplicate"] += 1
+                results["credit_notes"]["skipped"] += 1
             elif result.get("error"):
-                results["credit_notes"]["errors"].append(
-                    f"{cn.get('credit_note_number', cn_id[:8])}: {result['error']}"
-                )
+                results["credit_notes"]["errors"].append(f"{cn.get('credit_note_number', cn_id[:8])}: {result['error']}")
         except Exception as e:
             results["credit_notes"]["errors"].append(f"CN-{cn.get('id','?')[:8]}: {str(e)}")
     
-    total_created = (
-        results["invoices"]["created"] +
-        results["payments"]["created"] +
-        results["credit_notes"]["created"]
-    )
+    # ---- 4. TRAINER FEES ----
+    trainer_fees = await db.trainer_fees.find({}, {"_id": 0}).to_list(10000)
+    results["trainer_fees"]["found"] = len(trainer_fees)
+    
+    for tf in trainer_fees:
+        try:
+            tf_id = tf.get("id")
+            amount = float(tf.get("fee_amount") or 0)
+            if amount <= 0:
+                results["trainer_fees"]["skipped"] += 1
+                continue
+            
+            existing = await db.journal_entries.find_one({
+                "source_module": "trainer_fee", "source_id": tf_id, "status": {"$ne": "voided"}
+            })
+            if existing:
+                results["trainer_fees"]["skipped"] += 1
+                continue
+            
+            session_id = tf.get("session_id", "")
+            entry_date = tf.get("session_start_date") or session_date_map.get(session_id, "") or tf.get("created_at", "")[:10]
+            if not entry_date or len(entry_date) < 10:
+                entry_date = get_malaysia_time().strftime("%Y-%m-%d")
+            await ensure_period_open(entry_date)
+            
+            session_name = session_name_map.get(session_id, session_id[:8] if session_id else "Unknown")
+            trainer_name = tf.get("trainer_name", "Trainer")
+            
+            result = await create_auto_journal_entry(
+                entry_date=entry_date,
+                description=f"Trainer Fee - {trainer_name} for {session_name}",
+                source_module="trainer_fee",
+                source_id=tf_id,
+                source_reference=f"TF-{tf_id[:8]}",
+                lines=[
+                    {"account_code": "5000", "debit": amount, "credit": 0, "memo": f"Trainer fee - {trainer_name}"},
+                    {"account_code": "2100", "debit": 0, "credit": amount, "memo": "AP - Trainer fee payable"},
+                ],
+                created_by_id=user_id,
+                created_by_name=user_name,
+                skip_date_check=True
+            )
+            
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                results["trainer_fees"]["created"] += 1
+            elif result.get("is_duplicate"):
+                results["trainer_fees"]["skipped"] += 1
+            elif result.get("error"):
+                results["trainer_fees"]["errors"].append(f"TF-{tf_id[:8]}: {result['error']}")
+        except Exception as e:
+            results["trainer_fees"]["errors"].append(f"TF-{tf.get('id','?')[:8]}: {str(e)}")
+    
+    # ---- 5. COORDINATOR FEES ----
+    coordinator_fees = await db.coordinator_fees.find({}, {"_id": 0}).to_list(10000)
+    results["coordinator_fees"]["found"] = len(coordinator_fees)
+    
+    for cf in coordinator_fees:
+        try:
+            cf_id = cf.get("id")
+            amount = float(cf.get("total_fee") or 0)
+            if amount <= 0:
+                results["coordinator_fees"]["skipped"] += 1
+                continue
+            
+            existing = await db.journal_entries.find_one({
+                "source_module": "coordinator_fee", "source_id": cf_id, "status": {"$ne": "voided"}
+            })
+            if existing:
+                results["coordinator_fees"]["skipped"] += 1
+                continue
+            
+            session_id = cf.get("session_id", "")
+            entry_date = session_date_map.get(session_id, "") or cf.get("created_at", "")[:10]
+            if not entry_date or len(entry_date) < 10:
+                entry_date = get_malaysia_time().strftime("%Y-%m-%d")
+            await ensure_period_open(entry_date)
+            
+            session_name = session_name_map.get(session_id, session_id[:8] if session_id else "Unknown")
+            
+            result = await create_auto_journal_entry(
+                entry_date=entry_date,
+                description=f"Coordinator Fee for {session_name}",
+                source_module="coordinator_fee",
+                source_id=cf_id,
+                source_reference=f"CF-{cf_id[:8]}",
+                lines=[
+                    {"account_code": "5100", "debit": amount, "credit": 0, "memo": "Coordinator fee"},
+                    {"account_code": "2100", "debit": 0, "credit": amount, "memo": "AP - Coordinator fee payable"},
+                ],
+                created_by_id=user_id,
+                created_by_name=user_name,
+                skip_date_check=True
+            )
+            
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                results["coordinator_fees"]["created"] += 1
+            elif result.get("is_duplicate"):
+                results["coordinator_fees"]["skipped"] += 1
+            elif result.get("error"):
+                results["coordinator_fees"]["errors"].append(f"CF-{cf_id[:8]}: {result['error']}")
+        except Exception as e:
+            results["coordinator_fees"]["errors"].append(f"CF-{cf.get('id','?')[:8]}: {str(e)}")
+    
+    # ---- 6. SESSION EXPENSES (venue, materials, meals, transport, etc.) ----
+    session_expenses = await db.session_expenses.find({}, {"_id": 0}).to_list(10000)
+    results["session_expenses"]["found"] = len(session_expenses)
+    
+    for exp in session_expenses:
+        try:
+            exp_id = exp.get("id")
+            amount = float(exp.get("actual_amount") or 0)
+            if amount <= 0:
+                results["session_expenses"]["skipped"] += 1
+                continue
+            
+            existing = await db.journal_entries.find_one({
+                "source_module": "session_expense", "source_id": exp_id, "status": {"$ne": "voided"}
+            })
+            if existing:
+                results["session_expenses"]["skipped"] += 1
+                continue
+            
+            session_id = exp.get("session_id", "")
+            entry_date = session_date_map.get(session_id, "") or exp.get("created_at", "")[:10]
+            if not entry_date or len(entry_date) < 10:
+                entry_date = get_malaysia_time().strftime("%Y-%m-%d")
+            await ensure_period_open(entry_date)
+            
+            category = exp.get("category", "")
+            description_text = exp.get("description", category or "Session expense")
+            account_code = get_expense_account(category)
+            session_name = session_name_map.get(session_id, session_id[:8] if session_id else "Unknown")
+            
+            result = await create_auto_journal_entry(
+                entry_date=entry_date,
+                description=f"Session Expense - {description_text} for {session_name}",
+                source_module="session_expense",
+                source_id=exp_id,
+                source_reference=f"SE-{exp_id[:8]}",
+                lines=[
+                    {"account_code": account_code, "debit": amount, "credit": 0, "memo": f"{description_text}"},
+                    {"account_code": "2100", "debit": 0, "credit": amount, "memo": f"AP - {description_text}"},
+                ],
+                created_by_id=user_id,
+                created_by_name=user_name,
+                skip_date_check=True
+            )
+            
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                results["session_expenses"]["created"] += 1
+            elif result.get("is_duplicate"):
+                results["session_expenses"]["skipped"] += 1
+            elif result.get("error"):
+                results["session_expenses"]["errors"].append(f"SE-{exp_id[:8]}: {result['error']}")
+        except Exception as e:
+            results["session_expenses"]["errors"].append(f"SE-{exp.get('id','?')[:8]}: {str(e)}")
+    
+    # ---- 7. MARKETING COMMISSIONS ----
+    marketing_comms = await db.marketing_commissions.find({}, {"_id": 0}).to_list(10000)
+    results["marketing_commissions"]["found"] = len(marketing_comms)
+    
+    for mc in marketing_comms:
+        try:
+            mc_id = mc.get("id")
+            amount = float(mc.get("calculated_amount") or mc.get("amount") or 0)
+            if amount <= 0:
+                results["marketing_commissions"]["skipped"] += 1
+                continue
+            
+            existing = await db.journal_entries.find_one({
+                "source_module": "marketing_commission", "source_id": mc_id, "status": {"$ne": "voided"}
+            })
+            if existing:
+                results["marketing_commissions"]["skipped"] += 1
+                continue
+            
+            session_id = mc.get("session_id", "")
+            entry_date = session_date_map.get(session_id, "") or mc.get("created_at", "")[:10]
+            if not entry_date or len(entry_date) < 10:
+                entry_date = get_malaysia_time().strftime("%Y-%m-%d")
+            await ensure_period_open(entry_date)
+            
+            session_name = session_name_map.get(session_id, session_id[:8] if session_id else "Unknown")
+            marketer_name = mc.get("marketer_name", "Marketing")
+            
+            result = await create_auto_journal_entry(
+                entry_date=entry_date,
+                description=f"Marketing Commission - {marketer_name} for {session_name}",
+                source_module="marketing_commission",
+                source_id=mc_id,
+                source_reference=f"MC-{mc_id[:8]}",
+                lines=[
+                    {"account_code": "5200", "debit": amount, "credit": 0, "memo": f"Commission - {marketer_name}"},
+                    {"account_code": "2100", "debit": 0, "credit": amount, "memo": "AP - Marketing commission"},
+                ],
+                created_by_id=user_id,
+                created_by_name=user_name,
+                skip_date_check=True
+            )
+            
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                results["marketing_commissions"]["created"] += 1
+            elif result.get("is_duplicate"):
+                results["marketing_commissions"]["skipped"] += 1
+            elif result.get("error"):
+                results["marketing_commissions"]["errors"].append(f"MC-{mc_id[:8]}: {result['error']}")
+        except Exception as e:
+            results["marketing_commissions"]["errors"].append(f"MC-{mc.get('id','?')[:8]}: {str(e)}")
+    
+    # ---- 8. MANUAL INCOME ----
+    manual_income = await db.manual_income.find({}, {"_id": 0}).to_list(10000)
+    results["manual_income"]["found"] = len(manual_income)
+    
+    for mi in manual_income:
+        try:
+            mi_id = mi.get("id")
+            amount = float(mi.get("amount") or 0)
+            if amount <= 0:
+                results["manual_income"]["skipped"] += 1
+                continue
+            
+            existing = await db.journal_entries.find_one({
+                "source_module": "manual_income", "source_id": mi_id, "status": {"$ne": "voided"}
+            })
+            if existing:
+                results["manual_income"]["skipped"] += 1
+                continue
+            
+            entry_date = mi.get("date", "") or mi.get("created_at", "")[:10]
+            if not entry_date or len(entry_date) < 10:
+                entry_date = get_malaysia_time().strftime("%Y-%m-%d")
+            await ensure_period_open(entry_date)
+            
+            description_text = mi.get("description", "Manual income")
+            
+            result = await create_auto_journal_entry(
+                entry_date=entry_date,
+                description=f"Manual Income - {description_text}",
+                source_module="manual_income",
+                source_id=mi_id,
+                source_reference=f"MI-{mi_id[:8]}",
+                lines=[
+                    {"account_code": "1000", "debit": amount, "credit": 0, "memo": f"Cash - {description_text}"},
+                    {"account_code": "4100", "debit": 0, "credit": amount, "memo": f"Other Income - {description_text}"},
+                ],
+                created_by_id=user_id,
+                created_by_name=user_name,
+                skip_date_check=True
+            )
+            
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                results["manual_income"]["created"] += 1
+            elif result.get("is_duplicate"):
+                results["manual_income"]["skipped"] += 1
+            elif result.get("error"):
+                results["manual_income"]["errors"].append(f"MI-{mi_id[:8]}: {result['error']}")
+        except Exception as e:
+            results["manual_income"]["errors"].append(f"MI-{mi.get('id','?')[:8]}: {str(e)}")
+    
+    # ---- 9. MANUAL EXPENSES ----
+    manual_expenses = await db.manual_expenses.find({}, {"_id": 0}).to_list(10000)
+    results["manual_expenses"]["found"] = len(manual_expenses)
+    
+    for me_entry in manual_expenses:
+        try:
+            me_id = me_entry.get("id")
+            amount = float(me_entry.get("amount") or 0)
+            if amount <= 0:
+                results["manual_expenses"]["skipped"] += 1
+                continue
+            
+            existing = await db.journal_entries.find_one({
+                "source_module": "manual_expense", "source_id": me_id, "status": {"$ne": "voided"}
+            })
+            if existing:
+                results["manual_expenses"]["skipped"] += 1
+                continue
+            
+            entry_date = me_entry.get("date", "") or me_entry.get("created_at", "")[:10]
+            if not entry_date or len(entry_date) < 10:
+                entry_date = get_malaysia_time().strftime("%Y-%m-%d")
+            await ensure_period_open(entry_date)
+            
+            description_text = me_entry.get("description", "Manual expense")
+            
+            result = await create_auto_journal_entry(
+                entry_date=entry_date,
+                description=f"Manual Expense - {description_text}",
+                source_module="manual_expense",
+                source_id=me_id,
+                source_reference=f"ME-{me_id[:8]}",
+                lines=[
+                    {"account_code": "6999", "debit": amount, "credit": 0, "memo": f"{description_text}"},
+                    {"account_code": "1000", "debit": 0, "credit": amount, "memo": f"Cash paid - {description_text}"},
+                ],
+                created_by_id=user_id,
+                created_by_name=user_name,
+                skip_date_check=True
+            )
+            
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                results["manual_expenses"]["created"] += 1
+            elif result.get("is_duplicate"):
+                results["manual_expenses"]["skipped"] += 1
+            elif result.get("error"):
+                results["manual_expenses"]["errors"].append(f"ME-{me_id[:8]}: {result['error']}")
+        except Exception as e:
+            results["manual_expenses"]["errors"].append(f"ME-{me_entry.get('id','?')[:8]}: {str(e)}")
+    
+    # ---- 10. PETTY CASH ----
+    petty_cash = await db.petty_cash.find({}, {"_id": 0}).to_list(10000)
+    results["petty_cash"]["found"] = len(petty_cash)
+    
+    for pc in petty_cash:
+        try:
+            pc_id = pc.get("id")
+            amount = float(pc.get("amount") or 0)
+            if amount <= 0:
+                results["petty_cash"]["skipped"] += 1
+                continue
+            
+            existing = await db.journal_entries.find_one({
+                "source_module": "petty_cash", "source_id": pc_id, "status": {"$ne": "voided"}
+            })
+            if existing:
+                results["petty_cash"]["skipped"] += 1
+                continue
+            
+            entry_date = pc.get("date", "") or pc.get("created_at", "")[:10]
+            if not entry_date or len(entry_date) < 10:
+                entry_date = get_malaysia_time().strftime("%Y-%m-%d")
+            await ensure_period_open(entry_date)
+            
+            description_text = pc.get("description", "Petty cash expense")
+            
+            result = await create_auto_journal_entry(
+                entry_date=entry_date,
+                description=f"Petty Cash - {description_text}",
+                source_module="petty_cash",
+                source_id=pc_id,
+                source_reference=f"PC-{pc_id[:8]}",
+                lines=[
+                    {"account_code": "6600", "debit": amount, "credit": 0, "memo": f"Petty cash - {description_text}"},
+                    {"account_code": "1001", "debit": 0, "credit": amount, "memo": "Petty cash fund used"},
+                ],
+                created_by_id=user_id,
+                created_by_name=user_name,
+                skip_date_check=True
+            )
+            
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                results["petty_cash"]["created"] += 1
+            elif result.get("is_duplicate"):
+                results["petty_cash"]["skipped"] += 1
+            elif result.get("error"):
+                results["petty_cash"]["errors"].append(f"PC-{pc_id[:8]}: {result['error']}")
+        except Exception as e:
+            results["petty_cash"]["errors"].append(f"PC-{pc.get('id','?')[:8]}: {str(e)}")
+    
+    # Calculate totals
+    total_created = sum(r["created"] for r in results.values())
+    total_found = sum(r["found"] for r in results.values())
+    total_skipped = sum(r["skipped"] for r in results.values())
     
     return {
-        "message": f"Backfill complete. {total_created} journal entries created.",
+        "message": f"Backfill complete. {total_created} journal entries created from {total_found} transactions ({total_skipped} already synced).",
         "results": results,
-        "accounting_start_date": start_date,
-        "note": f"Transactions dated before {start_date} were posted with date {start_date}"
+        "total_created": total_created,
+        "total_found": total_found,
+        "total_skipped": total_skipped,
     }
 
 

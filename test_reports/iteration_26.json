@@ -1,0 +1,138 @@
+{
+  "summary": "Iteration 26 - Backfill Original Dates Testing Complete. Key fix verified: Dec 2025 invoices now use original dates (Dec 2025) instead of being forced to 2026-01-01. All 10 transaction types handled. 2026 P&L correctly shows Revenue RM 0 (Dec 2025 invoices in 2025), Balance Sheet balanced (RM 25,455.90 = Assets = Liab+Equity). Backend 15/15 tests PASSED. Frontend all critical flows verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration26_backfill_dates.py",
+    "/app/test_reports/pytest/iteration26_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Old journal entries dated 2026-01-01 still exist in DB (from previous backfill) but are skipped due to idempotency check. Consider cleanup migration if needed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration26_backfill_dates.py"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 tests passed)",
+    "frontend": "100% (All Accounting sub-tabs verified: COA, Journals, Trial Balance, GL, Balance Sheet, P&L)"
+  },
+  "test_credentials": "arjuna@mddrc.com.my / Dana102229",
+  "seed_data_creation": "None - backfill already ran. Testing idempotency and date verification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backfill with original dates is complete and working. Dec 2025 invoices are in 2025, 2026 P&L shows Revenue 0. All 10 transaction types (invoices, payments, credit_notes, trainer_fees, coordinator_fees, session_expenses, marketing_commissions, manual_income, manual_expenses, petty_cash) are handled. Preview env has no trainer_fees/session_expenses/etc data (expected). Account mapping: trainer=5000, coordinator=5100, marketing=5200, session expenses=5300-5700, manual income=4100, manual expenses=6999, petty cash=6600.",
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  },
+  "feature_verification": {
+    "backend": {
+      "POST /api/accounting/backfill handles 10 types": "PASS - All 10 transaction types present in response",
+      "Backfill idempotency": "PASS - 0 created, 8 skipped (4 invoices + 4 credit notes)",
+      "Backfill uses original dates": "PASS - Dec 2025 invoices have Dec 7/14/16/17 dates in 2025",
+      "Backfill auto-opens periods": "PASS - Dec 2025 period exists and is open",
+      "2026 P&L shows Revenue 0": "PASS - Revenue total is 0 for 2026",
+      "2025 P&L shows Training Revenue": "PASS - RM 27,840 in account 4000",
+      "2026 P&L shows only payroll expenses": "PASS - RM 3,103.65 (6000, 6100, 6200, 6300)",
+      "Balance Sheet is balanced": "PASS - is_balanced=true, Assets=Liab+Equity=25,455.90",
+      "Balance Sheet shows AR": "PASS - 1100 Accounts Receivable RM 27,840",
+      "COA has training expense accounts": "PASS - 5000-5700 all present",
+      "Trial Balance balanced": "PASS - DR=CR=30,943.65",
+      "Journal entries Dec 2025": "PASS - 8 entries with correct dates",
+      "General Ledger accessible": "PASS - 4000 (Training Revenue) has entries"
+    },
+    "frontend": {
+      "Sync Historical Transactions button": "PASS - data-testid='backfill-sync-btn' works",
+      "Backfill result display": "PASS - Shows '0 journal entries created from 8 transactions (8 already synced)' with breakdown",
+      "P&L tab (2026)": "PASS - Shows Revenue RM 0.00, Expenses RM 3,103.65, NET LOSS RM 3,103.65",
+      "Balance Sheet tab": "PASS - Shows 'Balanced' badge, Total Assets=Liab+Equity=RM 25,455.90",
+      "Trial Balance tab": "PASS - Shows 'Balanced' badge, Debit=Credit=RM 30,943.65",
+      "Chart of Accounts tab": "PASS - Shows all account types with codes",
+      "Journal Entries tab": "PASS - Accessible",
+      "General Ledger tab": "PASS - Accessible"
+    }
+  },
+  "backfill_response_sample": {
+    "message": "Backfill complete. 0 journal entries created from 8 transactions (8 already synced).",
+    "results": {
+      "invoices": {"found": 4, "created": 0, "skipped": 4},
+      "payments": {"found": 0, "created": 0, "skipped": 0},
+      "credit_notes": {"found": 4, "created": 0, "skipped": 4},
+      "trainer_fees": {"found": 0, "created": 0, "skipped": 0},
+      "coordinator_fees": {"found": 0, "created": 0, "skipped": 0},
+      "session_expenses": {"found": 0, "created": 0, "skipped": 0},
+      "marketing_commissions": {"found": 0, "created": 0, "skipped": 0},
+      "manual_income": {"found": 0, "created": 0, "skipped": 0},
+      "manual_expenses": {"found": 0, "created": 0, "skipped": 0},
+      "petty_cash": {"found": 0, "created": 0, "skipped": 0}
+    },
+    "total_created": 0,
+    "total_found": 8,
+    "total_skipped": 8
+  },
+  "pnl_2026_data": {
+    "period": "Year 2026",
+    "revenue": {"accounts": [], "total": 0.0},
+    "expenses": {
+      "accounts": [
+        {"account_code": "6000", "account_name": "Salary & Wages", "amount": 2700.0},
+        {"account_code": "6100", "account_name": "EPF Employer Contribution", "amount": 351.0},
+        {"account_code": "6200", "account_name": "SOCSO Employer Contribution", "amount": 47.25},
+        {"account_code": "6300", "account_name": "EIS Employer Contribution", "amount": 5.4}
+      ],
+      "total": 3103.65
+    },
+    "net_profit": -3103.65
+  },
+  "pnl_2025_data": {
+    "period": "Year 2025",
+    "revenue": {"accounts": [{"account_code": "4000", "account_name": "Training Revenue", "amount": 27840.0}], "total": 27840.0},
+    "expenses": {"accounts": [], "total": 0.0},
+    "net_profit": 27840.0
+  },
+  "balance_sheet_march_2026": {
+    "period": "As of March 2026",
+    "assets": {
+      "accounts": [
+        {"account_code": "1000", "account_name": "Cash at Bank", "balance": -2384.1},
+        {"account_code": "1100", "account_name": "Accounts Receivable", "balance": 27840.0}
+      ],
+      "total": 25455.9
+    },
+    "liabilities": {
+      "accounts": [
+        {"account_code": "2400", "account_name": "EPF Payable", "balance": 648.0},
+        {"account_code": "2450", "account_name": "SOCSO Payable", "balance": 60.75},
+        {"account_code": "2460", "account_name": "EIS Payable", "balance": 10.8}
+      ],
+      "total": 719.55
+    },
+    "equity": {"accounts": [], "total": 24736.35, "current_year_earnings": 24736.35},
+    "total_liabilities_equity": 25455.9,
+    "is_balanced": true
+  },
+  "dec_2025_journal_entries": [
+    {"journal_no": "JE-2025-12-0004", "date": "2025-12-07", "source": "invoice", "description": "Invoice INV/MDDRC/2025/12/0001"},
+    {"journal_no": "JE-2025-12-0001", "date": "2025-12-14", "source": "invoice", "description": "Invoice INV/MDDRC/2025/12/0002"},
+    {"journal_no": "JE-2025-12-0002", "date": "2025-12-16", "source": "invoice", "description": "Invoice INV/MDDRC/2025/12/0003"},
+    {"journal_no": "JE-2025-12-0003", "date": "2025-12-17", "source": "invoice", "description": "Invoice INV/MDDRC/2025/12/0004"},
+    {"journal_no": "JE-2025-12-0005 to 0008", "date": "2025-12-31", "source": "credit_note", "description": "4 credit notes"}
+  ],
+  "account_mapping_verification": {
+    "trainer_fees": "5000 - Trainer Fees (verified in COA)",
+    "coordinator_fees": "5100 - Coordinator Fees (verified in COA)",
+    "marketing_commissions": "5200 - Marketing Commission (verified in COA)",
+    "session_expenses": "5300-5700 based on category (verified in COA)",
+    "manual_income": "4100 (expected mapping)",
+    "manual_expenses": "6999 (expected mapping)",
+    "petty_cash": "6600 (expected mapping)"
+  }
+}
