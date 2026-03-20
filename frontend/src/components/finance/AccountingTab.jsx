@@ -468,7 +468,15 @@ const AccountingTab = ({ companySettings }) => {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Chart of Accounts</CardTitle>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => {
+                  <Button variant="outline" size="sm" onClick={async () => {
+                    // Fetch trial balance for actual amounts
+                    let trialData = {};
+                    try {
+                      const tbRes = await axiosInstance.get('/finance/trial-balance?year=' + new Date().getFullYear());
+                      (tbRes.data?.accounts || []).forEach(a => { trialData[a.account_code] = a; });
+                    } catch (e) { /* proceed without balances */ }
+                    const fmt = (v) => v ? `RM ${Math.abs(v).toLocaleString('en-MY', {minimumFractionDigits:2, maximumFractionDigits:2})}` : '-';
+
                     const settings = companySettings || {};
                     const primaryColor = settings.primary_color || '#1a365d';
                     const secondaryColor = settings.secondary_color || '#4472C4';
@@ -485,28 +493,31 @@ const AccountingTab = ({ companySettings }) => {
                     const types = ['Asset', 'Liability', 'Equity', 'Income', 'Expense'];
                     const typeColors = { Asset: '#2563eb', Liability: '#dc2626', Equity: '#7c3aed', Income: '#16a34a', Expense: '#ea580c' };
                     const w = window.open('', '_blank');
-                    w.document.write(`<!DOCTYPE html><html><head><title>Chart of Accounts</title>
+                    w.document.write(`<!DOCTYPE html><html><head><title>Chart of Accounts — Trial Balance</title>
                     <style>
-                      @page { size: A4; margin: 15mm; }
+                      @page { size: A4 landscape; margin: 12mm; }
                       @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
                       * { box-sizing: border-box; margin: 0; padding: 0; }
-                      body { font-family: Arial, sans-serif; font-size: 11px; padding: 25px; max-width: 210mm; margin: 0 auto; line-height: 1.5; color: #333; }
-                      .header { display: flex; align-items: center; gap: 20px; padding-bottom: 15px; border-bottom: 3px solid ${primaryColor}; margin-bottom: 20px; }
-                      .logo-img { width: 100px; height: auto; }
+                      body { font-family: Arial, sans-serif; font-size: 10px; padding: 20px; margin: 0 auto; line-height: 1.4; color: #333; }
+                      .header { display: flex; align-items: center; gap: 20px; padding-bottom: 12px; border-bottom: 3px solid ${primaryColor}; margin-bottom: 15px; }
+                      .logo-img { width: 80px; height: auto; }
                       .company-details { flex: 1; }
-                      .company-name { font-size: 18px; font-weight: bold; color: ${primaryColor}; margin-bottom: 5px; }
-                      .company-info { font-size: 11px; color: #444; line-height: 1.5; }
-                      .doc-title { font-size: 20px; font-weight: bold; text-align: center; color: ${primaryColor}; margin: 15px 0; padding: 10px; background: #f0f4f8; }
-                      .section-title { font-size: 13px; font-weight: bold; padding: 8px 12px; margin: 16px 0 6px; border-left: 4px solid; }
-                      table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-                      th { background: ${secondaryColor}; color: white; font-weight: bold; font-size: 10px; text-transform: uppercase; padding: 6px 10px; text-align: left; }
-                      td { padding: 5px 10px; font-size: 10px; border-bottom: 1px solid #eee; }
+                      .company-name { font-size: 16px; font-weight: bold; color: ${primaryColor}; margin-bottom: 3px; }
+                      .company-info { font-size: 10px; color: #444; line-height: 1.4; }
+                      .doc-title { font-size: 18px; font-weight: bold; text-align: center; color: ${primaryColor}; margin: 10px 0; padding: 8px; background: #f0f4f8; }
+                      .doc-subtitle { text-align: center; color: #666; font-size: 10px; margin-bottom: 12px; }
+                      .section-title { font-size: 12px; font-weight: bold; padding: 6px 10px; margin: 12px 0 4px; border-left: 4px solid; }
+                      table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+                      th { background: ${secondaryColor}; color: white; font-weight: bold; font-size: 9px; text-transform: uppercase; padding: 5px 8px; text-align: left; }
+                      th.num { text-align: right; }
+                      td { padding: 4px 8px; font-size: 9px; border-bottom: 1px solid #eee; }
+                      td.num { text-align: right; font-family: monospace; }
+                      td.has-val { font-weight: bold; }
                       .code { font-family: monospace; font-weight: bold; }
-                      .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: bold; }
-                      .active { background: #dcfce7; color: #166534; }
-                      .inactive { background: #f3f4f6; color: #6b7280; }
-                      .footer { margin-top: 30px; font-size: 9px; color: #777; padding-top: 12px; border-top: 1px solid #ddd; text-align: center; }
-                      .tagline { font-style: italic; color: ${primaryColor}; font-size: 12px; text-align: center; margin-top: 15px; padding-top: 12px; border-top: 1px solid #eee; }
+                      .stotal td { font-weight: bold; background: #f8f9fa; border-top: 2px solid #999; padding: 5px 8px; }
+                      .gtotal td { font-weight: bold; font-size: 10px; background: #e8edf3; border-top: 3px double #333; padding: 7px 8px; }
+                      .footer { margin-top: 20px; font-size: 8px; color: #777; padding-top: 10px; border-top: 1px solid #ddd; text-align: center; }
+                      .tagline { font-style: italic; color: ${primaryColor}; font-size: 11px; text-align: center; margin-top: 10px; }
                     </style></head><body>
                     <div class="header">
                       ${logoUrl ? `<img src="${logoUrl}" class="logo-img" alt="Logo" />` : ''}
@@ -521,28 +532,38 @@ const AccountingTab = ({ companySettings }) => {
                         </div>
                       </div>
                     </div>
-                    <div class="doc-title">CHART OF ACCOUNTS</div>
+                    <div class="doc-title">CHART OF ACCOUNTS — TRIAL BALANCE</div>
+                    <div class="doc-subtitle">For the Year ${new Date().getFullYear()} &bull; Generated: ${new Date().toLocaleString('en-MY')}</div>
                     ${types.map(type => {
                       const accs = (groupedAccounts[type] || []);
                       if (accs.length === 0) return '';
-                      return `
-                        <div class="section-title" style="border-color: ${typeColors[type]}; color: ${typeColors[type]};">${type.toUpperCase()} (${accs.length} accounts)</div>
-                        <table>
-                          <thead><tr><th style="width:15%;">Code</th><th style="width:40%;">Account Name</th><th style="width:25%;">Category</th><th style="width:10%;">Normal</th><th style="width:10%;">Status</th></tr></thead>
-                          <tbody>
-                            ${accs.map(a => `<tr>
-                              <td class="code">${a.account_code}</td>
-                              <td>${a.account_name}</td>
-                              <td style="color:#666;">${a.account_category || '-'}</td>
-                              <td>${a.normal_balance}</td>
-                              <td><span class="badge ${a.is_active ? 'active' : 'inactive'}">${a.is_active ? 'Active' : 'Inactive'}</span></td>
-                            </tr>`).join('')}
-                          </tbody>
-                        </table>`;
+                      let sDr = 0, sCr = 0;
+                      const rows = accs.map(a => {
+                        const tb = trialData[a.account_code] || {};
+                        const dr = tb.debit_balance || 0;
+                        const cr = tb.credit_balance || 0;
+                        sDr += dr; sCr += cr;
+                        return '<tr>' +
+                          '<td class="code">' + a.account_code + '</td>' +
+                          '<td>' + a.account_name + '</td>' +
+                          '<td style="color:#666;">' + (a.account_category || '-') + '</td>' +
+                          '<td class="num' + (dr > 0 ? ' has-val' : '') + '">' + (dr > 0 ? fmt(dr) : '-') + '</td>' +
+                          '<td class="num' + (cr > 0 ? ' has-val' : '') + '">' + (cr > 0 ? fmt(cr) : '-') + '</td>' +
+                          '</tr>';
+                      }).join('');
+                      return '<div class="section-title" style="border-color:' + typeColors[type] + ';color:' + typeColors[type] + ';">' + type.toUpperCase() + ' (' + accs.length + ' accounts)</div>' +
+                        '<table><thead><tr><th style="width:12%;">Code</th><th style="width:36%;">Account Name</th><th style="width:22%;">Category</th><th class="num" style="width:15%;">Debit (RM)</th><th class="num" style="width:15%;">Credit (RM)</th></tr></thead><tbody>' +
+                        rows +
+                        '<tr class="stotal"><td colspan="3" style="text-align:right;color:' + typeColors[type] + ';">' + type + ' Total</td><td class="num">' + (sDr > 0 ? fmt(sDr) : '-') + '</td><td class="num">' + (sCr > 0 ? fmt(sCr) : '-') + '</td></tr>' +
+                        '</tbody></table>';
                     }).join('')}
+                    <table><tbody><tr class="gtotal">
+                      <td colspan="3" style="text-align:right;width:70%;">GRAND TOTAL</td>
+                      <td class="num" style="width:15%;">${fmt(Object.values(trialData).reduce((s,a) => s + (a.debit_balance||0), 0))}</td>
+                      <td class="num" style="width:15%;">${fmt(Object.values(trialData).reduce((s,a) => s + (a.credit_balance||0), 0))}</td>
+                    </tr></tbody></table>
                     <div class="footer">
-                      <p>Chart of Accounts — ${settings.company_name || 'MDDRC'} Training Management System</p>
-                      <p>Generated on: ${new Date().toLocaleString('en-MY')}</p>
+                      <p>Chart of Accounts with Trial Balance — ${settings.company_name || 'MDDRC'} Training Management System</p>
                     </div>
                     <div class="tagline">"${tagline}"</div>
                     <script>window.onload = function() { setTimeout(function() { window.print(); }, 500); };</script>

@@ -23,7 +23,7 @@ import pymongo
 import os
 
 # Configuration
-BASE_URL = "https://fin-reporting-v2.preview.emergentagent.com/api"
+BASE_URL = "https://balance-sheet-ui.preview.emergentagent.com/api"
 
 # Test Credentials from review request
 ADMIN_EMAIL = "arjuna@mddrc.com.my"

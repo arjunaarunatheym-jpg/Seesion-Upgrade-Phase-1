@@ -1342,3 +1342,237 @@ async def pnl_drilldown(
         "total_debit": round(sum(e["debit"] for e in result), 2),
         "total_credit": round(sum(e["credit"] for e in result), 2),
     }
+
+
+# ==================== TRIAL BALANCE ====================
+
+@router.get("/trial-balance")
+async def get_trial_balance(
+    year: Optional[int] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Trial Balance — COA with actual debit/credit balances from journal entries"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    from datetime import datetime
+
+    # Build date filter
+    date_filter = {"status": "posted"}
+    period_label = "All Time"
+    if date_from and date_to:
+        date_filter["date"] = {"$gte": date_from, "$lte": date_to}
+        period_label = f"{date_from} to {date_to}"
+    elif year:
+        date_filter["date"] = {"$gte": f"{year}-01-01", "$lte": f"{year}-12-31"}
+        period_label = f"Year {year}"
+
+    # Get all active accounts from COA
+    accounts = await db.chart_of_accounts.find(
+        {"is_active": True}, {"_id": 0}
+    ).sort("account_code", 1).to_list(500)
+
+    # Aggregate journal entry lines by account code
+    pipeline = [
+        {"$match": date_filter},
+        {"$unwind": "$lines"},
+        {"$group": {
+            "_id": "$lines.account_code",
+            "total_debit": {"$sum": {"$toDouble": {"$ifNull": ["$lines.debit", 0]}}},
+            "total_credit": {"$sum": {"$toDouble": {"$ifNull": ["$lines.credit", 0]}}},
+            "entry_count": {"$sum": 1}
+        }}
+    ]
+    balances_raw = await db.journal_entries.aggregate(pipeline).to_list(500)
+    balance_map = {b["_id"]: b for b in balances_raw}
+
+    # Build trial balance rows
+    rows = []
+    grand_debit = 0
+    grand_credit = 0
+
+    for acc in accounts:
+        code = acc["account_code"]
+        bal = balance_map.get(code, {})
+        total_debit = round(bal.get("total_debit", 0), 2)
+        total_credit = round(bal.get("total_credit", 0), 2)
+        net = round(total_debit - total_credit, 2)
+
+        # Normal balance determines which column shows the net
+        normal = acc.get("normal_balance", "debit")
+        if normal == "debit":
+            debit_balance = round(net, 2) if net > 0 else 0
+            credit_balance = round(abs(net), 2) if net < 0 else 0
+        else:
+            credit_balance = round(abs(net), 2) if net < 0 or (net <= 0) else 0
+            debit_balance = round(net, 2) if net > 0 else 0
+            # For credit-normal accounts, net negative means credit balance
+            credit_balance = round(abs(net), 2) if net <= 0 else 0
+            debit_balance = round(net, 2) if net > 0 else 0
+
+        grand_debit += debit_balance
+        grand_credit += credit_balance
+
+        rows.append({
+            "account_code": code,
+            "account_name": acc["account_name"],
+            "account_type": acc["account_type"],
+            "account_category": acc.get("account_category", ""),
+            "normal_balance": normal,
+            "total_debit": total_debit,
+            "total_credit": total_credit,
+            "debit_balance": debit_balance,
+            "credit_balance": credit_balance,
+            "entry_count": bal.get("entry_count", 0),
+        })
+
+    return {
+        "period": period_label,
+        "accounts": rows,
+        "totals": {
+            "total_debit": round(grand_debit, 2),
+            "total_credit": round(grand_credit, 2),
+            "is_balanced": abs(grand_debit - grand_credit) < 0.01,
+            "difference": round(grand_debit - grand_credit, 2),
+        },
+        "account_count": len(rows),
+        "accounts_with_activity": sum(1 for r in rows if r["entry_count"] > 0),
+    }
+
+
+# ==================== BALANCE SHEET ====================
+
+@router.get("/balance-sheet")
+async def get_balance_sheet(
+    as_at: Optional[str] = None,
+    year: Optional[int] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Balance Sheet — Assets = Liabilities + Equity. Uses journal entries up to the given date."""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    from datetime import datetime
+
+    # Determine cut-off date
+    if as_at:
+        cutoff_date = as_at
+    elif year:
+        cutoff_date = f"{year}-12-31"
+    else:
+        cutoff_date = datetime.now().strftime("%Y-%m-%d")
+
+    period_label = f"As at {cutoff_date}"
+
+    # Get COA for balance sheet accounts only
+    bs_accounts = await db.chart_of_accounts.find(
+        {"is_active": True, "statement_type": "balance_sheet"},
+        {"_id": 0}
+    ).sort("account_code", 1).to_list(200)
+
+    # Also get P&L accounts (to calculate retained earnings)
+    pnl_accounts = await db.chart_of_accounts.find(
+        {"is_active": True, "statement_type": "profit_and_loss"},
+        {"_id": 0}
+    ).sort("account_code", 1).to_list(200)
+
+    all_codes = [a["account_code"] for a in bs_accounts + pnl_accounts]
+
+    # Aggregate all journal entries up to cutoff date
+    pipeline = [
+        {"$match": {"status": "posted", "date": {"$lte": cutoff_date}}},
+        {"$unwind": "$lines"},
+        {"$match": {"lines.account_code": {"$in": all_codes}}},
+        {"$group": {
+            "_id": "$lines.account_code",
+            "total_debit": {"$sum": {"$toDouble": {"$ifNull": ["$lines.debit", 0]}}},
+            "total_credit": {"$sum": {"$toDouble": {"$ifNull": ["$lines.credit", 0]}}}
+        }}
+    ]
+    balances_raw = await db.journal_entries.aggregate(pipeline).to_list(500)
+    balance_map = {b["_id"]: b for b in balances_raw}
+
+    def calc_balance(code, normal):
+        bal = balance_map.get(code, {})
+        dr = bal.get("total_debit", 0)
+        cr = bal.get("total_credit", 0)
+        if normal == "debit":
+            return round(dr - cr, 2)
+        else:
+            return round(cr - dr, 2)
+
+    # Build sections
+    assets = {"current": [], "non_current": [], "total": 0}
+    liabilities = {"current": [], "non_current": [], "total": 0}
+    equity = {"accounts": [], "total": 0}
+
+    for acc in bs_accounts:
+        code = acc["account_code"]
+        normal = acc.get("normal_balance", "debit")
+        balance = calc_balance(code, normal)
+        row = {
+            "account_code": code,
+            "account_name": acc["account_name"],
+            "account_category": acc.get("account_category", ""),
+            "balance": balance,
+        }
+
+        atype = acc["account_type"]
+        if atype == "Asset":
+            # Current assets: codes 1000-1499, Non-current: 1500+
+            if int(code) < 1500:
+                assets["current"].append(row)
+            else:
+                assets["non_current"].append(row)
+            assets["total"] = round(assets["total"] + balance, 2)
+        elif atype == "Liability":
+            if int(code) < 2500:
+                liabilities["current"].append(row)
+            else:
+                liabilities["non_current"].append(row)
+            liabilities["total"] = round(liabilities["total"] + balance, 2)
+        elif atype == "Equity":
+            equity["accounts"].append(row)
+            equity["total"] = round(equity["total"] + balance, 2)
+
+    # Calculate retained earnings from P&L accounts
+    retained_earnings = 0
+    for acc in pnl_accounts:
+        code = acc["account_code"]
+        normal = acc.get("normal_balance", "credit")
+        balance = calc_balance(code, normal)
+        # Revenue adds to retained earnings, expenses subtract
+        if acc["account_type"] in ["Income", "Revenue"]:
+            retained_earnings += balance
+        else:  # Expense
+            retained_earnings -= balance
+    retained_earnings = round(retained_earnings, 2)
+
+    equity["accounts"].append({
+        "account_code": "RE",
+        "account_name": "Retained Earnings (from P&L)",
+        "account_category": "Equity",
+        "balance": retained_earnings,
+    })
+    equity["total"] = round(equity["total"] + retained_earnings, 2)
+
+    total_liabilities_equity = round(liabilities["total"] + equity["total"], 2)
+    is_balanced = abs(assets["total"] - total_liabilities_equity) < 0.01
+
+    return {
+        "period": period_label,
+        "as_at": cutoff_date,
+        "assets": assets,
+        "liabilities": liabilities,
+        "equity": equity,
+        "summary": {
+            "total_assets": assets["total"],
+            "total_liabilities": liabilities["total"],
+            "total_equity": equity["total"],
+            "total_liabilities_equity": total_liabilities_equity,
+            "is_balanced": is_balanced,
+            "difference": round(assets["total"] - total_liabilities_equity, 2),
+        },
+    }

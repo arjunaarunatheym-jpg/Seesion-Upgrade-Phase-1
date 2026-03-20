@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://fin-reporting-v2.preview.emergentagent.com/api"
+BASE_URL = "https://balance-sheet-ui.preview.emergentagent.com/api"
 ADMIN_EMAIL = "arjuna@mddrc.com.my"
 ADMIN_PASSWORD = "Dana102229"
 PARTICIPANT_IC = "871128385485"
