@@ -11,103 +11,96 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 - **Trainer**: Conducts training, provides feedback
 - **Participant**: Attends training, completes tests, feedback
 
-## Core Features Implemented
-1. **Authentication & Authorization** - JWT-based login with role-based access
-2. **Training Session Management** - Create, schedule, manage training sessions
-3. **Participant Management** - Registration, attendance tracking, certificates
-4. **Invoice System** - Auto-generation, approval workflow, PDF generation
-5. **Multi-Invoice per Session** - Link multiple invoices from different companies to a single session
-6. **Finance Portal** - Full accounting, P&L ledger, payables, credit notes
-7. **Quotation System** - Marketing quotations with admin approval workflow
-8. **Indemnity Form** - Multi-step wizard with digital signature capture
-
 ## Tech Stack
 - Frontend: React 18 + Tailwind CSS + Shadcn UI
 - Backend: FastAPI (Python)
 - Database: MongoDB
 - PDF Generation: fpdf2
-- Authentication: JWT + bcrypt
+- Authentication: JWT + bcrypt (24h expiry)
 - Email: Resend API
-
-## API Endpoints (Key)
-- `/api/auth/login` - User authentication
-- `/api/finance/pnl-journal` - Journal-based Auditor P&L endpoint
-- `/api/finance/pnl-journal/drilldown/{account_code}` - Drilldown into P&L accounts
-- `/api/finance/pnl-journal/export` - Export P&L to Excel
-- `/api/accounting/chart-of-accounts` - Unified COA source of truth
-- `/api/accounting/upgrade-coa` - COA migration endpoint
-- `/api/hr/payslips/generate` - Generate payslip with full staff info, YTD, journal posting
-- `/api/hr/payslips/{id}` - GET/PUT/DELETE payslip (with journal entry management)
 
 ## Current Status (Mar 2026)
 
-### Recently Completed (Mar 19, 2026)
-- **3-Phase Finance Reporting Overhaul — COMPLETE**
-  - Phase A: Unified COA (46 accounts) with statement_type and pnl_section fields
-  - Phase B: Journal-based P&L endpoint with filters, drill-down, Excel export
-  - Phase C: Auditor P&L tab with summary cards, filters, drill-down dialog, print/export
-  - Fixed critical bug: pnl-journal endpoint return statement was misplaced
-  - All 14 backend tests passed, frontend verified (iteration_21)
+### Production Audit Phase 1 — COMPLETE (Mar 20, 2026)
+**Zero-risk fixes applied:**
+- CORS default hardened ('' instead of '*' fallback)
+- Admin password removed from startup logs
+- Dead backup files deleted (1.3MB)
+- 29 database indexes added across 15 collections
+- JWT expiry reduced from 7 days to 24 hours
 
-- **Payslip System Overhaul — COMPLETE**
-  - Fixed root cause: Duplicate endpoints in routes/hr.py (simplified) vs server.py (complete) — routes/hr.py was taking priority but missing staff info, YTD, journal posting
-  - Updated routes/hr.py with complete payslip generation including: designation, department, EPF/SOCSO numbers, bank info, YTD calculations, journal posting
-  - Added Edit Payslip endpoint (PUT /api/hr/payslips/{id}) with staff info refresh, amount editing, gross/nett recalculation, YTD recalculation, journal re-posting
-  - Added journal entry voiding on payslip delete
-  - Fixed post_payroll() field name mismatches (nett_pay vs net_pay, full_name vs employee_name)
-  - Removed ~377 lines of duplicate payslip code from server.py
-  - Added Edit button + dialog to frontend with live calculation preview
-  - Backdating works — generate payslips for any past month/year
-  - All tested via curl + frontend screenshots + testing agent (iteration_22)
+**Additive safety fixes applied:**
+- ErrorBoundary wraps entire app (prevents white-screen crashes)
+- ProtectedRoute guards on all frontend routes
+- Role-based access enforced: coordinator blocked from /finance, /admin
+- All 20/20 backend tests passed, all frontend flows verified (iteration_23)
 
-### Upcoming (P0/P1)
-- Trainer Contract Workflow
-- Post-Training Evaluation System
-- Automated Certificate Generation Workflow
-- SaaS Monetization (Stripe Integration)
-- server.py continued refactoring
+### Phase 1 Items Still Pending (Higher Risk — Need Careful Planning)
+- Remove 55 duplicate route definitions (24 in server.py, 31 cross-file)
+- Add `_id` exclusion to 96 MongoDB queries
+- Replace 106 bare `except:` clauses
+- Add Pydantic validation models for financial inputs
 
-### Backlog (P2)
-- Journal entry "Unknown" descriptions fix
-- Convert to Native App (Capacitor)
-- Privacy Policy Page
-- Client Portal / Trainer Portal
-- Enhanced Data Management tables with search/pagination
-- WYSIWYG PDF Template Editor
-- Collapsible table UI in Admin Dashboard
-- Cash Basis P&L report
+### Previous Session Completions
+- 3-Phase Finance Reporting Overhaul (Auditor P&L)
+- Payslip System Overhaul (edit, journal posting, delete with void)
+- Credit Note & Payment Flow Fix
+- Export Fixes (Marketing CSV, Invoice Excel)
+- CEO P&L, YoY Comparison, Print COA
+- Duplicate HR code removal (~667 lines)
+
+### Phase 2 — Operational Improvements (Planned)
+- Unify to single P&L system (journal-based)
+- Implement invoice status state machine
+- Consolidate 5 audit log collections into 1
+- Consolidate 3 attendance collections into 1
+- Add MongoDB schema validation
+- Continue server.py modularization
+- Add responsive breakpoints to 6 mobile-critical pages
+- Write integration tests for critical financial paths
+- Enforce password policy (8+ chars, complexity)
+
+### Phase 3 — Scaling & Polish (Planned)
+- Migrate financial calculations to Decimal
+- Break mega-components into sub-components
+- Implement refresh token mechanism
+- Feature-based frontend directory restructure
+- Loading skeletons and empty states
+- CI/CD pipeline
+
+### Feature Backlog
+- (P0) Trainer Contract Workflow
+- (P1) Post-Training Evaluation System
+- (P1) Automated Certificate Generation
+- (P1) SaaS Monetization (Stripe)
+- (P2) Client Portal / Trainer Portal
+- (P2) Cash Basis P&L Report
+- (P2) Native App (Capacitor)
+- (P2) Privacy Policy Page
 
 ## Architecture
 ```
 /app/
 ├── backend/
-│   ├── routes/
-│   │   ├── accounting.py          # COA source of truth, journal posting, migration
-│   │   ├── finance_reports.py     # Journal-based P&L, export, drilldown, subledgers, GL
-│   │   ├── finance_payments.py    # Payment recording, credit notes
-│   │   ├── finance_invoices.py    # Invoice CRUD, Excel export
-│   │   ├── hr.py                  # Complete HR/Payroll (payslip CRUD with journals)
-│   │   ├── marketing.py           # Quotation + lead notifications
-│   │   ├── sessions_new.py        # Session management
-│   │   └── notifications.py       # Notification settings + broadcast
+│   ├── routes/ (18 files - authoritative endpoints)
 │   ├── utils/
-│   │   └── email_notifications.py # Smart email dispatcher
-│   └── server.py                  # Main FastAPI app (reduced tech debt)
+│   ├── models/
+│   └── server.py (16,854 lines - needs modularization)
 └── frontend/
     └── src/
         ├── components/
-        │   ├── ledger/
-        │   │   ├── AuditorPnLTab.jsx     # Journal-based P&L with drill-down
-        │   │   ├── CEOPnLTab.jsx         # Programme-based P&L
-        │   │   ├── YoYComparisonTab.jsx  # Year-over-year comparison
-        │   │   └── GeneralLedgerTab.jsx  # General Ledger view
-        │   ├── finance/                  # Finance sub-components
-        │   ├── HRModule.jsx              # HR & Payroll with Edit payslip dialog
-        │   └── ProfitLossLedger.jsx      # Container for all P&L tabs
-        └── pages/
-            └── FinanceDashboard.jsx      # Finance Portal page
+        │   ├── ErrorBoundary.jsx (NEW)
+        │   ├── ProtectedRoute.jsx (NEW)
+        │   ├── ledger/ (P&L tabs)
+        │   ├── finance/ (sub-components)
+        │   └── HRModule.jsx
+        ├── pages/ (13 pages)
+        └── App.js (route definitions)
 ```
 
 ## Test Credentials
 - Admin: arjuna@mddrc.com.my / Dana102229
 - Coordinator: malek@mddrc.com.my / mddrc1
+
+## Full Audit Report
+See `/app/PRODUCTION_AUDIT_REPORT.md` for the complete 38-issue audit with severity classifications and 3-phase roadmap.
