@@ -1291,6 +1291,47 @@ def get_expense_account(category: str) -> str:
     return EXPENSE_CATEGORY_MAP.get(category.lower().strip(), DEFAULT_EXPENSE_ACCOUNT)
 
 
+@router.post("/backfill/reset-and-resync")
+async def reset_and_resync(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Void ALL auto-posted (non-payroll) journal entries and re-run the full backfill.
+    This fixes entries that were posted with wrong dates or wrong accounts.
+    Payroll entries are preserved since they were auto-posted correctly.
+    """
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    backfill_sources = [
+        "invoice", "payment", "credit_note",
+        "trainer_fee", "coordinator_fee", "session_expense",
+        "marketing_commission", "manual_income", "manual_expense", "petty_cash",
+        "revenue_recognition"
+    ]
+    
+    # Void all auto-posted entries from backfill sources
+    void_result = await db.journal_entries.update_many(
+        {"source_module": {"$in": backfill_sources}, "status": "posted"},
+        {"$set": {
+            "status": "voided",
+            "void_reason": "Reset & Re-sync: voided for re-posting with correct dates",
+            "voided_at": get_malaysia_time().isoformat(),
+            "voided_by": current_user.id
+        }}
+    )
+    voided_count = void_result.modified_count
+    
+    # Now run the full backfill (reuse the existing endpoint logic)
+    backfill_result = await backfill_journal_entries(current_user)
+    
+    return {
+        "message": f"Reset complete. Voided {voided_count} old entries, then {backfill_result['message']}",
+        "voided_count": voided_count,
+        "backfill": backfill_result
+    }
+
+
 @router.post("/backfill")
 async def backfill_journal_entries(
     current_user: User = Depends(get_current_user)

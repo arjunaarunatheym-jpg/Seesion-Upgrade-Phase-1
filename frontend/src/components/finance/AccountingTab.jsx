@@ -212,8 +212,7 @@ const AccountingTab = ({ companySettings }) => {
     try {
       const response = await axiosInstance.post('/accounting/backfill');
       setBackfillResult(response.data);
-      const created = response.data.results;
-      const totalCreated = (created.invoices?.created || 0) + (created.payments?.created || 0) + (created.credit_notes?.created || 0);
+      const totalCreated = response.data.total_created || 0;
       if (totalCreated > 0) {
         toast.success(`Synced ${totalCreated} journal entries from historical transactions`);
       } else {
@@ -221,6 +220,21 @@ const AccountingTab = ({ companySettings }) => {
       }
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to run backfill');
+    } finally {
+      setBackfillRunning(false);
+    }
+  };
+
+  const runResetAndResync = async () => {
+    if (!window.confirm('This will void all previously synced entries and re-create them with correct dates.\n\nPayroll entries will NOT be affected.\n\nContinue?')) return;
+    setBackfillRunning(true);
+    setBackfillResult(null);
+    try {
+      const response = await axiosInstance.post('/accounting/backfill/reset-and-resync');
+      setBackfillResult(response.data.backfill);
+      toast.success(response.data.message);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to reset & re-sync');
     } finally {
       setBackfillRunning(false);
     }
@@ -547,6 +561,17 @@ const AccountingTab = ({ companySettings }) => {
               >
                 {backfillRunning ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
                 Sync Historical Transactions
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={runResetAndResync} 
+                disabled={backfillRunning}
+                className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                data-testid="backfill-reset-btn"
+              >
+                {backfillRunning ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                Reset & Re-sync
               </Button>
               <Badge variant="outline" className="bg-green-50 text-green-700">
                 Active
