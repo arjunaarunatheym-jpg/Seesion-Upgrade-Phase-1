@@ -389,6 +389,75 @@ const AccountingTab = ({ companySettings }) => {
     }
   };
 
+  const printBalanceSheet = () => {
+    if (!balanceSheet) return;
+    const settings = companySettings || {};
+    const primaryColor = settings.primary_color || '#1a365d';
+    const tagline = settings.tagline || 'Towards a Nation of Safe Drivers';
+    let logoUrl = '';
+    if (settings.logo_url) {
+      logoUrl = settings.logo_url.startsWith('http') ? settings.logo_url 
+        : `${process.env.REACT_APP_BACKEND_URL}${settings.logo_url.startsWith('/') ? '' : '/'}${settings.logo_url}`;
+    }
+    const fmt = (v) => `RM ${(v || 0).toLocaleString('en-MY', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    const renderRows = (accounts) => (accounts || []).map(a => 
+      `<tr><td style="padding:6px 8px;color:#666;font-family:monospace;font-size:11px;">${a.account_code}</td><td style="padding:6px 8px;">${a.account_name}</td><td style="padding:6px 8px;text-align:right;font-family:monospace;">${fmt(a.balance)}</td></tr>`
+    ).join('');
+    
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>Balance Sheet - ${balanceSheet.period}</title>
+    <style>
+      @page { size: A4 portrait; margin: 15mm; }
+      @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #333; }
+      .header { text-align: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid ${primaryColor}; }
+      .header h1 { color: ${primaryColor}; font-size: 18px; margin: 8px 0 4px; }
+      .header h2 { font-size: 14px; color: #555; }
+      .header p { font-size: 11px; color: #777; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+      .section h3 { font-size: 13px; font-weight: bold; padding: 6px 0; border-bottom: 1px solid #ccc; margin-bottom: 4px; color: ${primaryColor}; }
+      table { width: 100%; border-collapse: collapse; }
+      .total-row td { font-weight: bold; border-top: 2px solid #333; padding: 8px; }
+      .subtotal-row td { font-weight: 600; border-top: 1px solid #999; padding: 6px 8px; }
+      .grand-total td { font-weight: bold; font-size: 14px; border-top: 3px double #333; padding: 10px 8px; }
+      .badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+      .balanced { background: #dcfce7; color: #166534; }
+      .unbalanced { background: #fee2e2; color: #991b1b; }
+      .footer { text-align: center; margin-top: 20px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 10px; color: #999; }
+    </style></head><body>
+    <div class="header">
+      ${logoUrl ? `<img src="${logoUrl}" style="height:50px;margin-bottom:8px;" />` : ''}
+      <h1>${settings.company_name || 'Company'}</h1>
+      <h2>Balance Sheet</h2>
+      <p>${balanceSheet.period} &nbsp; <span class="badge ${balanceSheet.is_balanced ? 'balanced' : 'unbalanced'}">${balanceSheet.is_balanced ? 'Balanced' : 'UNBALANCED'}</span></p>
+    </div>
+    <div class="grid">
+      <div class="section">
+        <h3>ASSETS</h3>
+        <table>${renderRows(balanceSheet.assets?.accounts)}
+          <tr class="total-row"><td></td><td>Total Assets</td><td style="text-align:right;font-family:monospace;">${fmt(balanceSheet.assets?.total)}</td></tr>
+        </table>
+      </div>
+      <div class="section">
+        <h3>LIABILITIES</h3>
+        <table>${renderRows(balanceSheet.liabilities?.accounts)}
+          <tr class="subtotal-row"><td></td><td>Total Liabilities</td><td style="text-align:right;font-family:monospace;">${fmt(balanceSheet.liabilities?.total)}</td></tr>
+        </table>
+        <h3 style="margin-top:20px;">EQUITY</h3>
+        <table>${renderRows(balanceSheet.equity?.accounts)}
+          <tr><td></td><td style="padding:6px 8px;font-style:italic;">Current Year Earnings</td><td style="padding:6px 8px;text-align:right;font-family:monospace;">${fmt(balanceSheet.equity?.current_year_earnings)}</td></tr>
+          <tr class="subtotal-row"><td></td><td>Total Equity</td><td style="text-align:right;font-family:monospace;">${fmt(balanceSheet.equity?.total)}</td></tr>
+          <tr class="grand-total"><td></td><td>Total Liabilities + Equity</td><td style="text-align:right;font-family:monospace;">${fmt(balanceSheet.total_liabilities_equity)}</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="footer">Generated on ${new Date().toLocaleString('en-MY')} | ${settings.company_name || ''}</div>
+    </body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  };
+
   const months = [
     { value: 1, label: 'January' },
     { value: 2, label: 'February' },
@@ -963,14 +1032,25 @@ const AccountingTab = ({ companySettings }) => {
         </TabsContent>
 
         {/* Balance Sheet */}
-        <TabsContent value="balance-sheet" className="mt-4">
+        <TabsContent value="balance-sheet" className="mt-4" data-testid="balance-sheet-tab-content">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Balance Sheet</CardTitle>
+                <div className="flex items-center gap-3">
+                  <CardTitle className="text-lg" data-testid="balance-sheet-title">Balance Sheet</CardTitle>
+                  {balanceSheet && (
+                    <Badge 
+                      data-testid="balance-sheet-status-badge"
+                      variant={balanceSheet.is_balanced ? 'default' : 'destructive'}
+                      className={balanceSheet.is_balanced ? 'bg-green-100 text-green-800 border-green-300' : ''}
+                    >
+                      {balanceSheet.is_balanced ? 'Balanced' : 'Unbalanced'}
+                    </Badge>
+                  )}
+                </div>
                 <div className="flex gap-2 items-center">
-                  <Select value={bsPeriod.month.toString()} onValueChange={(v) => setBsPeriod(prev => ({ ...prev, month: parseInt(v) }))}>
-                    <SelectTrigger className="w-32">
+                  <Select data-testid="bs-month-select" value={bsPeriod.month.toString()} onValueChange={(v) => setBsPeriod(prev => ({ ...prev, month: parseInt(v) }))}>
+                    <SelectTrigger className="w-32" data-testid="bs-month-trigger">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -984,75 +1064,101 @@ const AccountingTab = ({ companySettings }) => {
                     value={bsPeriod.year} 
                     onChange={(e) => setBsPeriod(prev => ({ ...prev, year: parseInt(e.target.value) }))}
                     className="w-24"
+                    data-testid="bs-year-input"
                   />
-                  <Button onClick={loadBalanceSheet} disabled={loading}>
+                  <Button onClick={loadBalanceSheet} disabled={loading} data-testid="bs-generate-btn">
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4 mr-1" />}
                     Generate
                   </Button>
                   {balanceSheet && (
-                    <Button variant="outline" onClick={exportBalanceSheetToExcel} disabled={loading}>
-                      <Download className="w-4 h-4 mr-1" /> Excel
-                    </Button>
+                    <>
+                      <Button variant="outline" onClick={exportBalanceSheetToExcel} disabled={loading} data-testid="bs-export-excel-btn">
+                        <Download className="w-4 h-4 mr-1" /> Excel
+                      </Button>
+                      <Button variant="outline" onClick={() => printBalanceSheet()} disabled={loading} data-testid="bs-print-btn">
+                        <Printer className="w-4 h-4 mr-1" /> Print
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent data-testid="balance-sheet-content">
               {balanceSheet ? (
-                <div className="grid grid-cols-2 gap-6">
-                  {/* Assets */}
-                  <div>
-                    <h3 className="font-bold text-lg mb-3 pb-2 border-b">ASSETS</h3>
-                    {balanceSheet.assets?.accounts?.map(acc => (
-                      <div key={acc.account_code} className="flex justify-between py-1">
-                        <span>{acc.account_name}</span>
-                        <span className="font-mono">{formatMoney(acc.balance)}</span>
-                      </div>
-                    ))}
-                    <div className="flex justify-between py-2 mt-2 border-t font-bold">
-                      <span>Total Assets</span>
-                      <span className="font-mono">{formatMoney(balanceSheet.assets?.total)}</span>
-                    </div>
+                <div>
+                  <div className="text-center mb-4">
+                    <p className="text-sm text-muted-foreground" data-testid="bs-period-label">{balanceSheet.period}</p>
                   </div>
-                  
-                  {/* Liabilities & Equity */}
-                  <div>
-                    <h3 className="font-bold text-lg mb-3 pb-2 border-b">LIABILITIES</h3>
-                    {balanceSheet.liabilities?.accounts?.map(acc => (
-                      <div key={acc.account_code} className="flex justify-between py-1">
-                        <span>{acc.account_name}</span>
-                        <span className="font-mono">{formatMoney(acc.balance)}</span>
+                  <div className="grid grid-cols-2 gap-6" data-testid="balance-sheet-grid">
+                    {/* Assets */}
+                    <div data-testid="bs-assets-section">
+                      <h3 className="font-bold text-lg mb-3 pb-2 border-b">ASSETS</h3>
+                      {balanceSheet.assets?.accounts?.map(acc => (
+                        <div key={acc.account_code} className="flex justify-between py-1 hover:bg-gray-50 px-1 rounded" data-testid={`bs-asset-${acc.account_code}`}>
+                          <span className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground font-mono">{acc.account_code}</span>
+                            <span>{acc.account_name}</span>
+                          </span>
+                          <span className="font-mono">{formatMoney(acc.balance)}</span>
+                        </div>
+                      ))}
+                      {(!balanceSheet.assets?.accounts || balanceSheet.assets.accounts.length === 0) && (
+                        <p className="text-sm text-muted-foreground py-2 italic">No asset accounts with balances</p>
+                      )}
+                      <div className="flex justify-between py-2 mt-2 border-t-2 border-gray-800 font-bold" data-testid="bs-total-assets">
+                        <span>Total Assets</span>
+                        <span className="font-mono">{formatMoney(balanceSheet.assets?.total)}</span>
                       </div>
-                    ))}
-                    <div className="flex justify-between py-2 mt-2 border-t font-semibold">
-                      <span>Total Liabilities</span>
-                      <span className="font-mono">{formatMoney(balanceSheet.liabilities?.total)}</span>
                     </div>
                     
-                    <h3 className="font-bold text-lg mb-3 pb-2 border-b mt-6">EQUITY</h3>
-                    {balanceSheet.equity?.accounts?.map(acc => (
-                      <div key={acc.account_code} className="flex justify-between py-1">
-                        <span>{acc.account_name}</span>
-                        <span className="font-mono">{formatMoney(acc.balance)}</span>
+                    {/* Liabilities & Equity */}
+                    <div data-testid="bs-liabilities-equity-section">
+                      <h3 className="font-bold text-lg mb-3 pb-2 border-b">LIABILITIES</h3>
+                      {balanceSheet.liabilities?.accounts?.map(acc => (
+                        <div key={acc.account_code} className="flex justify-between py-1 hover:bg-gray-50 px-1 rounded" data-testid={`bs-liability-${acc.account_code}`}>
+                          <span className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground font-mono">{acc.account_code}</span>
+                            <span>{acc.account_name}</span>
+                          </span>
+                          <span className="font-mono">{formatMoney(acc.balance)}</span>
+                        </div>
+                      ))}
+                      {(!balanceSheet.liabilities?.accounts || balanceSheet.liabilities.accounts.length === 0) && (
+                        <p className="text-sm text-muted-foreground py-2 italic">No liability accounts with balances</p>
+                      )}
+                      <div className="flex justify-between py-2 mt-2 border-t font-semibold" data-testid="bs-total-liabilities">
+                        <span>Total Liabilities</span>
+                        <span className="font-mono">{formatMoney(balanceSheet.liabilities?.total)}</span>
                       </div>
-                    ))}
-                    <div className="flex justify-between py-1">
-                      <span className="italic">Current Year Earnings</span>
-                      <span className="font-mono">{formatMoney(balanceSheet.equity?.current_year_earnings)}</span>
-                    </div>
-                    <div className="flex justify-between py-2 mt-2 border-t font-semibold">
-                      <span>Total Equity</span>
-                      <span className="font-mono">{formatMoney(balanceSheet.equity?.total)}</span>
-                    </div>
-                    
-                    <div className="flex justify-between py-3 mt-4 border-t-2 font-bold text-lg">
-                      <span>Total Liabilities + Equity</span>
-                      <span className="font-mono">{formatMoney(balanceSheet.total_liabilities_equity)}</span>
+                      
+                      <h3 className="font-bold text-lg mb-3 pb-2 border-b mt-6">EQUITY</h3>
+                      {balanceSheet.equity?.accounts?.map(acc => (
+                        <div key={acc.account_code} className="flex justify-between py-1 hover:bg-gray-50 px-1 rounded" data-testid={`bs-equity-${acc.account_code}`}>
+                          <span className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground font-mono">{acc.account_code}</span>
+                            <span>{acc.account_name}</span>
+                          </span>
+                          <span className="font-mono">{formatMoney(acc.balance)}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between py-1 hover:bg-gray-50 px-1 rounded" data-testid="bs-current-year-earnings">
+                        <span className="italic">Current Year Earnings</span>
+                        <span className="font-mono">{formatMoney(balanceSheet.equity?.current_year_earnings)}</span>
+                      </div>
+                      <div className="flex justify-between py-2 mt-2 border-t font-semibold" data-testid="bs-total-equity">
+                        <span>Total Equity</span>
+                        <span className="font-mono">{formatMoney(balanceSheet.equity?.total)}</span>
+                      </div>
+                      
+                      <div className="flex justify-between py-3 mt-4 border-t-2 border-gray-800 font-bold text-lg" data-testid="bs-total-liabilities-equity">
+                        <span>Total Liabilities + Equity</span>
+                        <span className="font-mono">{formatMoney(balanceSheet.total_liabilities_equity)}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-gray-500" data-testid="bs-empty-state">
                   Select a period and click "Generate" to view the balance sheet.
                 </div>
               )}
