@@ -1735,47 +1735,47 @@ const FinanceDashboard = ({ user, onLogout }) => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div className="flex items-center gap-3">
-            <DollarSign className="w-8 h-8 text-green-600" />
+            <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Finance Portal</h1>
-              <p className="text-sm text-gray-500">Welcome, {user?.full_name}</p>
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900">Finance Portal</h1>
+              <p className="text-xs sm:text-sm text-gray-500">Welcome, {user?.full_name}</p>
             </div>
           </div>
-          <Button variant="outline" onClick={onLogout}>
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
+          <Button variant="outline" onClick={onLogout} size="sm">
+            <LogOut className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Logout</span>
           </Button>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6 flex flex-wrap gap-1 h-auto w-full justify-start bg-gray-100 p-2 rounded-lg">
-            <TabsTrigger value="dashboard" className="text-xs sm:text-sm">Dashboard</TabsTrigger>
-            <TabsTrigger value="invoices" className="text-xs sm:text-sm">Invoices</TabsTrigger>
-            <TabsTrigger value="payables" className="text-xs sm:text-sm">Payables</TabsTrigger>
-            <TabsTrigger value="payments" className="text-xs sm:text-sm">Payments</TabsTrigger>
-            <TabsTrigger value="credit-notes" className="text-xs sm:text-sm">Credit Notes</TabsTrigger>
-            <TabsTrigger value="profit-loss" className="text-xs sm:text-sm">
+          <TabsList className="mb-6 flex gap-1 h-auto w-full justify-start bg-gray-100 p-2 rounded-lg overflow-x-auto scrollbar-hide md:flex-wrap">
+            <TabsTrigger value="dashboard" className="flex-shrink-0 text-xs sm:text-sm">Dashboard</TabsTrigger>
+            <TabsTrigger value="invoices" className="flex-shrink-0 text-xs sm:text-sm">Invoices</TabsTrigger>
+            <TabsTrigger value="payables" className="flex-shrink-0 text-xs sm:text-sm">Payables</TabsTrigger>
+            <TabsTrigger value="payments" className="flex-shrink-0 text-xs sm:text-sm">Payments</TabsTrigger>
+            <TabsTrigger value="credit-notes" className="flex-shrink-0 text-xs sm:text-sm">Credit Notes</TabsTrigger>
+            <TabsTrigger value="profit-loss" className="flex-shrink-0 text-xs sm:text-sm">
               <BarChart3 className="w-4 h-4 mr-1 hidden sm:inline" />
               P&L Ledger
             </TabsTrigger>
-            <TabsTrigger value="petty-cash" className="text-xs sm:text-sm">
+            <TabsTrigger value="petty-cash" className="flex-shrink-0 text-xs sm:text-sm">
               <Wallet className="w-4 h-4 mr-1 hidden sm:inline" />
               Petty Cash
             </TabsTrigger>
-            <TabsTrigger value="hr" className="text-xs sm:text-sm">
+            <TabsTrigger value="hr" className="flex-shrink-0 text-xs sm:text-sm">
               <Users className="w-4 h-4 mr-1 hidden sm:inline" />
               HR & Payroll
             </TabsTrigger>
-            <TabsTrigger value="audit" className="text-xs sm:text-sm">Audit Log</TabsTrigger>
-            <TabsTrigger value="accounting" className="text-xs sm:text-sm">
+            <TabsTrigger value="audit" className="flex-shrink-0 text-xs sm:text-sm">Audit Log</TabsTrigger>
+            <TabsTrigger value="accounting" className="flex-shrink-0 text-xs sm:text-sm">
               <BookOpen className="w-3 h-3 mr-1" />
               Accounting
             </TabsTrigger>
-            <TabsTrigger value="settings" className="text-xs sm:text-sm">
+            <TabsTrigger value="settings" className="flex-shrink-0 text-xs sm:text-sm">
               <Settings className="w-4 h-4 mr-1 hidden sm:inline" />
               Settings
             </TabsTrigger>

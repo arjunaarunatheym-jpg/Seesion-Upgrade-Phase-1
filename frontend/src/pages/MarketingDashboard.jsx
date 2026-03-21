@@ -690,7 +690,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
 
       <main className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-4 sm:mb-6 flex flex-wrap gap-1">
+          <TabsList className="mb-4 sm:mb-6 flex gap-1 overflow-x-auto scrollbar-hide">
             <TabsTrigger value="dashboard" data-testid="dashboard-tab" className="text-xs sm:text-sm px-2 sm:px-3">
               <BarChart3 className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Dashboard</span><span className="sm:hidden">Home</span>
             </TabsTrigger>

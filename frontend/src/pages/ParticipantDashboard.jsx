@@ -612,12 +612,12 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
 
       {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Participant Portal</h1>
-            <p className="text-sm text-gray-600">Welcome, {user.full_name}</p>
+            <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Participant Portal</h1>
+            <p className="text-xs sm:text-sm text-gray-600">Welcome, {user.full_name}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 self-end sm:self-auto">
             <Button
               onClick={handleRefreshStatus}
               variant="outline"

@@ -1017,8 +1017,8 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div className="flex items-center gap-3 sm:gap-4">
             {logoUrl && (
               <button
                 onClick={() => navigate('/calendar')}
@@ -1027,16 +1027,16 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                 <img 
                   src={logoUrl} 
                   alt={companyName}
-                  className="h-10 w-auto object-contain"
+                  className="h-8 sm:h-10 w-auto object-contain"
                 />
               </button>
             )}
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Coordinator Portal</h1>
-              <p className="text-sm text-gray-600">Welcome, {user.full_name}</p>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Coordinator Portal</h1>
+              <p className="text-xs sm:text-sm text-gray-600">Welcome, {user.full_name}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-auto">
             {/* Marketing Portal link for users with marketing role */}
             {(user.additional_roles?.includes('marketing') || user.role === 'marketing') && (
               <Button 

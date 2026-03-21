@@ -314,8 +314,8 @@ const AssistantAdminDashboard = ({ user, onLogout }) => {
       {/* Header */}
       <div className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+            <div className="flex items-center gap-3 sm:gap-4">
               {logoUrl && (
                 <button
                   onClick={() => navigate('/calendar')}
@@ -324,20 +324,20 @@ const AssistantAdminDashboard = ({ user, onLogout }) => {
                   <img 
                     src={logoUrl} 
                     alt={companyName}
-                    className="h-10 w-auto object-contain"
+                    className="h-8 sm:h-10 w-auto object-contain"
                   />
                 </button>
               )}
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Assistant Admin Portal</h1>
-                <p className="text-sm text-gray-600">Add participants to training sessions</p>
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Assistant Admin Portal</h1>
+                <p className="text-xs sm:text-sm text-gray-600">Add participants to training sessions</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">{user.full_name}</span>
-              <Button variant="outline" onClick={onLogout}>
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
+            <div className="flex items-center gap-2 sm:gap-4 self-end sm:self-auto">
+              <span className="text-xs sm:text-sm text-gray-600 hidden sm:inline">{user.full_name}</span>
+              <Button variant="outline" size="sm" onClick={onLogout}>
+                <LogOut className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Logout</span>
               </Button>
             </div>
           </div>
@@ -347,16 +347,14 @@ const AssistantAdminDashboard = ({ user, onLogout }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="flex flex-wrap w-full mb-6 h-auto justify-start gap-2 bg-white shadow-sm p-2 rounded-lg">
-            <TabsTrigger value="sessions" className="flex-1 min-w-[80px]">
-              <Calendar className="w-4 h-4 mr-2" />
+          <TabsList className="flex w-full mb-6 h-auto justify-start gap-2 bg-white shadow-sm p-2 rounded-lg overflow-x-auto scrollbar-hide">
+            <TabsTrigger value="sessions" className="flex-shrink-0">
+              <Calendar className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Active Sessions</span>
-              <span className="sm:hidden">Sessions</span>
             </TabsTrigger>
-            <TabsTrigger value="session-mgmt" className="flex-1 min-w-[80px] bg-gradient-to-r from-blue-500 to-indigo-500 text-white data-[state=active]:text-white">
-              <Settings className="w-4 h-4 mr-2" />
+            <TabsTrigger value="session-mgmt" className="flex-shrink-0 bg-gradient-to-r from-blue-500 to-indigo-500 text-white data-[state=active]:text-white">
+              <Settings className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Session Mgmt</span>
-              <span className="sm:hidden">Mgmt</span>
             </TabsTrigger>
             <TabsTrigger value="programs" className="flex-1 min-w-[80px]">
               <BookOpen className="w-4 h-4 mr-2" />

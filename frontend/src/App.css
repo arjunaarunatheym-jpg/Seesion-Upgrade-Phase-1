@@ -19,3 +19,93 @@ h1, h2, h3, h4, h5, h6 {
 .App {
   min-height: 100vh;
 }
+
+/* ============ MOBILE RESPONSIVE GLOBAL OVERRIDES ============ */
+
+/* Tables: horizontal scroll wrapper */
+@media (max-width: 768px) {
+  /* Make any table scrollable if it overflows */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+  
+  /* But allow text to wrap inside cells */
+  td, th {
+    white-space: normal;
+    min-width: 80px;
+  }
+  
+  /* Table cells: tighter padding on mobile */
+  td, th {
+    padding: 6px 8px !important;
+    font-size: 0.75rem;
+  }
+
+  /* Dialogs: full width on mobile */
+  [role="dialog"] {
+    max-width: calc(100vw - 16px) !important;
+    width: calc(100vw - 16px) !important;
+    margin: 8px !important;
+    max-height: 90vh !important;
+  }
+  
+  /* Dialog content: better scroll */
+  [role="dialog"] > div {
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  /* Card grids: single column */
+  .grid-cols-3,
+  .grid-cols-4 {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Reduce padding on main content */
+  main {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Tab triggers: smaller text, compact */
+  [role="tablist"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none;
+  }
+  
+  [role="tablist"]::-webkit-scrollbar {
+    display: none;
+  }
+  
+  [role="tab"] {
+    font-size: 0.7rem !important;
+    padding: 6px 10px !important;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Buttons: icon-only on very small screens */
+  .btn-responsive-text {
+    display: none;
+  }
+
+  /* Badge: smaller on mobile */
+  [class*="Badge"], .badge {
+    font-size: 0.6rem;
+    padding: 2px 6px;
+  }
+}
+
+/* Scrollbar hide utility (used by tab lists) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

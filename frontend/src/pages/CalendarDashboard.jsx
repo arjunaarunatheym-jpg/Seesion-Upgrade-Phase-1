@@ -153,21 +153,21 @@ const CalendarDashboard = ({ user, onLogout }) => {
     >
       {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div className="flex items-center gap-3 sm:gap-4">
             {logoUrl && (
               <img 
                 src={logoUrl} 
                 alt={companyName}
-                className="h-10 w-auto object-contain"
+                className="h-8 sm:h-10 w-auto object-contain"
               />
             )}
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Training Calendar</h1>
-              <p className="text-sm text-gray-600">Welcome, {user.full_name}</p>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Training Calendar</h1>
+              <p className="text-xs sm:text-sm text-gray-600">Welcome, {user.full_name}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-auto">
             <Button
               onClick={() => {
                 if (user.email === "arjuna@mddrc.com.my" || user.role === "admin") navigate("/admin");
@@ -201,19 +201,19 @@ const CalendarDashboard = ({ user, onLogout }) => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                <CalendarIcon className="w-6 h-6 text-blue-600" />
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <CalendarIcon className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 <div>
-                  <CardTitle className="text-2xl">
+                  <CardTitle className="text-lg sm:text-2xl">
                     {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-xs sm:text-sm">
                     All training sessions (past and future)
                   </CardDescription>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 self-end sm:self-auto">
                 <Button
                   onClick={goToPrevMonth}
                   variant="outline"

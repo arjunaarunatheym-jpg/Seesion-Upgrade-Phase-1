@@ -1646,7 +1646,7 @@ const AdminDashboard = ({ user, onLogout }) => {
       }}
     >
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div className="flex items-center gap-4">
             {logoUrl && (
               <button
@@ -1656,16 +1656,16 @@ const AdminDashboard = ({ user, onLogout }) => {
                 <img 
                   src={logoUrl} 
                   alt={companyName}
-                  className="h-10 w-auto object-contain"
+                  className="h-8 sm:h-10 w-auto object-contain"
                 />
               </button>
             )}
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="text-sm text-gray-600">Welcome, {user.full_name}</p>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+              <p className="text-xs sm:text-sm text-gray-600">Welcome, {user.full_name}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-auto">
             {(user.email === "arjuna@mddrc.com.my" || user.role === "super_admin") && (
               <Button
                 data-testid="superadmin-portal-button"
@@ -1692,71 +1692,58 @@ const AdminDashboard = ({ user, onLogout }) => {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="flex flex-wrap w-full mb-8 h-auto justify-start gap-2 bg-gray-100 p-2 rounded-lg md:grid md:grid-cols-10">
-            <TabsTrigger value="programs" data-testid="programs-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <BookOpen className="w-4 h-4 mr-2" />
+          <TabsList className="flex w-full mb-8 h-auto justify-start gap-2 bg-gray-100 p-2 rounded-lg overflow-x-auto scrollbar-hide md:flex-wrap">
+            <TabsTrigger value="programs" data-testid="programs-tab" className="flex-shrink-0 text-xs sm:text-sm">
+              <BookOpen className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Programs</span>
-              <span className="sm:hidden">Programs</span>
             </TabsTrigger>
-            <TabsTrigger value="companies" data-testid="companies-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <Building2 className="w-4 h-4 mr-2" />
+            <TabsTrigger value="companies" data-testid="companies-tab" className="flex-shrink-0 text-xs sm:text-sm">
+              <Building2 className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Companies</span>
-              <span className="sm:hidden">Companies</span>
             </TabsTrigger>
-            <TabsTrigger value="sessions" data-testid="sessions-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <Calendar className="w-4 h-4 mr-2" />
+            <TabsTrigger value="sessions" data-testid="sessions-tab" className="flex-shrink-0 text-xs sm:text-sm">
+              <Calendar className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Sessions</span>
-              <span className="sm:hidden">Sessions</span>
             </TabsTrigger>
-            <TabsTrigger value="finance" data-testid="finance-tab" className="flex-1 min-w-[120px] md:min-w-0 bg-gradient-to-r from-green-500 to-emerald-500 text-white">
-              <DollarSign className="w-4 h-4 mr-2" />
+            <TabsTrigger value="finance" data-testid="finance-tab" className="flex-shrink-0 text-xs sm:text-sm bg-gradient-to-r from-green-500 to-emerald-500 text-white">
+              <DollarSign className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Finance</span>
-              <span className="sm:hidden">Finance</span>
             </TabsTrigger>
-            <TabsTrigger value="staff" data-testid="staff-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <UserCog className="w-4 h-4 mr-2" />
+            <TabsTrigger value="staff" data-testid="staff-tab" className="flex-shrink-0 text-xs sm:text-sm">
+              <UserCog className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Staff</span>
-              <span className="sm:hidden">Staff</span>
             </TabsTrigger>
-            <TabsTrigger value="data-management" data-testid="data-management-tab" className="flex-1 min-w-[120px] md:min-w-0 bg-gradient-to-r from-purple-500 to-pink-500 text-white">
-              <ClipboardList className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Data Management</span>
-              <span className="sm:hidden">Data</span>
+            <TabsTrigger value="data-management" data-testid="data-management-tab" className="flex-shrink-0 text-xs sm:text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white">
+              <ClipboardList className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Data</span>
             </TabsTrigger>
-            <TabsTrigger value="past-training" data-testid="past-training-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <FileText className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Past Training</span>
-              <span className="sm:hidden">Past</span>
+            <TabsTrigger value="past-training" data-testid="past-training-tab" className="flex-shrink-0 text-xs sm:text-sm">
+              <FileText className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Past</span>
             </TabsTrigger>
-            <TabsTrigger value="reports" data-testid="reports-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <FileText className="w-4 h-4 mr-2" />
+            <TabsTrigger value="reports" data-testid="reports-tab" className="flex-shrink-0 text-xs sm:text-sm">
+              <FileText className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Reports</span>
-              <span className="sm:hidden">Reports</span>
             </TabsTrigger>
-            <TabsTrigger value="users" data-testid="users-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <Users className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">All Users</span>
-              <span className="sm:hidden">Users</span>
+            <TabsTrigger value="users" data-testid="users-tab" className="flex-shrink-0 text-xs sm:text-sm">
+              <Users className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Users</span>
             </TabsTrigger>
-            <TabsTrigger value="settings" data-testid="settings-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <SettingsIcon className="w-4 h-4 mr-2" />
+            <TabsTrigger value="settings" data-testid="settings-tab" className="flex-shrink-0 text-xs sm:text-sm">
+              <SettingsIcon className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Settings</span>
-              <span className="sm:hidden">Settings</span>
             </TabsTrigger>
-            <TabsTrigger value="quotations" data-testid="quotations-tab" className="flex-1 min-w-[120px] md:min-w-0 bg-gradient-to-r from-orange-500 to-amber-500 text-white">
-              <FileText className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Quotations</span>
-              <span className="sm:hidden">Quotes</span>
+            <TabsTrigger value="quotations" data-testid="quotations-tab" className="flex-shrink-0 text-xs sm:text-sm bg-gradient-to-r from-orange-500 to-amber-500 text-white">
+              <FileText className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Quotes</span>
             </TabsTrigger>
-            <TabsTrigger value="marketing-leads" data-testid="marketing-leads-tab" className="flex-1 min-w-[120px] md:min-w-0 bg-gradient-to-r from-teal-500 to-emerald-500 text-white">
-              <Target className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Marketing Leads</span>
-              <span className="sm:hidden">Leads</span>
+            <TabsTrigger value="marketing-leads" data-testid="marketing-leads-tab" className="flex-shrink-0 text-xs sm:text-sm bg-gradient-to-r from-teal-500 to-emerald-500 text-white">
+              <Target className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Leads</span>
             </TabsTrigger>
-            <TabsTrigger value="my-payroll" data-testid="my-payroll-tab" className="flex-1 min-w-[120px] md:min-w-0 bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
-              <DollarSign className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">My Payroll</span>
-              <span className="sm:hidden">Payroll</span>
+            <TabsTrigger value="my-payroll" data-testid="my-payroll-tab" className="flex-shrink-0 text-xs sm:text-sm bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
+              <DollarSign className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Payroll</span>
             </TabsTrigger>
           </TabsList>
 

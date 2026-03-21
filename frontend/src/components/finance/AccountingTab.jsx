@@ -543,7 +543,7 @@ const AccountingTab = ({ companySettings }) => {
     <div className="space-y-4">
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <BookOpen className="w-5 h-5" />
@@ -551,7 +551,7 @@ const AccountingTab = ({ companySettings }) => {
               </CardTitle>
               <CardDescription>Double-entry accounting with full audit trail</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button 
                 variant="outline" 
                 size="sm" 
@@ -559,8 +559,9 @@ const AccountingTab = ({ companySettings }) => {
                 disabled={backfillRunning}
                 data-testid="backfill-sync-btn"
               >
-                {backfillRunning ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
-                Sync Historical Transactions
+                {backfillRunning ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 sm:mr-1" />}
+                <span className="hidden sm:inline">Sync Historical Transactions</span>
+                <span className="sm:hidden">Sync</span>
               </Button>
               <Button 
                 variant="outline" 
@@ -570,8 +571,9 @@ const AccountingTab = ({ companySettings }) => {
                 className="text-orange-600 border-orange-300 hover:bg-orange-50"
                 data-testid="backfill-reset-btn"
               >
-                {backfillRunning ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
-                Reset & Re-sync
+                {backfillRunning ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 sm:mr-1" />}
+                <span className="hidden sm:inline">Reset & Re-sync</span>
+                <span className="sm:hidden">Reset</span>
               </Button>
               <Badge variant="outline" className="bg-green-50 text-green-700">
                 Active
@@ -600,13 +602,13 @@ const AccountingTab = ({ companySettings }) => {
       </Card>
 
       <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-        <TabsList className="grid grid-cols-6 w-full">
-          <TabsTrigger value="coa" className="text-xs">Chart of Accounts</TabsTrigger>
-          <TabsTrigger value="journals" className="text-xs">Journal Entries</TabsTrigger>
-          <TabsTrigger value="trial-balance" className="text-xs">Trial Balance</TabsTrigger>
-          <TabsTrigger value="general-ledger" className="text-xs">General Ledger</TabsTrigger>
-          <TabsTrigger value="balance-sheet" className="text-xs">Balance Sheet</TabsTrigger>
-          <TabsTrigger value="pl" className="text-xs">P&L</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto scrollbar-hide">
+          <TabsTrigger value="coa" className="flex-shrink-0 text-xs">Chart of Accounts</TabsTrigger>
+          <TabsTrigger value="journals" className="flex-shrink-0 text-xs">Journal Entries</TabsTrigger>
+          <TabsTrigger value="trial-balance" className="flex-shrink-0 text-xs">Trial Balance</TabsTrigger>
+          <TabsTrigger value="general-ledger" className="flex-shrink-0 text-xs">General Ledger</TabsTrigger>
+          <TabsTrigger value="balance-sheet" className="flex-shrink-0 text-xs">Balance Sheet</TabsTrigger>
+          <TabsTrigger value="pl" className="flex-shrink-0 text-xs">P&L</TabsTrigger>
         </TabsList>
 
         {/* Chart of Accounts */}
@@ -1114,9 +1116,9 @@ const AccountingTab = ({ companySettings }) => {
         <TabsContent value="balance-sheet" className="mt-4" data-testid="balance-sheet-tab-content">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <CardTitle className="text-lg" data-testid="balance-sheet-title">Balance Sheet</CardTitle>
+                  <CardTitle className="text-base sm:text-lg" data-testid="balance-sheet-title">Balance Sheet</CardTitle>
                   {balanceSheet && (
                     <Badge 
                       data-testid="balance-sheet-status-badge"
@@ -1127,9 +1129,9 @@ const AccountingTab = ({ companySettings }) => {
                     </Badge>
                   )}
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="flex flex-wrap gap-2 items-center">
                   <Select data-testid="bs-month-select" value={bsPeriod.month.toString()} onValueChange={(v) => setBsPeriod(prev => ({ ...prev, month: parseInt(v) }))}>
-                    <SelectTrigger className="w-32" data-testid="bs-month-trigger">
+                    <SelectTrigger className="w-28 sm:w-32" data-testid="bs-month-trigger">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1168,7 +1170,7 @@ const AccountingTab = ({ companySettings }) => {
                   <div className="text-center mb-4">
                     <p className="text-sm text-muted-foreground" data-testid="bs-period-label">{balanceSheet.period}</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-6" data-testid="balance-sheet-grid">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6" data-testid="balance-sheet-grid">
                     {/* Assets */}
                     <div data-testid="bs-assets-section">
                       <h3 className="font-bold text-lg mb-3 pb-2 border-b">ASSETS</h3>
