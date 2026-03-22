@@ -1,52 +1,44 @@
 # MDDRC Training Management System - PRD
 
 ## Original Problem Statement
-Build a comprehensive training management platform for Malaysian Defensive Driving and Riding Centre Sdn Bhd (MDDRC). Manages training sessions, participants, invoicing, and coordination across multiple user roles.
+Comprehensive training management platform for MDDRC. Manages training sessions, participants, invoicing, and coordination across multiple user roles.
 
 ## Tech Stack
 - Frontend: React 18 + Tailwind CSS + Shadcn UI
-- Backend: FastAPI (Python)
-- Database: MongoDB
-- Authentication: JWT + bcrypt (24h expiry)
+- Backend: FastAPI (Python), Database: MongoDB, Auth: JWT + bcrypt
 
 ## Current Status (Mar 2026)
 
-### Manual Staff-User Link Fix — COMPLETE (Mar 22, 2026)
-**Problem**: Staff members (like Abdul Malek) showed "Not linked" on HR & Payroll because the auto-link only matched by exact name/IC. If names differ slightly, the link fails.
-**Fix**: 
-- Added `POST /api/hr/staff/{staff_id}/link-user/{user_id}` endpoint for manual linking
-- Added `DELETE /api/hr/staff/{staff_id}/unlink-user` endpoint for unlinking
-- Replaced static "Not linked" badge with clickable "Link user" button → opens dropdown to select user
-- "Linked" badge shows green, hover turns red for unlinking
-- Auto-link button still available for batch operations
-- Testing: Backend endpoints verified, UI screenshot confirmed
+### Enhanced HR Payroll Fields — COMPLETE (Mar 22, 2026)
+**Income Fields**: Basic Salary, Fixed Allowance (NEW), Housing Allowance, Transport Allowance, Commission (variable/monthly), Incentives (variable), Bonus (variable), Annual Leave Pay (variable), Overtime
+**Deduction Fields**: EPF, SOCSO, EIS/SIP, CP39/PCB Tax (NEW), CP38 (NEW), Loan (NEW), Mid-Month Advance (NEW), Salary Adjustment (NEW), Unpaid Leave (NEW)
+- Fixed allowance is stored on staff record (monthly fixed); all others are variable per payslip
+- Generate Payslip, Edit Payslip, View Payslip, and PayslipPrint all updated
+- Testing: 100% backend + frontend (iteration_31)
 
-### Dashboard Analytics/KPIs + Backend Role Protection — COMPLETE (Mar 22, 2026)
-- Dashboard KPIs: 8 business metrics on Admin Dashboard
-- Role guards added to 15 endpoints across 6 route files
-- Testing: 100% (iteration_30)
+### Manual Staff-User Link — COMPLETE (Mar 22, 2026)
+- "Link user" button replaces "Not linked" badge, opens dropdown to select user
+- POST /api/hr/staff/{id}/link-user/{user_id} and DELETE /api/hr/staff/{id}/unlink-user
 
-### Quick Wins Batch — COMPLETE (Mar 22, 2026)
-- Database Indexing: 25 new indexes across 19 collections
-- PWA Enhancements: Service worker v2
-- Loading States & Empty States: Skeleton loaders + empty states
+### Dashboard KPIs + Role Protection — COMPLETE (Mar 22, 2026)
+- 8 KPI cards on Admin Dashboard, role guards on 15+ endpoints
 
-### Previous Completions
-- Balance Sheet UI, Backfill System, Reset & Re-sync
-- Full mobile responsive overhaul
-- Payroll portal fixes & status indicators
+### Quick Wins — COMPLETE (Mar 22, 2026)
+- DB Indexing (25 indexes), PWA v2, Loading/Empty States
+
+### Previous: Balance Sheet, Backfill, Mobile Responsive, Payroll Portal
 
 ## Known Issues
 - Pre-existing 500 error on checklist template API (P2)
 
 ## Feature Backlog
-- (P0) Duplicate Route Refactor — 55 endpoints (user holding until laptop ready)
+- (P0) Duplicate Route Refactor (user holding until laptop ready)
 - (P1) Unify P&L Systems
-- (P1) Notification System
-- (P1) Trainer Contract Workflow (freelance only)
-- (P1) Post-Training Evaluation (3mo/6mo, programme-specific questionnaires)
-- (P1) Supervisor Portal Enhancement
-- (P1) Certificate Generation (PDF template)
+- (P1) Notification System — in-app bell + email alerts
+- (P1) Trainer Contract Workflow — freelance staff only, per session
+- (P1) Post-Training Evaluation — programme-specific questionnaires, 3mo/6mo follow-up
+- (P1) Supervisor Portal Enhancement — invoices, feedback, certificates
+- (P1) Certificate Generation — PDF template with dynamic fields
 - (P1) SaaS Monetization (Stripe)
 - (P2) Client/Trainer Portals, Native App, PWA Offline
 
