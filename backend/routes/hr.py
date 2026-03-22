@@ -407,6 +407,45 @@ async def auto_link_staff_to_users(current_user: User = Depends(get_current_user
     return {"message": f"Linked {linked} staff to user accounts", "linked": linked, "total_unlinked": len(unlinked_staff)}
 
 
+@router.post("/staff/{staff_id}/link-user/{user_id}")
+async def manual_link_staff_to_user(staff_id: str, user_id: str, current_user: User = Depends(get_current_user)):
+    """Manually link an hr_staff record to a user account"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Finance can link staff")
+
+    staff = await db.hr_staff.find_one({"id": staff_id}, {"_id": 0})
+    if not staff:
+        raise HTTPException(status_code=404, detail="Staff not found")
+
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1, "full_name": 1, "email": 1})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await db.hr_staff.update_one(
+        {"id": staff_id},
+        {"$set": {"user_id": user_id, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    return {"message": f"Linked {staff.get('full_name')} to user {user.get('full_name')}", "staff_id": staff_id, "user_id": user_id}
+
+
+@router.delete("/staff/{staff_id}/unlink-user")
+async def unlink_staff_from_user(staff_id: str, current_user: User = Depends(get_current_user)):
+    """Unlink an hr_staff record from its user account"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Finance can unlink staff")
+
+    result = await db.hr_staff.update_one(
+        {"id": staff_id},
+        {"$set": {"user_id": None, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Staff not found")
+
+    return {"message": "User unlinked successfully", "staff_id": staff_id}
+
+
 @router.get("/available-users")
 async def get_available_users(current_user: User = Depends(get_current_user)):
     """Get users that can be linked as staff"""

@@ -65,6 +65,11 @@ const HRModule = () => {
   const [editPayslipData, setEditPayslipData] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
   
+  // Manual link state
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkingStaff, setLinkingStaff] = useState(null);
+  const [selectedLinkUser, setSelectedLinkUser] = useState('');
+  
   // Pay advice state
   const [payAdviceList, setPayAdviceList] = useState([]);
   const [availableUsers, setAvailableUsers] = useState([]);
@@ -272,6 +277,32 @@ const HRModule = () => {
       other_allowance: '', epf_number: '', socso_number: '', tax_number: '',
       employee_epf_rate: '11', employer_epf_rate: '13', is_active: true
     });
+  };
+
+  // Manual link staff to user
+  const handleManualLink = async () => {
+    if (!linkingStaff || !selectedLinkUser) return;
+    try {
+      await axiosInstance.post(`/hr/staff/${linkingStaff.id}/link-user/${selectedLinkUser}`);
+      toast.success(`Linked ${linkingStaff.full_name} to user account`);
+      setLinkDialogOpen(false);
+      setLinkingStaff(null);
+      setSelectedLinkUser('');
+      loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to link');
+    }
+  };
+
+  const handleUnlinkStaff = async (staffMember) => {
+    if (!confirm(`Unlink ${staffMember.full_name} from their user account?`)) return;
+    try {
+      await axiosInstance.delete(`/hr/staff/${staffMember.id}/unlink-user`);
+      toast.success('User unlinked');
+      loadData();
+    } catch (error) {
+      toast.error('Failed to unlink');
+    }
   };
 
   // Payroll Period Management
@@ -639,10 +670,24 @@ const HRModule = () => {
                                 Unpaid
                               </Badge>
                             )}
-                            {!s.user_id && (
-                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300 text-xs">
-                                Not linked
-                              </Badge>
+                            {!s.user_id ? (
+                              <button
+                                onClick={() => { setLinkingStaff(s); setSelectedLinkUser(''); setLinkDialogOpen(true); }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-300 hover:bg-yellow-100 cursor-pointer transition-colors"
+                                data-testid={`link-staff-${s.id}`}
+                              >
+                                <Link className="w-3 h-3" />
+                                Link user
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleUnlinkStaff(s)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-300 hover:bg-red-50 hover:text-red-700 hover:border-red-300 cursor-pointer transition-colors"
+                                data-testid={`unlink-staff-${s.id}`}
+                              >
+                                <Link className="w-3 h-3" />
+                                Linked
+                              </button>
                             )}
                           </div>
                         </div>
@@ -1569,6 +1614,38 @@ const HRModule = () => {
             >
               Unlock Pay Advice
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Link Dialog */}
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Link Staff to User Account</DialogTitle>
+            <DialogDescription>
+              Select the user account for <strong>{linkingStaff?.full_name}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <Select value={selectedLinkUser} onValueChange={setSelectedLinkUser}>
+              <SelectTrigger data-testid="link-user-select">
+                <SelectValue placeholder="Select a user account..." />
+              </SelectTrigger>
+              <SelectContent>
+                {availableUsers.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.full_name} ({u.email}) — {u.role}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setLinkDialogOpen(false)}>Cancel</Button>
+              <Button size="sm" disabled={!selectedLinkUser} onClick={handleManualLink} data-testid="confirm-link-btn">
+                <Link className="w-4 h-4 mr-1" /> Link
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
