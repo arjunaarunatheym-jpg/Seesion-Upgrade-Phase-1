@@ -723,6 +723,17 @@ const MarketingDashboard = ({ user, onLogout }) => {
 
           {/* Dashboard Tab */}
           <TabsContent value="dashboard">
+            {loading ? (
+              <div className="space-y-6" data-testid="marketing-loading">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[1,2,3,4].map(i => <div key={i} className="border rounded-lg p-4 space-y-2"><div className="h-4 w-20 bg-gray-200 animate-pulse rounded" /><div className="h-8 w-16 bg-gray-200 animate-pulse rounded" /></div>)}
+                </div>
+                <div className="space-y-3">
+                  {[1,2,3].map(i => <div key={i} className="h-20 bg-gray-200 animate-pulse rounded-lg" />)}
+                </div>
+              </div>
+            ) : (
+            <>
             {/* Pipeline Stats Summary */}
             <div className="mb-6">
               <PipelineStatsCard
@@ -741,6 +752,8 @@ const MarketingDashboard = ({ user, onLogout }) => {
               onAddClient={() => { setEditingClient(null); setClientForm({ company_name: '', company_address: '', contact_person: '', contact_phone: '', contact_email: '', notes: '' }); setShowClientDialog(true); }}
               onViewQuotation={viewQuotationDetails}
             />
+            </>
+            )}
           </TabsContent>
 
           {/* Leads Tab */}

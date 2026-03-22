@@ -198,9 +198,26 @@ const InvoicesTab = ({
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className="text-center py-8">Loading invoices...</div>
+          <div className="space-y-3" data-testid="invoices-loading">
+            {[1,2,3,4,5].map(i => (
+              <div key={i} className="flex items-center gap-4 p-3">
+                <div className="h-5 w-28 bg-gray-200 animate-pulse rounded" />
+                <div className="h-5 flex-1 bg-gray-200 animate-pulse rounded" />
+                <div className="h-5 w-20 bg-gray-200 animate-pulse rounded-full" />
+                <div className="h-5 w-24 bg-gray-200 animate-pulse rounded" />
+              </div>
+            ))}
+          </div>
         ) : filteredInvoices.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">No invoices found</div>
+          <div className="flex flex-col items-center justify-center py-16 text-center" data-testid="empty-state">
+            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+              <FileText className="w-8 h-8 text-slate-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-700 mb-1">No invoices found</h3>
+            <p className="text-sm text-slate-500 max-w-sm">
+              {statusFilter !== 'all' ? `No invoices with status "${statusFilter}". Try changing the filter.` : 'Invoices will appear here when sessions are created and approved.'}
+            </p>
+          </div>
         ) : (
           <div className="space-y-3">
             {groupedByMonth.map((group) => (

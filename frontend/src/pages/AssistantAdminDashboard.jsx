@@ -388,7 +388,13 @@ const AssistantAdminDashboard = ({ user, onLogout }) => {
             <CardContent>
               <div className="space-y-2">
                 {sessions.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-8">No sessions available</p>
+                  <div className="flex flex-col items-center justify-center py-12 text-center" data-testid="empty-state">
+                    <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                      <Calendar className="w-7 h-7 text-slate-400" />
+                    </div>
+                    <h3 className="text-base font-semibold text-slate-700 mb-1">No sessions available</h3>
+                    <p className="text-sm text-slate-500">Sessions will appear here when created.</p>
+                  </div>
                 ) : (
                   sessions.map((session) => (
                     <button

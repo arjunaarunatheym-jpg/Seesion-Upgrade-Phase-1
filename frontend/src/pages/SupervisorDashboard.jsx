@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, ClipboardCheck, Users, CheckCircle, XCircle, FileText, Download } from "lucide-react";
+import { LogOut, ClipboardCheck, Users, CheckCircle, XCircle, FileText, Download, Calendar } from "lucide-react";
 
 const SupervisorDashboard = ({ user, onLogout }) => {
   const [sessions, setSessions] = useState([]);
@@ -231,7 +231,13 @@ const SupervisorDashboard = ({ user, onLogout }) => {
               </CardHeader>
               <CardContent>
                 {sessions.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No sessions assigned yet</p>
+                  <div className="flex flex-col items-center justify-center py-12 text-center" data-testid="empty-state">
+                    <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                      <Calendar className="w-7 h-7 text-slate-400" />
+                    </div>
+                    <h3 className="text-base font-semibold text-slate-700 mb-1">No sessions assigned yet</h3>
+                    <p className="text-sm text-slate-500">Sessions will appear here once assigned by admin.</p>
+                  </div>
                 ) : (
                   <div className="space-y-3">
                     {sessions.map((session) => (

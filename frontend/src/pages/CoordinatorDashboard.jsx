@@ -1060,9 +1060,16 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {loading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading...</p>
+          <div className="space-y-6" data-testid="coordinator-loading">
+            <div className="flex gap-2 bg-gray-100 p-2 rounded-lg">
+              {[1,2,3,4,5].map(i => <div key={i} className="h-9 w-28 bg-gray-200 animate-pulse rounded-md flex-shrink-0" />)}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[1,2,3].map(i => <div key={i} className="border rounded-lg p-4 space-y-3"><div className="h-4 w-24 bg-gray-200 animate-pulse rounded" /><div className="h-8 w-16 bg-gray-200 animate-pulse rounded" /></div>)}
+            </div>
+            <div className="space-y-3">
+              {[1,2,3,4].map(i => <div key={i} className="h-16 bg-gray-200 animate-pulse rounded-lg" />)}
+            </div>
           </div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -1111,9 +1118,12 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                 </CardHeader>
                 <CardContent>
                   {sessions.length === 0 ? (
-                    <div className="py-12 text-center">
-                      <Calendar className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                      <p className="text-gray-500">No sessions assigned yet</p>
+                    <div className="flex flex-col items-center justify-center py-16 text-center" data-testid="empty-state">
+                      <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                        <Calendar className="w-8 h-8 text-slate-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-slate-700 mb-1">No sessions assigned yet</h3>
+                      <p className="text-sm text-slate-500 max-w-sm">Sessions will appear here once an admin assigns you as coordinator.</p>
                     </div>
                   ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

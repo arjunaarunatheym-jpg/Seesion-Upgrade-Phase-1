@@ -1,8 +1,10 @@
-// Service Worker for MDDRC Training Portal PWA
-const CACHE_NAME = 'mddrc-pwa-v1';
+// Service Worker for MDDRC Training Portal PWA — Enhanced v2
+const CACHE_VERSION = 'v2';
+const STATIC_CACHE = `mddrc-static-${CACHE_VERSION}`;
+const DATA_CACHE = `mddrc-data-${CACHE_VERSION}`;
 const OFFLINE_URL = '/offline.html';
 
-// Assets to cache immediately on install
+// Core shell assets to precache on install
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -12,112 +14,150 @@ const PRECACHE_ASSETS = [
   '/icons/icon-512x512.png'
 ];
 
-// Install event - cache essential assets
+// API paths safe for stale-while-revalidate (read-only, non-sensitive)
+const CACHEABLE_API_PATHS = [
+  '/api/programs',
+  '/api/companies',
+  '/api/settings',
+];
+
+// Install — precache core shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('PWA: Caching essential assets');
-        return cache.addAll(PRECACHE_ASSETS);
-      })
-      .then(() => {
-        self.skipWaiting();
-      })
-      .catch((error) => {
-        console.log('PWA: Cache failed', error);
-      })
+    caches.open(STATIC_CACHE)
+      .then((cache) => cache.addAll(PRECACHE_ASSETS))
+      .then(() => self.skipWaiting())
+      .catch((err) => console.warn('SW install cache failed:', err))
   );
 });
 
-// Activate event - clean up old caches
+// Activate — purge old cache versions
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    }).then(() => {
-      self.clients.claim();
-    })
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((k) => k !== STATIC_CACHE && k !== DATA_CACHE)
+          .map((k) => caches.delete(k))
+      )
+    ).then(() => self.clients.claim())
   );
 });
 
-// Fetch event - network first, fallback to cache
+// Helper: is this a cacheable API request?
+function isCacheableAPI(url) {
+  return CACHEABLE_API_PATHS.some((path) => url.pathname.startsWith(path));
+}
+
+// Helper: is this a static asset?
+function isStaticAsset(url) {
+  return /\.(js|css|png|jpg|jpeg|svg|woff2?|ttf|ico|webp)(\?.*)?$/.test(url.pathname);
+}
+
+// Fetch strategy
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') {
+  const { request } = event;
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+
+  // Strategy 1: Cacheable API — stale-while-revalidate
+  if (url.pathname.startsWith('/api/') && isCacheableAPI(url)) {
+    event.respondWith(
+      caches.open(DATA_CACHE).then((cache) =>
+        cache.match(request).then((cached) => {
+          const networkFetch = fetch(request)
+            .then((response) => {
+              if (response.ok) {
+                cache.put(request, response.clone());
+              }
+              return response;
+            })
+            .catch(() => cached); // network fail → serve stale
+          return cached || networkFetch;
+        })
+      )
+    );
     return;
   }
 
-  // Skip API requests (always go to network)
-  if (event.request.url.includes('/api/')) {
+  // Skip non-cacheable API requests (always network)
+  if (url.pathname.startsWith('/api/')) return;
+
+  // Strategy 2: Static assets — cache-first
+  if (isStaticAsset(url)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(STATIC_CACHE).then((c) => c.put(request, clone));
+          }
+          return response;
+        }).catch(() =>
+          new Response('', { status: 503, statusText: 'Offline' })
+        );
+      })
+    );
     return;
   }
 
+  // Strategy 3: Navigation — network-first, offline fallback
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(STATIC_CACHE).then((c) => c.put(request, clone));
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then((cached) => cached || caches.match(OFFLINE_URL))
+        )
+    );
+    return;
+  }
+
+  // Default: network-first with cache fallback
   event.respondWith(
-    fetch(event.request)
+    fetch(request)
       .then((response) => {
-        // Clone the response before caching
-        const responseClone = response.clone();
-        
-        // Cache successful responses
-        if (response.status === 200) {
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(STATIC_CACHE).then((c) => c.put(request, clone));
         }
-        
         return response;
       })
-      .catch(() => {
-        // Network failed, try cache
-        return caches.match(event.request)
-          .then((cachedResponse) => {
-            if (cachedResponse) {
-              return cachedResponse;
-            }
-            
-            // If it's a navigation request, show offline page
-            if (event.request.mode === 'navigate') {
-              return caches.match(OFFLINE_URL);
-            }
-            
-            return new Response('Offline', {
-              status: 503,
-              statusText: 'Service Unavailable'
-            });
-          });
-      })
+      .catch(() => caches.match(request))
   );
 });
 
-// Handle push notifications (for future use)
+// Push notifications
 self.addEventListener('push', (event) => {
-  if (event.data) {
-    const data = event.data.json();
-    const options = {
+  if (!event.data) return;
+  const data = event.data.json();
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'MDDRC', {
       body: data.body || 'New notification',
       icon: '/icons/icon-192x192.png',
       badge: '/icons/icon-72x72.png',
       vibrate: [100, 50, 100],
-      data: {
-        url: data.url || '/'
-      }
-    };
-    
-    event.waitUntil(
-      self.registration.showNotification(data.title || 'MDDRC', options)
-    );
-  }
+      data: { url: data.url || '/' },
+      actions: data.actions || [],
+    })
+  );
 });
 
-// Handle notification clicks
+// Notification click
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  
-  event.waitUntil(
-    clients.openWindow(event.notification.data.url || '/')
-  );
+  event.waitUntil(clients.openWindow(event.notification.data.url || '/'));
+});
+
+// Background sync (future use)
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-pending') {
+    event.waitUntil(Promise.resolve());
+  }
 });
