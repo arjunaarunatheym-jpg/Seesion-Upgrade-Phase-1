@@ -446,6 +446,103 @@ async def unlink_staff_from_user(staff_id: str, current_user: User = Depends(get
     return {"message": "User unlinked successfully", "staff_id": staff_id}
 
 
+@router.post("/payslips/backfill")
+async def backfill_payslips(current_user: User = Depends(get_current_user)):
+    """Backfill existing payslips with new fields and recalculate totals.
+    - Adds missing new fields (fixed_allowance, incentives, annual_leave_pay, cp38, mid_month_advance, salary_adjustment, unpaid_leave)
+    - Syncs fixed_allowance from current staff record
+    - Recalculates gross_salary, total_deductions, net_salary
+    """
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Admin/Finance can backfill")
+
+    all_staff = await db.hr_staff.find({}, {"_id": 0}).to_list(None)
+    staff_map = {s["id"]: s for s in all_staff}
+
+    all_payslips = await db.payslips.find({}, {"_id": 0}).to_list(None)
+    updated = 0
+    skipped = 0
+
+    new_fields = {
+        "fixed_allowance": 0,
+        "incentives": 0,
+        "annual_leave_pay": 0,
+        "cp38": 0,
+        "mid_month_advance": 0,
+        "salary_adjustment": 0,
+        "unpaid_leave": 0,
+    }
+
+    for ps in all_payslips:
+        staff = staff_map.get(ps.get("staff_id"))
+        if not staff:
+            skipped += 1
+            continue
+
+        updates = {}
+
+        # Add any missing new fields with default 0
+        for field, default_val in new_fields.items():
+            if field not in ps:
+                updates[field] = default_val
+
+        # Sync fixed_allowance from staff record (if staff has it set and payslip doesn't)
+        if "fixed_allowance" not in ps or ps.get("fixed_allowance") is None:
+            updates["fixed_allowance"] = staff.get("fixed_allowance", 0) or 0
+
+        if not updates:
+            skipped += 1
+            continue
+
+        # Recalculate totals with new fields
+        basic = ps.get("basic_salary", 0)
+        fixed_allow = updates.get("fixed_allowance", ps.get("fixed_allowance", 0))
+        housing = ps.get("housing_allowance", 0)
+        transport = ps.get("transport_allowance", 0)
+        meal = ps.get("meal_allowance", 0)
+        phone = ps.get("phone_allowance", 0)
+        other_allow = ps.get("other_allowance", 0)
+        total_allowances = fixed_allow + housing + transport + meal + phone + other_allow
+
+        overtime = ps.get("overtime", 0)
+        bonus = ps.get("bonus", 0)
+        commission = ps.get("commission", 0)
+        incentives = updates.get("incentives", ps.get("incentives", 0))
+        annual_leave_pay = updates.get("annual_leave_pay", ps.get("annual_leave_pay", 0))
+        other_earnings = ps.get("other_earnings", 0)
+
+        gross_salary = round(basic + total_allowances + overtime + bonus + commission + incentives + annual_leave_pay + other_earnings, 2)
+
+        epf_employee = ps.get("epf_employee", 0)
+        socso_employee = ps.get("socso_employee", 0)
+        eis_employee = ps.get("eis_employee", 0)
+        pcb = ps.get("pcb", 0)
+        cp38_val = updates.get("cp38", ps.get("cp38", 0))
+        loan = ps.get("loan_deduction", 0)
+        mid_month = updates.get("mid_month_advance", ps.get("mid_month_advance", 0))
+        sal_adj = updates.get("salary_adjustment", ps.get("salary_adjustment", 0))
+        unpaid = updates.get("unpaid_leave", ps.get("unpaid_leave", 0))
+        other_ded = ps.get("other_deductions", 0)
+
+        total_deductions = round(epf_employee + socso_employee + eis_employee + pcb + cp38_val + loan + mid_month + sal_adj + unpaid + other_ded, 2)
+        net_salary = round(gross_salary - total_deductions, 2)
+
+        updates["total_allowances"] = total_allowances
+        updates["gross_salary"] = gross_salary
+        updates["total_deductions"] = total_deductions
+        updates["net_salary"] = net_salary
+
+        await db.payslips.update_one({"id": ps["id"]}, {"$set": updates})
+        updated += 1
+
+    return {
+        "message": f"Backfill complete. Updated {updated} payslips, skipped {skipped}.",
+        "updated": updated,
+        "skipped": skipped,
+        "total": len(all_payslips)
+    }
+
+
 @router.get("/available-users")
 async def get_available_users(current_user: User = Depends(get_current_user)):
     """Get users that can be linked as staff"""

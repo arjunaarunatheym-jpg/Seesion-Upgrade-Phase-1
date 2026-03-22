@@ -640,6 +640,19 @@ const HRModule = () => {
             >
               <Link className="w-3 h-3 mr-1" /> Auto-link Users
             </Button>
+            <Button variant="outline" size="sm" data-testid="backfill-payslips-btn"
+              onClick={async () => {
+                try {
+                  const res = await axiosInstance.post('/hr/payslips/backfill');
+                  toast.success(res.data.message);
+                  loadData();
+                } catch (err) {
+                  toast.error(err.response?.data?.detail || 'Failed to backfill');
+                }
+              }}
+            >
+              <RefreshCw className="w-3 h-3 mr-1" /> Re-sync Payslips
+            </Button>
           </div>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
             <div className="relative flex-1 max-w-md">
