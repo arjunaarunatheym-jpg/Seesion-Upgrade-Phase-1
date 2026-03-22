@@ -11,23 +11,19 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 
 ## Current Status (Mar 2026)
 
-### Payroll Portal & Status Indicators — COMPLETE (Mar 22, 2026)
-**Root cause**: hr_staff records had no `user_id` link to user accounts, so staff portals couldn't find payslips.
-
+### Quick Wins Batch — COMPLETE (Mar 22, 2026)
 **What was built**:
-- `GET /api/hr/payroll-status` — Returns paid/unpaid counts per month for all staff
-- `POST /api/hr/staff/auto-link-users` — Auto-matches hr_staff to users by name or IC number
-- **My Payroll tab** added to Coordinator, Marketing, and Trainer dashboards
-- **Payroll status summary** in HRModule: "March 2026 Payroll: X Paid, Y Unpaid"
-- **Per-staff badges**: Green "Paid" / Orange "Unpaid" on each staff card
-- **"Not linked" badge** for staff without user_id connection
-- **Auto-link Users button** in HR module to fix linkage
-- Testing: 100% — Backend 14/14, Frontend all flows (iteration_28)
+- **Database Indexing**: 25 new indexes added to 19 collections (attendance_records, audit_trail, chief_trainer_feedback, coordinator_feedback, finance_audit_log, manual_expenses, manual_income, marketing_clients, participant_attendance, petty_cash_transactions, vehicle_checklists, vehicle_details, tests, broadcast_history, feedback_templates, certificate_templates, marketing_audit_log, super_admin_audit_log)
+- **PWA Enhancements**: Service worker upgraded to v2 with cache-first for static assets, stale-while-revalidate for read-only API data, improved offline page
+- **Loading States & Empty States**: Skeleton loaders added to Finance, Coordinator, Supervisor, Marketing dashboards. Empty state components with icons and descriptions added to all major list views (sessions, invoices, attendance)
+- Testing: 100% — Backend 11/11, Frontend all flows (iteration_29)
+
+### Payroll Portal & Status Indicators — COMPLETE (Mar 22, 2026)
+- Auto-link hr_staff to users, payroll status badges, My Payroll tabs
+- Testing: 100% (iteration_28)
 
 ### Mobile Responsive Overhaul — COMPLETE (Mar 21, 2026)
 - All 9 dashboard pages made mobile-friendly
-- Global CSS: table scroll, full-width dialogs, scrollable tabs, compact badges
-- Headers stack vertically on mobile, tabs icon-only with horizontal scroll
 - Testing: 100% (iteration_27)
 
 ### Comprehensive Backfill System — COMPLETE (Mar 20, 2026)
@@ -44,19 +40,26 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 1. **Always include backfill**: Future auto-posting improvements must include backfill
 2. **Mobile-first CSS**: Use sm:/md:/lg: breakpoints
 3. **Staff-user linking**: Always link hr_staff to users for portal access
+4. **Loading patterns**: Use skeleton loaders during data fetch, empty states when no data
 
 ## Known Issues
 - Pre-existing 500 error on checklist template API (P2)
 - Historical journal entries show "Unknown" for some descriptions (P2)
 
 ## Feature Backlog
-- (P0) Duplicate Route Refactor — 55 conflicting API endpoints
-- (P1) Phase 2 Audit Fixes — Unify P&L, invoice state machine
-- (P1) Trainer Contract Workflow
-- (P1) Post-Training Evaluation System
-- (P1) Automated Certificate Generation
+- (P0) Duplicate Route Refactor — 55 conflicting API endpoints (user wants to hold until laptop ready)
+- (P1) Unify P&L Systems — Deprecate old Auditor P&L
+- (P1) Backend Role Protection — 20+ unprotected endpoints
+- (P1) Dashboard Analytics/KPIs — At-a-glance business metrics
+- (P1) Trainer Contract Workflow — Freelance staff contracts per session
+- (P1) Post-Training Evaluation System — 3mo/6mo follow-up, auto-delete non-attendees
+- (P1) Supervisor Portal Enhancement — Invoices, feedback, certificates for company trainees
+- (P1) Certificate Generation — PDF template-based with dynamic fields
+- (P1) Notification System — In-app bell + email notifications
 - (P1) SaaS Monetization (Stripe)
 - (P2) Client/Trainer Portals, Native App
+- (P2) PWA Offline Data Caching for field staff
+- (P2) Phase 2/3 Audit Fixes
 
 ## Test Credentials
 - Admin: arjuna@mddrc.com.my / Dana102229
