@@ -1064,13 +1064,6 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
             <p className="mt-4 text-gray-600">Loading...</p>
           </div>
-        ) : sessions.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Calendar className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-              <p className="text-gray-500">No sessions assigned yet</p>
-            </CardContent>
-          </Card>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="flex w-full h-auto justify-start gap-2 bg-gray-100 p-2 rounded-lg overflow-x-auto scrollbar-hide">
@@ -1117,6 +1110,12 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                   <CardDescription>Training sessions you are coordinating</CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {sessions.length === 0 ? (
+                    <div className="py-12 text-center">
+                      <Calendar className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                      <p className="text-gray-500">No sessions assigned yet</p>
+                    </div>
+                  ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {sessions.map((session) => {
                       const stats = sessionStats[session.id] || {};
@@ -1222,6 +1221,7 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                       );
                     })}
                   </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
