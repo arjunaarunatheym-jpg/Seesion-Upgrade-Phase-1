@@ -267,6 +267,8 @@ async def update_staff(staff_id: str, data: dict, current_user: User = Depends(g
         raise HTTPException(status_code=404, detail="Staff not found")
     
     update_data = {
+        "user_id": data.get("user_id", existing.get("user_id")),
+        "full_name": data.get("full_name", existing.get("full_name", "")),
         "employee_id": data.get("employee_id", existing.get("employee_id")),
         "nric": data.get("nric", existing.get("nric", "")),
         "designation": data.get("designation", existing.get("designation")),
@@ -307,6 +309,104 @@ async def delete_staff(staff_id: str, current_user: User = Depends(get_current_u
     return {"message": "Staff deleted successfully"}
 
 
+@router.get("/payroll-status")
+async def get_payroll_status(
+    year: int = None,
+    month: int = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get payroll status showing which staff have payslips for a given month"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    if not year:
+        year = now.year
+    if not month:
+        month = now.month
+    
+    # Get all active staff
+    staff_list = await db.hr_staff.find(
+        {"is_active": True}, {"_id": 0}
+    ).to_list(500)
+    
+    # Get payslips for this period
+    payslips = await db.payslips.find(
+        {"year": year, "month": month}, {"_id": 0, "staff_id": 1, "net_salary": 1, "gross_salary": 1}
+    ).to_list(500)
+    
+    paid_staff_ids = {p["staff_id"]: p for p in payslips}
+    
+    status = []
+    for s in staff_list:
+        payslip = paid_staff_ids.get(s["id"])
+        status.append({
+            "staff_id": s["id"],
+            "full_name": s.get("full_name", ""),
+            "designation": s.get("designation", ""),
+            "department": s.get("department", ""),
+            "basic_salary": s.get("basic_salary", 0),
+            "user_id": s.get("user_id"),
+            "has_payslip": payslip is not None,
+            "net_salary": payslip.get("net_salary", 0) if payslip else None,
+            "gross_salary": payslip.get("gross_salary", 0) if payslip else None,
+        })
+    
+    paid_count = sum(1 for s in status if s["has_payslip"])
+    
+    return {
+        "year": year,
+        "month": month,
+        "total_staff": len(status),
+        "paid_count": paid_count,
+        "unpaid_count": len(status) - paid_count,
+        "staff": status
+    }
+
+
+@router.post("/staff/auto-link-users")
+async def auto_link_staff_to_users(current_user: User = Depends(get_current_user)):
+    """Auto-link hr_staff records to user accounts by matching name or email"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only Admin can manage staff")
+    
+    # Get all unlinked staff
+    unlinked_staff = await db.hr_staff.find(
+        {"$or": [{"user_id": None}, {"user_id": {"$exists": False}}]},
+        {"_id": 0}
+    ).to_list(500)
+    
+    if not unlinked_staff:
+        return {"message": "All staff are already linked", "linked": 0}
+    
+    # Get all users that could be staff
+    all_users = await db.users.find(
+        {"role": {"$in": ["trainer", "coordinator", "marketing", "assistant_admin", "admin", "finance"]}},
+        {"_id": 0, "id": 1, "full_name": 1, "email": 1, "role": 1, "id_number": 1}
+    ).to_list(500)
+    
+    linked = 0
+    for staff in unlinked_staff:
+        staff_name = (staff.get("full_name") or "").strip().lower()
+        staff_nric = (staff.get("nric") or "").strip()
+        
+        for user in all_users:
+            user_name = (user.get("full_name") or "").strip().lower()
+            user_ic = (user.get("id_number") or "").strip()
+            
+            # Match by name (case-insensitive) or NRIC/IC number
+            if (staff_name and user_name and staff_name == user_name) or \
+               (staff_nric and user_ic and staff_nric == user_ic):
+                await db.hr_staff.update_one(
+                    {"id": staff["id"]},
+                    {"$set": {"user_id": user["id"], "updated_at": datetime.now(timezone.utc).isoformat()}}
+                )
+                linked += 1
+                break
+    
+    return {"message": f"Linked {linked} staff to user accounts", "linked": linked, "total_unlinked": len(unlinked_staff)}
+
+
 @router.get("/available-users")
 async def get_available_users(current_user: User = Depends(get_current_user)):
     """Get users that can be linked as staff"""
@@ -318,7 +418,7 @@ async def get_available_users(current_user: User = Depends(get_current_user)):
     
     users = await db.users.find(
         {
-            "role": {"$in": ["trainer", "coordinator", "assistant_admin", "admin"]},
+            "role": {"$in": ["trainer", "coordinator", "marketing", "assistant_admin", "admin", "finance"]},
             "id": {"$nin": existing_user_ids}
         },
         {"_id": 0, "id": 1, "full_name": 1, "email": 1, "role": 1, "id_number": 1}

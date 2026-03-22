@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { 
   Users, Plus, Edit, Trash2, Save, Search, DollarSign, 
   FileText, Building2, Printer, X, Calculator, Loader2, Lock, Unlock,
-  Calendar, Eye, RefreshCw, Upload, Download
+  Calendar, Eye, RefreshCw, Upload, Download, Link
 } from 'lucide-react';
 import PayslipPrint from './PayslipPrint';
 import PayAdvicePrint from './PayAdvicePrint';
@@ -34,6 +34,9 @@ const HRModule = () => {
   const [periods, setPeriods] = useState([]);
   const [periodDialogOpen, setPeriodDialogOpen] = useState(false);
   const [newPeriod, setNewPeriod] = useState({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
+  
+  // Payroll status (which staff have payslips this month)
+  const [payrollStatus, setPayrollStatus] = useState({});
   
   // Payslips state
   const [payslips, setPayslips] = useState([]);
@@ -113,7 +116,7 @@ const HRModule = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [staffRes, periodsRes, payslipsRes, adviceRes, usersRes, settingsRes, epfRates, socsoRates, eisRates] = await Promise.all([
+      const [staffRes, periodsRes, payslipsRes, adviceRes, usersRes, settingsRes, epfRates, socsoRates, eisRates, payrollStatusRes] = await Promise.all([
         axiosInstance.get('/hr/staff').catch(() => ({ data: [] })),
         axiosInstance.get('/hr/payroll-periods').catch(() => ({ data: [] })),
         axiosInstance.get('/hr/payslips').catch(() => ({ data: [] })),
@@ -122,7 +125,8 @@ const HRModule = () => {
         axiosInstance.get('/finance/company-settings').catch(() => ({ data: {} })),
         axiosInstance.get('/hr/statutory-rates?rate_type=epf').catch(() => ({ data: [] })),
         axiosInstance.get('/hr/statutory-rates?rate_type=socso').catch(() => ({ data: [] })),
-        axiosInstance.get('/hr/statutory-rates?rate_type=eis').catch(() => ({ data: [] }))
+        axiosInstance.get('/hr/statutory-rates?rate_type=eis').catch(() => ({ data: [] })),
+        axiosInstance.get(`/hr/payroll-status?year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`).catch(() => ({ data: {} }))
       ]);
       
       setStaff(staffRes.data);
@@ -136,6 +140,12 @@ const HRModule = () => {
         socso: socsoRates.data,
         eis: eisRates.data
       });
+      // Build payroll status map by staff_id
+      const statusMap = {};
+      (payrollStatusRes.data?.staff || []).forEach(s => {
+        statusMap[s.staff_id] = s;
+      });
+      setPayrollStatus(statusMap);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -555,7 +565,36 @@ const HRModule = () => {
 
         {/* Staff Management Tab */}
         <TabsContent value="staff">
-          <div className="flex justify-between items-center mb-4">
+          {/* Payroll status summary for current month */}
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg flex flex-wrap items-center gap-3 text-sm" data-testid="payroll-status-summary">
+            <span className="font-medium text-gray-700">
+              {new Date().toLocaleString('en', { month: 'long', year: 'numeric' })} Payroll:
+            </span>
+            <Badge className="bg-green-100 text-green-800">
+              {Object.values(payrollStatus).filter(s => s.has_payslip).length} Paid
+            </Badge>
+            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
+              {Object.values(payrollStatus).filter(s => !s.has_payslip).length} Unpaid
+            </Badge>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="ml-auto text-xs"
+              data-testid="auto-link-users-btn"
+              onClick={async () => {
+                try {
+                  const res = await axiosInstance.post('/hr/staff/auto-link-users');
+                  toast.success(res.data.message);
+                  loadData();
+                } catch (err) {
+                  toast.error(err.response?.data?.detail || 'Failed to auto-link');
+                }
+              }}
+            >
+              <Link className="w-3 h-3 mr-1" /> Auto-link Users
+            </Button>
+          </div>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
@@ -591,6 +630,20 @@ const HRModule = () => {
                           <div className="flex gap-2 mt-1">
                             <Badge variant="outline">{s.employee_id || 'No ID'}</Badge>
                             <Badge variant="outline" className="bg-blue-50">{s.department || 'No dept'}</Badge>
+                            {payrollStatus[s.id]?.has_payslip ? (
+                              <Badge className="bg-green-100 text-green-800 border-green-300" data-testid={`payroll-paid-${s.id}`}>
+                                Paid
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300" data-testid={`payroll-unpaid-${s.id}`}>
+                                Unpaid
+                              </Badge>
+                            )}
+                            {!s.user_id && (
+                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300 text-xs">
+                                Not linked
+                              </Badge>
+                            )}
                           </div>
                         </div>
                       </div>

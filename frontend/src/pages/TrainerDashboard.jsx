@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useTheme } from "../context/ThemeContext";
 import { LogOut, Calendar, ClipboardCheck, Users, FileText, ChevronDown, ChevronRight, MessageSquare, Search, Eye, Building2, BookOpen, DollarSign, Settings, Wallet } from "lucide-react";
 import MyEarnings from "../components/MyEarnings";
+import MyPayroll from "../components/MyPayroll";
 import { ChecklistsTab } from "../components/trainer/ChecklistsTab";
 import { FeedbackTab } from "../components/trainer/FeedbackTab";
 import { PastTrainingTab } from "../components/shared/PastTrainingTab";
@@ -489,9 +490,13 @@ const TrainerDashboard = ({ user, onLogout }) => {
               <FileText className="w-4 h-4 mr-2" />
               <span className="text-sm">Past Training</span>
             </TabsTrigger>
-            <TabsTrigger value="my-earnings" data-testid="my-earnings-tab" className="flex-1 min-w-[140px] md:min-w-0 bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
-              <Wallet className="w-4 h-4 mr-2" />
-              <span className="text-sm">My Earnings</span>
+            <TabsTrigger value="my-earnings" data-testid="my-earnings-tab" className="flex-shrink-0 bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
+              <Wallet className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline text-sm">My Earnings</span>
+            </TabsTrigger>
+            <TabsTrigger value="my-payroll" data-testid="my-payroll-tab" className="flex-shrink-0 bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
+              <DollarSign className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline text-sm">My Payroll</span>
             </TabsTrigger>
             {isChiefTrainerForAnySessions() && (
               <TabsTrigger value="feedback" data-testid="feedback-tab" className="flex-1 min-w-[140px] md:min-w-0">
@@ -1069,6 +1074,10 @@ const TrainerDashboard = ({ user, onLogout }) => {
               userId={user.id} 
               userRoles={[user.role, ...(user.additional_roles || [])]}
             />
+          </TabsContent>
+
+          <TabsContent value="my-payroll">
+            <MyPayroll />
           </TabsContent>
 
         </Tabs>

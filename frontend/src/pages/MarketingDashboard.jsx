@@ -18,6 +18,7 @@ import {
   CalendarDays, Briefcase
 } from 'lucide-react';
 import MyEarnings from '../components/MyEarnings';
+import MyPayroll from '../components/MyPayroll';
 import { DashboardTab } from '../components/marketing/DashboardTab';
 import { ClientsTab } from '../components/marketing/ClientsTab';
 import { QuotationsTab } from '../components/marketing/QuotationsTab';
@@ -709,6 +710,9 @@ const MarketingDashboard = ({ user, onLogout }) => {
             <TabsTrigger value="earnings" data-testid="earnings-tab" className="text-xs sm:text-sm px-2 sm:px-3">
               <Wallet className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Earnings
             </TabsTrigger>
+            <TabsTrigger value="my-payroll" data-testid="my-payroll-tab" className="text-xs sm:text-sm px-2 sm:px-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
+              <DollarSign className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> Payroll
+            </TabsTrigger>
             <TabsTrigger value="sessions" data-testid="sessions-tab" className="text-xs sm:text-sm px-2 sm:px-3">
               <Briefcase className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> My Sessions
               {mySessions.current.length > 0 && (
@@ -792,6 +796,11 @@ const MarketingDashboard = ({ user, onLogout }) => {
           {/* Earnings Tab */}
           <TabsContent value="earnings">
             <MyEarnings user={user} />
+          </TabsContent>
+
+          {/* My Payroll Tab */}
+          <TabsContent value="my-payroll">
+            <MyPayroll />
           </TabsContent>
 
           {/* My Sessions Tab */}

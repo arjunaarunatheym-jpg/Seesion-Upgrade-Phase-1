@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { LogOut, Calendar, Users, FileText, BarChart3, Camera, Upload, Sparkles, Save, Send, Edit, Trash2, Clock, MessageSquare, Download, CheckCircle, Search, Eye, Building2, BookOpen, Plus, DollarSign, Wallet } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import MyEarnings from "../components/MyEarnings";
+import MyPayroll from "../components/MyPayroll";
 import { ManagementTab } from "../components/coordinator/ManagementTab";
 import { ReportTab } from "../components/coordinator/ReportTab";
 import { AnalyticsTab } from "../components/coordinator/AnalyticsTab";
@@ -1072,36 +1073,39 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
           </Card>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="flex flex-wrap w-full h-auto justify-start gap-2 bg-gray-100 p-2 rounded-lg sm:grid sm:grid-cols-6">
-              <TabsTrigger value="sessions" className="flex-1 min-w-[100px] sm:min-w-0">
+            <TabsList className="flex w-full h-auto justify-start gap-2 bg-gray-100 p-2 rounded-lg overflow-x-auto scrollbar-hide">
+              <TabsTrigger value="sessions" className="flex-shrink-0">
                 <Calendar className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">My Sessions</span>
                 <span className="sm:hidden">Sessions</span>
               </TabsTrigger>
-              <TabsTrigger value="management" className="flex-1 min-w-[100px] sm:min-w-0">
+              <TabsTrigger value="management" className="flex-shrink-0">
                 <Users className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Session Management</span>
                 <span className="sm:hidden">Management</span>
               </TabsTrigger>
-              <TabsTrigger value="past-training" className="flex-1 min-w-[100px] sm:min-w-0">
+              <TabsTrigger value="past-training" className="flex-shrink-0">
                 <FileText className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Past Training</span>
                 <span className="sm:hidden">Past</span>
               </TabsTrigger>
-              <TabsTrigger value="report" className="flex-1 min-w-[100px] sm:min-w-0">
+              <TabsTrigger value="report" className="flex-shrink-0">
                 <FileText className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Training Report</span>
                 <span className="sm:hidden">Report</span>
               </TabsTrigger>
-              <TabsTrigger value="analytics" className="flex-1 min-w-[100px] sm:min-w-0">
+              <TabsTrigger value="analytics" className="flex-shrink-0">
                 <BarChart3 className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">Analytics</span>
                 <span className="sm:hidden">Analytics</span>
               </TabsTrigger>
-              <TabsTrigger value="my-earnings" data-testid="my-earnings-tab" className="flex-1 min-w-[100px] sm:min-w-0 bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
-                <Wallet className="w-4 h-4 mr-2" />
+              <TabsTrigger value="my-earnings" data-testid="my-earnings-tab" className="flex-shrink-0 bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
+                <Wallet className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">My Earnings</span>
-                <span className="sm:hidden">Earnings</span>
+              </TabsTrigger>
+              <TabsTrigger value="my-payroll" data-testid="my-payroll-tab" className="flex-shrink-0 bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
+                <DollarSign className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">My Payroll</span>
               </TabsTrigger>
             </TabsList>
 
@@ -1313,6 +1317,10 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                 userId={user.id} 
                 userRoles={[user.role, ...(user.additional_roles || [])]}
               />
+            </TabsContent>
+
+            <TabsContent value="my-payroll">
+              <MyPayroll />
             </TabsContent>
 
           </Tabs>
