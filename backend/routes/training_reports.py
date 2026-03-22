@@ -90,6 +90,8 @@ async def create_training_report(report_data: TrainingReportCreate, current_user
 @router.get("/{session_id}")
 async def get_training_report(session_id: str, current_user: User = Depends(get_current_user)):
     """Get training report for a session"""
+    if current_user.role not in ["admin", "super_admin", "coordinator", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     report = await db.training_reports.find_one({"session_id": session_id}, {"_id": 0})
     
     if not report:
@@ -278,6 +280,8 @@ async def generate_docx(session_id: str, current_user: User = Depends(get_curren
 @router.get("/{session_id}/download-docx")
 async def download_docx(session_id: str, current_user: User = Depends(get_current_user)):
     """Download DOCX report"""
+    if current_user.role not in ["admin", "super_admin", "coordinator", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     report = await db.training_reports.find_one({"session_id": session_id}, {"_id": 0})
     if not report or not report.get("docx_url"):
         raise HTTPException(status_code=404, detail="DOCX report not found")
@@ -364,6 +368,8 @@ async def submit_final_report(session_id: str, current_user: User = Depends(get_
 @router.get("/{session_id}/download-pdf")
 async def download_pdf(session_id: str, current_user: User = Depends(get_current_user)):
     """Download PDF report"""
+    if current_user.role not in ["admin", "super_admin", "coordinator", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     report = await db.training_reports.find_one({"session_id": session_id}, {"_id": 0})
     if not report or not report.get("pdf_url"):
         raise HTTPException(status_code=404, detail="PDF report not found")

@@ -513,6 +513,8 @@ async def reopen_payables_period(period_id: str, reason: str = "", current_user:
 @router.get("/payables/period-status")
 async def get_period_status(year: int, month: int, current_user: User = Depends(get_current_user)):
     """Check if a specific period is open or closed"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Admin or Finance access required")
     period = await db.payables_periods.find_one({"year": year, "month": month}, {"_id": 0})
     if not period:
         return {"status": "open", "exists": False}
@@ -966,6 +968,8 @@ async def recalculate_marketing_commissions(
 @router.get("/expense-categories")
 async def get_expense_categories(current_user: User = Depends(get_current_user)):
     """Get list of expense categories with their calculation types and rates"""
+    if current_user.role not in ["admin", "super_admin", "finance", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     return [
         {"id": "fnb", "name": "F&B", "type": "per_pax", "rate": 25, "description": "Food & Beverages - RM 25 per participant"},
         {"id": "hrdc_levy", "name": "HRDCorp Levy", "type": "percentage", "rate": 4, "description": "HRDCorp Levy Deduction - 4% of invoice total"},

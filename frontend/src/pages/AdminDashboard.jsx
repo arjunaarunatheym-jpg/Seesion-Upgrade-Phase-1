@@ -34,6 +34,7 @@ import { CertificatesTab } from "../components/admin/CertificatesTab";
 import { QuotationsTab } from "../components/admin/QuotationsTab";
 import RichTextToolbar from "../components/RichTextToolbar";
 import { AdminMarketingOverview } from "../components/marketing/AdminMarketingOverview";
+import { DashboardKPIs } from "../components/DashboardKPIs";
 
 const AdminDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -1691,6 +1692,7 @@ const AdminDashboard = ({ user, onLogout }) => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <DashboardKPIs />
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="flex w-full mb-8 h-auto justify-start gap-2 bg-gray-100 p-2 rounded-lg overflow-x-auto scrollbar-hide md:flex-wrap">
             <TabsTrigger value="programs" data-testid="programs-tab" className="flex-shrink-0 text-xs sm:text-sm">

@@ -88,6 +88,8 @@ async def generate_report(request: ReportGenerateRequest, current_user = Depends
 @router.get("/session/{session_id}", response_model=TrainingReport)
 async def get_session_report(session_id: str, current_user = Depends(get_current_user)):
     """Get report for a specific session"""
+    if current_user.role not in ["admin", "super_admin", "coordinator", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     report = await db.training_reports.find_one({"session_id": session_id}, {"_id": 0})
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -112,6 +114,8 @@ async def generate_docx_report(session_id: str, current_user = Depends(get_curre
 @router.get("/{session_id}/download-docx")
 async def download_docx_report(session_id: str, current_user = Depends(get_current_user)):
     """Download DOCX report"""
+    if current_user.role not in ["admin", "super_admin", "coordinator", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     from fastapi.responses import FileResponse
     import os
     
@@ -187,6 +191,8 @@ async def upload_final_pdf(
 @router.get("/{session_id}/download-pdf")
 async def download_pdf_report(session_id: str, current_user = Depends(get_current_user)):
     """Download PDF report"""
+    if current_user.role not in ["admin", "super_admin", "coordinator", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     from fastapi.responses import FileResponse
     import os
     

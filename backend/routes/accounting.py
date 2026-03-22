@@ -3426,6 +3426,8 @@ async def export_journal_entries_excel(
     current_user: User = Depends(get_current_user)
 ):
     """Export journal entries to Excel"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Admin or Finance access required")
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -3521,6 +3523,8 @@ async def export_trial_balance_excel(
     current_user: User = Depends(get_current_user)
 ):
     """Export trial balance to Excel"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Admin or Finance access required")
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -3653,6 +3657,8 @@ async def export_pl_excel(
     current_user: User = Depends(get_current_user)
 ):
     """Export P&L to Excel"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Admin or Finance access required")
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -3789,6 +3795,8 @@ async def export_balance_sheet_excel(
     current_user: User = Depends(get_current_user)
 ):
     """Export Balance Sheet to Excel"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Admin or Finance access required")
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side

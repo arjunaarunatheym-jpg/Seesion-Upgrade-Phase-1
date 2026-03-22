@@ -555,6 +555,8 @@ async def upload_statutory_rates(file: UploadFile = File(...), rate_type: str = 
 @router.get("/statutory-rates/templates/{rate_type}")
 async def download_statutory_template(rate_type: str, current_user: User = Depends(get_current_user)):
     """Download Excel template for statutory rates"""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Admin or Finance access required")
     if rate_type not in ["epf", "socso", "eis"]:
         raise HTTPException(status_code=400, detail="Invalid rate type")
     

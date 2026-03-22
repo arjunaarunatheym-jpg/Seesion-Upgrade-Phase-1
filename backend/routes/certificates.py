@@ -169,6 +169,8 @@ async def upload_participant_certificate(
 @router.get("/eligibility/{session_id}/{participant_id}")
 async def check_certificate_eligibility(session_id: str, participant_id: str, current_user: User = Depends(get_current_user)):
     """Check if participant is eligible for certificate"""
+    if current_user.role not in ["admin", "super_admin", "coordinator", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -306,6 +308,8 @@ async def download_participant_certificate(session_id: str, participant_id: str,
 @router.get("/preview/{certificate_id}")
 async def preview_certificate(certificate_id: str, current_user: User = Depends(get_current_user)):
     """Preview certificate (returns certificate data)"""
+    if current_user.role not in ["admin", "super_admin", "coordinator", "assistant_admin", "supervisor"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     certificate = await db.certificates.find_one({"id": certificate_id}, {"_id": 0})
     if not certificate:
         raise HTTPException(status_code=404, detail="Certificate not found")
