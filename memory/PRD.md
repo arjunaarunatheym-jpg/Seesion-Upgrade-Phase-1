@@ -11,51 +11,62 @@ Build a comprehensive training management platform for Malaysian Defensive Drivi
 
 ## Current Status (Mar 2026)
 
-### Quick Wins Batch — COMPLETE (Mar 22, 2026)
+### Dashboard Analytics/KPIs + Backend Role Protection — COMPLETE (Mar 22, 2026)
 **What was built**:
-- **Database Indexing**: 25 new indexes added to 19 collections (attendance_records, audit_trail, chief_trainer_feedback, coordinator_feedback, finance_audit_log, manual_expenses, manual_income, marketing_clients, participant_attendance, petty_cash_transactions, vehicle_checklists, vehicle_details, tests, broadcast_history, feedback_templates, certificate_templates, marketing_audit_log, super_admin_audit_log)
-- **PWA Enhancements**: Service worker upgraded to v2 with cache-first for static assets, stale-while-revalidate for read-only API data, improved offline page
-- **Loading States & Empty States**: Skeleton loaders added to Finance, Coordinator, Supervisor, Marketing dashboards. Empty state components with icons and descriptions added to all major list views (sessions, invoices, attendance)
-- Testing: 100% — Backend 11/11, Frontend all flows (iteration_29)
+- **Dashboard KPIs**: New `GET /api/admin/dashboard-kpis` endpoint aggregating 8 business metrics. KPI cards component displaying Sessions This Month, Revenue YTD, Outstanding Invoices, Trainees YTD, Avg Feedback Score, Trainer Utilization, Active Staff, Pending Quotations
+- **Backend Role Protection**: Role-based access guards added to 15 endpoints across 6 route files (accounting exports, finance payables, HR templates, reports, training reports, certificates). Unauthorized roles receive 403 errors.
+- Testing: 100% — Backend 16/16, Frontend all flows (iteration_30)
 
-### Payroll Portal & Status Indicators — COMPLETE (Mar 22, 2026)
-- Auto-link hr_staff to users, payroll status badges, My Payroll tabs
-- Testing: 100% (iteration_28)
+### Quick Wins Batch — COMPLETE (Mar 22, 2026)
+- Database Indexing: 25 new indexes across 19 collections
+- PWA Enhancements: Service worker v2, cache-first, offline page
+- Loading States & Empty States: Skeleton loaders + empty states across all dashboards
+- Testing: 100% (iteration_29)
 
-### Mobile Responsive Overhaul — COMPLETE (Mar 21, 2026)
-- All 9 dashboard pages made mobile-friendly
-- Testing: 100% (iteration_27)
+### Previous Completions
+- Balance Sheet UI, Comprehensive Backfill System, Reset & Re-sync
+- Full mobile responsive overhaul (all 9 dashboards)
+- Payroll portal fixes & status indicators
+- Production Audit Phase 1
 
-### Comprehensive Backfill System — COMPLETE (Mar 20, 2026)
-- 10 transaction types, original dates, Reset & Re-sync button
-- Testing: 100% (iteration_26)
-
-### Balance Sheet UI — COMPLETE
-- Balanced badge, account codes, Print/Excel
-
-### Production Audit Phase 1 — COMPLETE
-- DB indexes, JWT 24h, ErrorBoundary, ProtectedRoute
-
-## Design Principles
-1. **Always include backfill**: Future auto-posting improvements must include backfill
-2. **Mobile-first CSS**: Use sm:/md:/lg: breakpoints
-3. **Staff-user linking**: Always link hr_staff to users for portal access
-4. **Loading patterns**: Use skeleton loaders during data fetch, empty states when no data
+## Architecture
+```
+/app/
+├── backend/
+│   ├── routes/
+│   │   ├── admin_kpis.py        # NEW: Dashboard KPI metrics
+│   │   ├── accounting.py        # MODIFIED: Role guards on 4 export endpoints
+│   │   ├── finance_payables.py  # MODIFIED: Role guards on 2 endpoints
+│   │   ├── hr.py                # MODIFIED: Role guard on statutory download
+│   │   ├── reports.py           # MODIFIED: Role guards on 3 endpoints
+│   │   ├── training_reports.py  # MODIFIED: Role guards on 3 endpoints
+│   │   └── certificates.py     # MODIFIED: Role guards on 2 endpoints
+│   └── server.py
+└── frontend/
+    ├── src/
+    │   ├── components/
+    │   │   ├── DashboardKPIs.jsx # NEW: KPI cards component
+    │   │   ├── EmptyState.jsx    # NEW: Reusable empty state
+    │   │   └── ui/skeleton.jsx   # MODIFIED: Extended with variants
+    │   └── pages/
+    │       └── AdminDashboard.jsx # MODIFIED: KPI cards integrated
+    └── public/
+        ├── service-worker.js     # MODIFIED: Enhanced caching v2
+        └── offline.html          # MODIFIED: Improved UI
+```
 
 ## Known Issues
 - Pre-existing 500 error on checklist template API (P2)
 - Historical journal entries show "Unknown" for some descriptions (P2)
 
 ## Feature Backlog
-- (P0) Duplicate Route Refactor — 55 conflicting API endpoints (user wants to hold until laptop ready)
+- (P0) Duplicate Route Refactor — 55 conflicting API endpoints (user holding until laptop ready)
 - (P1) Unify P&L Systems — Deprecate old Auditor P&L
-- (P1) Backend Role Protection — 20+ unprotected endpoints
-- (P1) Dashboard Analytics/KPIs — At-a-glance business metrics
+- (P1) Notification System — In-app bell + email alerts
 - (P1) Trainer Contract Workflow — Freelance staff contracts per session
-- (P1) Post-Training Evaluation System — 3mo/6mo follow-up, auto-delete non-attendees
-- (P1) Supervisor Portal Enhancement — Invoices, feedback, certificates for company trainees
+- (P1) Post-Training Evaluation — 3mo/6mo follow-up, auto-delete non-attendees
+- (P1) Supervisor Portal Enhancement — Invoices, feedback, certificates
 - (P1) Certificate Generation — PDF template-based with dynamic fields
-- (P1) Notification System — In-app bell + email notifications
 - (P1) SaaS Monetization (Stripe)
 - (P2) Client/Trainer Portals, Native App
 - (P2) PWA Offline Data Caching for field staff
