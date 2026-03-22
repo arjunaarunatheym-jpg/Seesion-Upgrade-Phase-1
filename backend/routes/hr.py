@@ -674,19 +674,22 @@ async def generate_payslip(data: dict, current_user: User = Depends(get_current_
     
     # Earnings - use provided values or fall back to staff defaults
     basic_salary = data.get("basic_salary") if data.get("basic_salary") is not None else staff.get("basic_salary", 0)
+    fixed_allowance = data.get("fixed_allowance") if data.get("fixed_allowance") is not None else staff.get("fixed_allowance", 0)
     housing_allowance = data.get("housing_allowance") if data.get("housing_allowance") is not None else staff.get("housing_allowance", 0)
     transport_allowance = data.get("transport_allowance") if data.get("transport_allowance") is not None else staff.get("transport_allowance", 0)
     meal_allowance = data.get("meal_allowance") if data.get("meal_allowance") is not None else staff.get("meal_allowance", 0)
     phone_allowance = data.get("phone_allowance") if data.get("phone_allowance") is not None else staff.get("phone_allowance", 0)
     other_allowance = data.get("other_allowance") if data.get("other_allowance") is not None else staff.get("other_allowance", 0)
-    total_allowances = housing_allowance + transport_allowance + meal_allowance + phone_allowance + other_allowance
+    total_allowances = fixed_allowance + housing_allowance + transport_allowance + meal_allowance + phone_allowance + other_allowance
     
     overtime = data.get("overtime", 0)
     bonus = data.get("bonus", 0)
     commission = data.get("commission", 0)
+    incentives = data.get("incentives", 0)
+    annual_leave_pay = data.get("annual_leave_pay", 0)
     other_earnings = data.get("other_earnings", 0)
     
-    gross_salary = basic_salary + total_allowances + overtime + bonus + commission + other_earnings
+    gross_salary = basic_salary + total_allowances + overtime + bonus + commission + incentives + annual_leave_pay + other_earnings
     
     # Statutory calculations
     epf = calculate_epf(basic_salary, age, staff.get("employee_epf_rate"), staff.get("employer_epf_rate"))
@@ -702,10 +705,14 @@ async def generate_payslip(data: dict, current_user: User = Depends(get_current_
     eis_employer = data.get("eis_employer") if data.get("eis_employer") is not None else eis["employer_amount"]
     
     pcb = data.get("pcb", 0)
+    cp38 = data.get("cp38", 0)
     loan_deduction = data.get("loan_deduction", 0)
+    mid_month_advance = data.get("mid_month_advance", 0)
+    salary_adjustment = data.get("salary_adjustment", 0)
+    unpaid_leave = data.get("unpaid_leave", 0)
     other_deductions = data.get("other_deductions", 0)
     
-    total_deductions = round(epf_employee + socso_employee + eis_employee + pcb + loan_deduction + other_deductions, 2)
+    total_deductions = round(epf_employee + socso_employee + eis_employee + pcb + cp38 + loan_deduction + mid_month_advance + salary_adjustment + unpaid_leave + other_deductions, 2)
     nett_pay = round(gross_salary - total_deductions, 2)
     
     # YTD calculation
@@ -749,6 +756,7 @@ async def generate_payslip(data: dict, current_user: User = Depends(get_current_
         
         # Earnings
         "basic_salary": basic_salary,
+        "fixed_allowance": fixed_allowance,
         "housing_allowance": housing_allowance,
         "transport_allowance": transport_allowance,
         "meal_allowance": meal_allowance,
@@ -758,6 +766,8 @@ async def generate_payslip(data: dict, current_user: User = Depends(get_current_
         "overtime": overtime,
         "bonus": bonus,
         "commission": commission,
+        "incentives": incentives,
+        "annual_leave_pay": annual_leave_pay,
         "other_earnings": other_earnings,
         "gross_salary": gross_salary,
         
@@ -771,7 +781,11 @@ async def generate_payslip(data: dict, current_user: User = Depends(get_current_
         "eis_employee": eis_employee,
         "eis_employer": eis_employer,
         "pcb": pcb,
+        "cp38": cp38,
         "loan_deduction": loan_deduction,
+        "mid_month_advance": mid_month_advance,
+        "salary_adjustment": salary_adjustment,
+        "unpaid_leave": unpaid_leave,
         "other_deductions": other_deductions,
         "total_deductions": total_deductions,
         
@@ -890,11 +904,11 @@ async def update_payslip(payslip_id: str, data: dict, current_user: User = Depen
     
     # Update editable fields
     editable_fields = [
-        "basic_salary", "housing_allowance", "transport_allowance", "meal_allowance",
+        "basic_salary", "fixed_allowance", "housing_allowance", "transport_allowance", "meal_allowance",
         "phone_allowance", "other_allowance", "overtime", "bonus", "commission",
-        "other_earnings", "epf_employee", "epf_employer", "socso_employee",
-        "socso_employer", "eis_employee", "eis_employer", "pcb",
-        "loan_deduction", "other_deductions"
+        "incentives", "annual_leave_pay", "other_earnings", "epf_employee", "epf_employer", "socso_employee",
+        "socso_employer", "eis_employee", "eis_employer", "pcb", "cp38",
+        "loan_deduction", "mid_month_advance", "salary_adjustment", "unpaid_leave", "other_deductions"
     ]
     for field in editable_fields:
         if field in data and data[field] is not None:
@@ -903,19 +917,21 @@ async def update_payslip(payslip_id: str, data: dict, current_user: User = Depen
     # Recalculate derived values
     basic = float(payslip.get("basic_salary", 0))
     total_allowances = sum(float(payslip.get(f, 0)) for f in [
-        "housing_allowance", "transport_allowance", "meal_allowance",
+        "fixed_allowance", "housing_allowance", "transport_allowance", "meal_allowance",
         "phone_allowance", "other_allowance"
     ])
     overtime_val = float(payslip.get("overtime", 0))
     bonus_val = float(payslip.get("bonus", 0))
     commission_val = float(payslip.get("commission", 0))
+    incentives_val = float(payslip.get("incentives", 0))
+    annual_leave_val = float(payslip.get("annual_leave_pay", 0))
     other_earnings_val = float(payslip.get("other_earnings", 0))
     
-    gross_salary = round(basic + total_allowances + overtime_val + bonus_val + commission_val + other_earnings_val, 2)
+    gross_salary = round(basic + total_allowances + overtime_val + bonus_val + commission_val + incentives_val + annual_leave_val + other_earnings_val, 2)
     
     total_deductions = round(sum(float(payslip.get(f, 0)) for f in [
-        "epf_employee", "socso_employee", "eis_employee", "pcb",
-        "loan_deduction", "other_deductions"
+        "epf_employee", "socso_employee", "eis_employee", "pcb", "cp38",
+        "loan_deduction", "mid_month_advance", "salary_adjustment", "unpaid_leave", "other_deductions"
     ]), 2)
     
     nett_pay = round(gross_salary - total_deductions, 2)

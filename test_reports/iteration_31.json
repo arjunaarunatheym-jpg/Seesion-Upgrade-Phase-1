@@ -1,0 +1,47 @@
+{
+  "summary": "Tested enhanced HR Payroll fields - new income fields (Fixed Allowance, Commission, Incentives, Bonus, Annual Leave Pay) and new deduction fields (CP39/PCB Tax, CP38, Loan, Mid-Month Advance, Salary Adjustment, Unpaid Leave). All backend tests passed (12/12). Fixed missing fields in handleEditPayslipSave function and live calculation preview in Edit Payslip dialog.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration31_hr_payroll_fields.py",
+    "/app/test_reports/pytest/iteration31_hr_payroll_fields.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fixed: handleEditPayslipSave was missing new fields (fixed_allowance, incentives, annual_leave_pay, cp38, mid_month_advance, salary_adjustment, unpaid_leave)",
+    "Fixed: Live calculation preview in Edit Payslip dialog was missing new earnings (fixed_allowance, incentives, annual_leave_pay) and deductions (cp38, mid_month_advance, salary_adjustment, unpaid_leave)"
+  ],
+  "updated_files": [
+    "/app/frontend/src/components/HRModule.jsx"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "Admin: arjuna@mddrc.com.my / Dana102229",
+  "seed_data_creation": "Test payslips created and cleaned up during backend tests",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "HR Payroll enhanced fields testing complete. All new income fields (Fixed Allowance, Commission, Incentives, Bonus, Annual Leave Pay, Overtime) and deduction fields (CP39/PCB Tax, CP38, Loan, Mid-Month Advance, Salary Adjustment, Unpaid Leave) are working correctly in Generate Payslip, Edit Payslip, View Payslip dialogs and PayslipPrint component. Manual link/unlink endpoints exist and work. Staff card shows 'Linked' badge when staff is linked to a user.",
+  "features_tested": {
+    "login": "PASS - Admin login works with arjuna@mddrc.com.my / Dana102229",
+    "hr_payroll_tab": "PASS - Finance > HR & Payroll tab loads correctly showing staff list",
+    "staff_link_badge": "PASS - Staff card shows 'Linked' badge for linked staff",
+    "generate_payslip_earnings": "PASS - Generate Payslip dialog shows all new variable earnings: Commission, Incentives, Bonus, Annual Leave Pay, Overtime",
+    "generate_payslip_deductions": "PASS - Generate Payslip dialog shows all new deductions: CP39/PCB Tax, CP38, Loan, Mid-Month Advance, Salary Adjustment, Unpaid Leave",
+    "generate_payslip_api": "PASS - Generate Payslip API creates payslip with new fields correctly (verified via backend tests)",
+    "edit_payslip_fields": "PASS - Edit Payslip dialog shows all new earnings and deduction fields",
+    "edit_payslip_save": "PASS - Edit Payslip saves and recalculates gross/net correctly with new fields (fixed handleEditPayslipSave)",
+    "view_payslip_fields": "PASS - View Payslip shows new fields (commission, incentives, CP38, etc) when non-zero",
+    "manual_link_endpoint": "PASS - POST /api/hr/staff/{id}/link-user/{user_id} endpoint exists",
+    "manual_unlink_endpoint": "PASS - DELETE /api/hr/staff/{id}/unlink-user endpoint exists",
+    "payslip_print": "PASS - PayslipPrint shows new fields correctly in the printable payslip"
+  }
+}

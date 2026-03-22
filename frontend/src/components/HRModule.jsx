@@ -48,10 +48,15 @@ const HRModule = () => {
     overtime: 0,
     bonus: 0,
     commission: 0,
+    incentives: 0,
+    annual_leave_pay: 0,
     pcb: 0,
+    cp38: 0,
     loan_deduction: 0,
+    mid_month_advance: 0,
+    salary_adjustment: 0,
+    unpaid_leave: 0,
     other_deductions: 0,
-    // Editable statutory values
     epf_employee: null,
     epf_employer: null,
     socso_employee: null,
@@ -101,6 +106,7 @@ const HRModule = () => {
     bank_name: '',
     bank_account: '',
     basic_salary: '',
+    fixed_allowance: '',
     housing_allowance: '',
     transport_allowance: '',
     meal_allowance: '',
@@ -203,6 +209,7 @@ const HRModule = () => {
       const payload = {
         ...formData,
         basic_salary: parseFloat(formData.basic_salary) || 0,
+        fixed_allowance: parseFloat(formData.fixed_allowance) || 0,
         housing_allowance: parseFloat(formData.housing_allowance) || 0,
         transport_allowance: parseFloat(formData.transport_allowance) || 0,
         meal_allowance: parseFloat(formData.meal_allowance) || 0,
@@ -242,6 +249,7 @@ const HRModule = () => {
       bank_name: staffMember.bank_name || '',
       bank_account: staffMember.bank_account || '',
       basic_salary: staffMember.basic_salary?.toString() || '',
+      fixed_allowance: staffMember.fixed_allowance?.toString() || '',
       housing_allowance: staffMember.housing_allowance?.toString() || '',
       transport_allowance: staffMember.transport_allowance?.toString() || '',
       meal_allowance: staffMember.meal_allowance?.toString() || '',
@@ -273,7 +281,7 @@ const HRModule = () => {
     setFormData({
       user_id: '', employee_id: '', full_name: '', nric: '', designation: '', department: '',
       date_joined: '', date_of_birth: '', bank_name: '', bank_account: '', basic_salary: '',
-      housing_allowance: '', transport_allowance: '', meal_allowance: '', phone_allowance: '',
+      fixed_allowance: '', housing_allowance: '', transport_allowance: '', meal_allowance: '', phone_allowance: '',
       other_allowance: '', epf_number: '', socso_number: '', tax_number: '',
       employee_epf_rate: '11', employer_epf_rate: '13', is_active: true
     });
@@ -331,7 +339,7 @@ const HRModule = () => {
   // Calculate statutory deductions for preview
   const calculateStatutory = (staffMember) => {
     const basic = staffMember?.basic_salary || 0;
-    const gross = basic + (staffMember?.housing_allowance || 0) + (staffMember?.transport_allowance || 0) + 
+    const gross = basic + (staffMember?.fixed_allowance || 0) + (staffMember?.housing_allowance || 0) + (staffMember?.transport_allowance || 0) + 
                   (staffMember?.meal_allowance || 0) + (staffMember?.phone_allowance || 0) + (staffMember?.other_allowance || 0);
     
     // Estimate age from NRIC
@@ -372,7 +380,8 @@ const HRModule = () => {
     setPayslipForm({
       year: new Date().getFullYear(),
       month: new Date().getMonth() + 1,
-      overtime: 0, bonus: 0, commission: 0, pcb: 0, loan_deduction: 0, other_deductions: 0,
+      overtime: 0, bonus: 0, commission: 0, incentives: 0, annual_leave_pay: 0,
+      pcb: 0, cp38: 0, loan_deduction: 0, mid_month_advance: 0, salary_adjustment: 0, unpaid_leave: 0, other_deductions: 0,
       epf_employee: calc.epf_employee,
       epf_employer: calc.epf_employer,
       socso_employee: calc.socso_employee,
@@ -419,6 +428,7 @@ const HRModule = () => {
     try {
       const payload = {
         basic_salary: editPayslipData.basic_salary,
+        fixed_allowance: editPayslipData.fixed_allowance,
         housing_allowance: editPayslipData.housing_allowance,
         transport_allowance: editPayslipData.transport_allowance,
         meal_allowance: editPayslipData.meal_allowance,
@@ -427,6 +437,8 @@ const HRModule = () => {
         overtime: editPayslipData.overtime,
         bonus: editPayslipData.bonus,
         commission: editPayslipData.commission,
+        incentives: editPayslipData.incentives,
+        annual_leave_pay: editPayslipData.annual_leave_pay,
         other_earnings: editPayslipData.other_earnings,
         epf_employee: editPayslipData.epf_employee,
         epf_employer: editPayslipData.epf_employer,
@@ -435,7 +447,11 @@ const HRModule = () => {
         eis_employee: editPayslipData.eis_employee,
         eis_employer: editPayslipData.eis_employer,
         pcb: editPayslipData.pcb,
+        cp38: editPayslipData.cp38,
         loan_deduction: editPayslipData.loan_deduction,
+        mid_month_advance: editPayslipData.mid_month_advance,
+        salary_adjustment: editPayslipData.salary_adjustment,
+        unpaid_leave: editPayslipData.unpaid_leave,
         other_deductions: editPayslipData.other_deductions,
       };
       await axiosInstance.put(`/hr/payslips/${editPayslipData.id}`, payload);
@@ -561,7 +577,7 @@ const HRModule = () => {
   };
 
   const calculateTotalAllowances = (s) => {
-    return (s.housing_allowance || 0) + (s.transport_allowance || 0) + 
+    return (s.fixed_allowance || 0) + (s.housing_allowance || 0) + (s.transport_allowance || 0) + 
            (s.meal_allowance || 0) + (s.phone_allowance || 0) + (s.other_allowance || 0);
   };
 
@@ -1065,6 +1081,10 @@ const HRModule = () => {
                 <Input type="number" value={formData.basic_salary} onChange={(e) => setFormData({ ...formData, basic_salary: e.target.value })} />
               </div>
               <div>
+                <Label>Fixed Allowance</Label>
+                <Input type="number" value={formData.fixed_allowance} onChange={(e) => setFormData({ ...formData, fixed_allowance: e.target.value })} />
+              </div>
+              <div>
                 <Label>Housing Allowance</Label>
                 <Input type="number" value={formData.housing_allowance} onChange={(e) => setFormData({ ...formData, housing_allowance: e.target.value })} />
               </div>
@@ -1130,12 +1150,12 @@ const HRModule = () => {
 
       {/* Generate Payslip Dialog */}
       <Dialog open={payslipDialogOpen} onOpenChange={setPayslipDialogOpen}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Generate Payslip</DialogTitle>
             <DialogDescription>{selectedStaffForPayslip?.full_name} • NRIC: {selectedStaffForPayslip?.nric || 'N/A'}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+          <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Year</Label>
@@ -1155,15 +1175,27 @@ const HRModule = () => {
             </div>
             
             <div className="border-t pt-4">
-              <h4 className="font-semibold text-sm text-green-600 mb-2">Additional Earnings</h4>
+              <h4 className="font-semibold text-sm text-green-600 mb-2">Variable Earnings (this month)</h4>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">Overtime (RM)</Label>
-                  <Input type="number" value={payslipForm.overtime} onChange={(e) => setPayslipForm({ ...payslipForm, overtime: parseFloat(e.target.value) || 0 })} />
+                  <Label className="text-xs">Commission (RM)</Label>
+                  <Input type="number" value={payslipForm.commission} onChange={(e) => setPayslipForm({ ...payslipForm, commission: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Incentives (RM)</Label>
+                  <Input type="number" value={payslipForm.incentives} onChange={(e) => setPayslipForm({ ...payslipForm, incentives: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
                   <Label className="text-xs">Bonus (RM)</Label>
                   <Input type="number" value={payslipForm.bonus} onChange={(e) => setPayslipForm({ ...payslipForm, bonus: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Annual Leave Pay (RM)</Label>
+                  <Input type="number" value={payslipForm.annual_leave_pay} onChange={(e) => setPayslipForm({ ...payslipForm, annual_leave_pay: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Overtime (RM)</Label>
+                  <Input type="number" value={payslipForm.overtime} onChange={(e) => setPayslipForm({ ...payslipForm, overtime: parseFloat(e.target.value) || 0 })} />
                 </div>
               </div>
             </div>
@@ -1202,12 +1234,28 @@ const HRModule = () => {
               <h4 className="font-semibold text-sm text-red-600 mb-2">Other Deductions</h4>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">PCB/Tax (RM)</Label>
+                  <Label className="text-xs">CP39 / PCB Tax (RM)</Label>
                   <Input type="number" value={payslipForm.pcb} onChange={(e) => setPayslipForm({ ...payslipForm, pcb: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Loan Deduction (RM)</Label>
+                  <Label className="text-xs">CP38 (RM)</Label>
+                  <Input type="number" value={payslipForm.cp38} onChange={(e) => setPayslipForm({ ...payslipForm, cp38: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Loan (RM)</Label>
                   <Input type="number" value={payslipForm.loan_deduction} onChange={(e) => setPayslipForm({ ...payslipForm, loan_deduction: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Mid-Month Advance (RM)</Label>
+                  <Input type="number" value={payslipForm.mid_month_advance} onChange={(e) => setPayslipForm({ ...payslipForm, mid_month_advance: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Salary Adjustment (RM)</Label>
+                  <Input type="number" value={payslipForm.salary_adjustment} onChange={(e) => setPayslipForm({ ...payslipForm, salary_adjustment: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Unpaid Leave (RM)</Label>
+                  <Input type="number" value={payslipForm.unpaid_leave} onChange={(e) => setPayslipForm({ ...payslipForm, unpaid_leave: parseFloat(e.target.value) || 0 })} />
                 </div>
               </div>
             </div>
@@ -1254,8 +1302,11 @@ const HRModule = () => {
                     <tbody>
                       <tr><td>Basic Salary</td><td className="text-right">RM {viewPayslip.basic_salary?.toLocaleString()}</td></tr>
                       <tr><td>Allowances</td><td className="text-right">RM {viewPayslip.total_allowances?.toLocaleString()}</td></tr>
-                      <tr><td>Overtime</td><td className="text-right">RM {viewPayslip.overtime?.toLocaleString()}</td></tr>
-                      <tr><td>Bonus</td><td className="text-right">RM {viewPayslip.bonus?.toLocaleString()}</td></tr>
+                      {viewPayslip.commission > 0 && <tr><td>Commission</td><td className="text-right">RM {viewPayslip.commission?.toLocaleString()}</td></tr>}
+                      {viewPayslip.incentives > 0 && <tr><td>Incentives</td><td className="text-right">RM {viewPayslip.incentives?.toLocaleString()}</td></tr>}
+                      {viewPayslip.bonus > 0 && <tr><td>Bonus</td><td className="text-right">RM {viewPayslip.bonus?.toLocaleString()}</td></tr>}
+                      {viewPayslip.annual_leave_pay > 0 && <tr><td>Annual Leave Pay</td><td className="text-right">RM {viewPayslip.annual_leave_pay?.toLocaleString()}</td></tr>}
+                      {viewPayslip.overtime > 0 && <tr><td>Overtime</td><td className="text-right">RM {viewPayslip.overtime?.toLocaleString()}</td></tr>}
                       <tr className="font-bold border-t"><td>GROSS</td><td className="text-right">RM {viewPayslip.gross_salary?.toLocaleString()}</td></tr>
                     </tbody>
                   </table>
@@ -1266,8 +1317,13 @@ const HRModule = () => {
                     <tbody>
                       <tr><td>EPF ({viewPayslip.epf_employee_rate}%)</td><td className="text-right">RM {viewPayslip.epf_employee?.toLocaleString()}</td></tr>
                       <tr><td>SOCSO</td><td className="text-right">RM {viewPayslip.socso_employee?.toLocaleString()}</td></tr>
-                      <tr><td>EIS</td><td className="text-right">RM {viewPayslip.eis_employee?.toLocaleString()}</td></tr>
-                      <tr><td>PCB/Tax</td><td className="text-right">RM {viewPayslip.pcb?.toLocaleString()}</td></tr>
+                      <tr><td>EIS/SIP</td><td className="text-right">RM {viewPayslip.eis_employee?.toLocaleString()}</td></tr>
+                      {(viewPayslip.pcb > 0) && <tr><td>CP39 / PCB Tax</td><td className="text-right">RM {viewPayslip.pcb?.toLocaleString()}</td></tr>}
+                      {(viewPayslip.cp38 > 0) && <tr><td>CP38</td><td className="text-right">RM {viewPayslip.cp38?.toLocaleString()}</td></tr>}
+                      {(viewPayslip.loan_deduction > 0) && <tr><td>Loan</td><td className="text-right">RM {viewPayslip.loan_deduction?.toLocaleString()}</td></tr>}
+                      {(viewPayslip.mid_month_advance > 0) && <tr><td>Mid-Month Advance</td><td className="text-right">RM {viewPayslip.mid_month_advance?.toLocaleString()}</td></tr>}
+                      {(viewPayslip.salary_adjustment > 0) && <tr><td>Salary Adjustment</td><td className="text-right">RM {viewPayslip.salary_adjustment?.toLocaleString()}</td></tr>}
+                      {(viewPayslip.unpaid_leave > 0) && <tr><td>Unpaid Leave</td><td className="text-right">RM {viewPayslip.unpaid_leave?.toLocaleString()}</td></tr>}
                       <tr className="font-bold border-t"><td>TOTAL</td><td className="text-right">RM {viewPayslip.total_deductions?.toLocaleString()}</td></tr>
                     </tbody>
                   </table>
@@ -1341,6 +1397,11 @@ const HRModule = () => {
                       onChange={(e) => setEditPayslipData({ ...editPayslipData, basic_salary: parseFloat(e.target.value) || 0 })} data-testid="edit-basic-salary" />
                   </div>
                   <div>
+                    <Label className="text-xs">Fixed Allowance</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.fixed_allowance || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, fixed_allowance: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
                     <Label className="text-xs">Housing Allowance</Label>
                     <Input type="number" step="0.01" value={editPayslipData.housing_allowance || 0}
                       onChange={(e) => setEditPayslipData({ ...editPayslipData, housing_allowance: parseFloat(e.target.value) || 0 })} />
@@ -1351,24 +1412,14 @@ const HRModule = () => {
                       onChange={(e) => setEditPayslipData({ ...editPayslipData, transport_allowance: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
-                    <Label className="text-xs">Meal Allowance</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.meal_allowance || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, meal_allowance: parseFloat(e.target.value) || 0 })} />
+                    <Label className="text-xs">Commission</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.commission || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, commission: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
-                    <Label className="text-xs">Phone Allowance</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.phone_allowance || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, phone_allowance: parseFloat(e.target.value) || 0 })} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Other Allowance</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.other_allowance || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, other_allowance: parseFloat(e.target.value) || 0 })} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Overtime</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.overtime || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, overtime: parseFloat(e.target.value) || 0 })} />
+                    <Label className="text-xs">Incentives</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.incentives || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, incentives: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
                     <Label className="text-xs">Bonus</Label>
@@ -1376,9 +1427,14 @@ const HRModule = () => {
                       onChange={(e) => setEditPayslipData({ ...editPayslipData, bonus: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
-                    <Label className="text-xs">Commission</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.commission || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, commission: parseFloat(e.target.value) || 0 })} />
+                    <Label className="text-xs">Annual Leave Pay</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.annual_leave_pay || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, annual_leave_pay: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Overtime</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.overtime || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, overtime: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
                     <Label className="text-xs">Other Earnings</Label>
@@ -1413,24 +1469,44 @@ const HRModule = () => {
                       onChange={(e) => setEditPayslipData({ ...editPayslipData, socso_employer: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
-                    <Label className="text-xs">EIS Employee</Label>
+                    <Label className="text-xs">EIS/SIP Employee</Label>
                     <Input type="number" step="0.01" value={editPayslipData.eis_employee || 0}
                       onChange={(e) => setEditPayslipData({ ...editPayslipData, eis_employee: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
-                    <Label className="text-xs">EIS Employer</Label>
+                    <Label className="text-xs">EIS/SIP Employer</Label>
                     <Input type="number" step="0.01" value={editPayslipData.eis_employer || 0}
                       onChange={(e) => setEditPayslipData({ ...editPayslipData, eis_employer: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
-                    <Label className="text-xs">PCB / Income Tax</Label>
+                    <Label className="text-xs">CP39 / PCB Tax</Label>
                     <Input type="number" step="0.01" value={editPayslipData.pcb || 0}
                       onChange={(e) => setEditPayslipData({ ...editPayslipData, pcb: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
-                    <Label className="text-xs">Loan Deduction</Label>
+                    <Label className="text-xs">CP38</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.cp38 || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, cp38: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Loan</Label>
                     <Input type="number" step="0.01" value={editPayslipData.loan_deduction || 0}
                       onChange={(e) => setEditPayslipData({ ...editPayslipData, loan_deduction: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Mid-Month Advance</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.mid_month_advance || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, mid_month_advance: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Salary Adjustment</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.salary_adjustment || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, salary_adjustment: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Unpaid Leave</Label>
+                    <Input type="number" step="0.01" value={editPayslipData.unpaid_leave || 0}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, unpaid_leave: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
                     <Label className="text-xs">Other Deductions</Label>
@@ -1444,15 +1520,15 @@ const HRModule = () => {
               <div className="p-3 bg-green-50 rounded border border-green-200">
                 <div className="flex justify-between text-sm">
                   <span>Gross Salary:</span>
-                  <span className="font-semibold">RM {((editPayslipData.basic_salary || 0) + (editPayslipData.housing_allowance || 0) + (editPayslipData.transport_allowance || 0) + (editPayslipData.meal_allowance || 0) + (editPayslipData.phone_allowance || 0) + (editPayslipData.other_allowance || 0) + (editPayslipData.overtime || 0) + (editPayslipData.bonus || 0) + (editPayslipData.commission || 0) + (editPayslipData.other_earnings || 0)).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                  <span className="font-semibold">RM {((editPayslipData.basic_salary || 0) + (editPayslipData.fixed_allowance || 0) + (editPayslipData.housing_allowance || 0) + (editPayslipData.transport_allowance || 0) + (editPayslipData.meal_allowance || 0) + (editPayslipData.phone_allowance || 0) + (editPayslipData.other_allowance || 0) + (editPayslipData.overtime || 0) + (editPayslipData.bonus || 0) + (editPayslipData.commission || 0) + (editPayslipData.incentives || 0) + (editPayslipData.annual_leave_pay || 0) + (editPayslipData.other_earnings || 0)).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between text-sm text-red-600">
                   <span>Total Deductions:</span>
-                  <span>- RM {((editPayslipData.epf_employee || 0) + (editPayslipData.socso_employee || 0) + (editPayslipData.eis_employee || 0) + (editPayslipData.pcb || 0) + (editPayslipData.loan_deduction || 0) + (editPayslipData.other_deductions || 0)).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                  <span>- RM {((editPayslipData.epf_employee || 0) + (editPayslipData.socso_employee || 0) + (editPayslipData.eis_employee || 0) + (editPayslipData.pcb || 0) + (editPayslipData.cp38 || 0) + (editPayslipData.loan_deduction || 0) + (editPayslipData.mid_month_advance || 0) + (editPayslipData.salary_adjustment || 0) + (editPayslipData.unpaid_leave || 0) + (editPayslipData.other_deductions || 0)).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="flex justify-between text-base font-bold text-green-700 border-t pt-1 mt-1">
                   <span>Nett Pay:</span>
-                  <span>RM {(((editPayslipData.basic_salary || 0) + (editPayslipData.housing_allowance || 0) + (editPayslipData.transport_allowance || 0) + (editPayslipData.meal_allowance || 0) + (editPayslipData.phone_allowance || 0) + (editPayslipData.other_allowance || 0) + (editPayslipData.overtime || 0) + (editPayslipData.bonus || 0) + (editPayslipData.commission || 0) + (editPayslipData.other_earnings || 0)) - ((editPayslipData.epf_employee || 0) + (editPayslipData.socso_employee || 0) + (editPayslipData.eis_employee || 0) + (editPayslipData.pcb || 0) + (editPayslipData.loan_deduction || 0) + (editPayslipData.other_deductions || 0))).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                  <span>RM {(((editPayslipData.basic_salary || 0) + (editPayslipData.fixed_allowance || 0) + (editPayslipData.housing_allowance || 0) + (editPayslipData.transport_allowance || 0) + (editPayslipData.meal_allowance || 0) + (editPayslipData.phone_allowance || 0) + (editPayslipData.other_allowance || 0) + (editPayslipData.overtime || 0) + (editPayslipData.bonus || 0) + (editPayslipData.commission || 0) + (editPayslipData.incentives || 0) + (editPayslipData.annual_leave_pay || 0) + (editPayslipData.other_earnings || 0)) - ((editPayslipData.epf_employee || 0) + (editPayslipData.socso_employee || 0) + (editPayslipData.eis_employee || 0) + (editPayslipData.pcb || 0) + (editPayslipData.cp38 || 0) + (editPayslipData.loan_deduction || 0) + (editPayslipData.mid_month_advance || 0) + (editPayslipData.salary_adjustment || 0) + (editPayslipData.unpaid_leave || 0) + (editPayslipData.other_deductions || 0))).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
 

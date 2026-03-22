@@ -166,13 +166,17 @@ const PayslipPrint = ({ payslip, companySettings, onClose }) => {
               <div className="earnings p-2" style={{ borderRight: '1px solid #ddd' }}>
                 <div className="section-title" style={{ fontWeight: 'bold', fontSize: '9px', marginBottom: '4px', paddingBottom: '2px', borderBottom: `2px solid ${secondaryColor}`, color: secondaryColor }}>EARNINGS</div>
                 <div className="item-row flex justify-between py-0.5"><span>Basic Salary</span><span>{formatCurrency(payslip.basic_salary)}</span></div>
+                {payslip.fixed_allowance > 0 && <div className="item-row flex justify-between py-0.5"><span>Fixed Allowance</span><span>{formatCurrency(payslip.fixed_allowance)}</span></div>}
                 {payslip.housing_allowance > 0 && <div className="item-row flex justify-between py-0.5"><span>Housing</span><span>{formatCurrency(payslip.housing_allowance)}</span></div>}
                 {payslip.transport_allowance > 0 && <div className="item-row flex justify-between py-0.5"><span>Transport</span><span>{formatCurrency(payslip.transport_allowance)}</span></div>}
                 {payslip.meal_allowance > 0 && <div className="item-row flex justify-between py-0.5"><span>Meal</span><span>{formatCurrency(payslip.meal_allowance)}</span></div>}
                 {payslip.phone_allowance > 0 && <div className="item-row flex justify-between py-0.5"><span>Phone</span><span>{formatCurrency(payslip.phone_allowance)}</span></div>}
                 {payslip.other_allowance > 0 && <div className="item-row flex justify-between py-0.5"><span>Other</span><span>{formatCurrency(payslip.other_allowance)}</span></div>}
-                {payslip.overtime > 0 && <div className="item-row flex justify-between py-0.5"><span>Overtime</span><span>{formatCurrency(payslip.overtime)}</span></div>}
+                {payslip.commission > 0 && <div className="item-row flex justify-between py-0.5"><span>Commission</span><span>{formatCurrency(payslip.commission)}</span></div>}
+                {payslip.incentives > 0 && <div className="item-row flex justify-between py-0.5"><span>Incentives</span><span>{formatCurrency(payslip.incentives)}</span></div>}
                 {payslip.bonus > 0 && <div className="item-row flex justify-between py-0.5"><span>Bonus</span><span>{formatCurrency(payslip.bonus)}</span></div>}
+                {payslip.annual_leave_pay > 0 && <div className="item-row flex justify-between py-0.5"><span>Annual Leave Pay</span><span>{formatCurrency(payslip.annual_leave_pay)}</span></div>}
+                {payslip.overtime > 0 && <div className="item-row flex justify-between py-0.5"><span>Overtime</span><span>{formatCurrency(payslip.overtime)}</span></div>}
                 <div className="item-total flex justify-between font-bold pt-1 mt-1" style={{ borderTop: '1px solid #ddd' }}><span>GROSS</span><span>{formatCurrency(payslip.gross_salary)}</span></div>
               </div>
               
@@ -180,9 +184,13 @@ const PayslipPrint = ({ payslip, companySettings, onClose }) => {
                 <div className="section-title" style={{ fontWeight: 'bold', fontSize: '9px', marginBottom: '4px', paddingBottom: '2px', borderBottom: '2px solid #dc2626', color: '#dc2626' }}>DEDUCTIONS</div>
                 <div className="item-row flex justify-between py-0.5"><span>EPF ({payslip.epf_employee_rate}%)</span><span>{formatCurrency(payslip.epf_employee)}</span></div>
                 <div className="item-row flex justify-between py-0.5"><span>SOCSO</span><span>{formatCurrency(payslip.socso_employee)}</span></div>
-                <div className="item-row flex justify-between py-0.5"><span>EIS</span><span>{formatCurrency(payslip.eis_employee)}</span></div>
-                {payslip.pcb > 0 && <div className="item-row flex justify-between py-0.5"><span>PCB</span><span>{formatCurrency(payslip.pcb)}</span></div>}
+                <div className="item-row flex justify-between py-0.5"><span>EIS/SIP</span><span>{formatCurrency(payslip.eis_employee)}</span></div>
+                {payslip.pcb > 0 && <div className="item-row flex justify-between py-0.5"><span>CP39/PCB</span><span>{formatCurrency(payslip.pcb)}</span></div>}
+                {payslip.cp38 > 0 && <div className="item-row flex justify-between py-0.5"><span>CP38</span><span>{formatCurrency(payslip.cp38)}</span></div>}
                 {payslip.loan_deduction > 0 && <div className="item-row flex justify-between py-0.5"><span>Loan</span><span>{formatCurrency(payslip.loan_deduction)}</span></div>}
+                {payslip.mid_month_advance > 0 && <div className="item-row flex justify-between py-0.5"><span>Mid-Month Adv</span><span>{formatCurrency(payslip.mid_month_advance)}</span></div>}
+                {payslip.salary_adjustment > 0 && <div className="item-row flex justify-between py-0.5"><span>Salary Adj</span><span>{formatCurrency(payslip.salary_adjustment)}</span></div>}
+                {payslip.unpaid_leave > 0 && <div className="item-row flex justify-between py-0.5"><span>Unpaid Leave</span><span>{formatCurrency(payslip.unpaid_leave)}</span></div>}
                 {payslip.other_deductions > 0 && <div className="item-row flex justify-between py-0.5"><span>Other</span><span>{formatCurrency(payslip.other_deductions)}</span></div>}
                 <div className="item-total flex justify-between font-bold pt-1 mt-1" style={{ borderTop: '1px solid #ddd' }}><span>TOTAL</span><span>{formatCurrency(payslip.total_deductions)}</span></div>
               </div>
