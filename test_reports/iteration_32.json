@@ -1,0 +1,48 @@
+{
+  "summary": "Tested EPF band-based calculation, dynamic statutory recalculation, and '0' input deletion bug fix. All backend tests passed (13/13). Frontend UI tests verified: EPF amounts are whole RM (no cents), statutory deductions auto-calculate on dialog open and update dynamically when variable earnings change, number input fields can be cleared to empty (no stuck '0' bug).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Finance page", "issues": ["PWA install banner overlays bottom of page - minor annoyance but doesn't block functionality"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration32_epf_statutory.py",
+    "/app/test_reports/pytest/iteration32_epf_statutory.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration32_epf_statutory.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "Admin: arjuna@mddrc.com.my / Dana102229",
+  "seed_data_creation": "EPF band data with 1001 records already exists in statutory_rates collection",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "EPF calculation now uses band-based lookup from statutory_rates collection (rate_type: 'epf') for salaries ≤RM20,000. EPF amounts are whole RM (no cents) per Malaysian Third Schedule. Employer rate is 13% for salary ≤RM5000 and 12% for >RM5000. Dynamic statutory recalculation works via POST /api/hr/statutory/calculate endpoint with 400ms debounce. The '0' input deletion bug was fixed using nv() helper for display and np() helper for onChange.",
+  "features_tested": {
+    "statutory_calculate_endpoint": "PASS - POST /api/hr/statutory/calculate returns correct EPF/SOCSO/EIS for all salary levels",
+    "epf_rm2700": "PASS - EPF Employee=298, Employer=352 (whole RM, 13% employer rate)",
+    "epf_rm3000": "PASS - EPF Employee=330, Employer=390 (whole RM, 13% employer rate)",
+    "epf_rm5000_boundary": "PASS - EPF Employee=550, Employer=650 (13% employer rate at boundary)",
+    "epf_rm8000": "PASS - EPF Employee=880, Employer=960 (12% employer rate for >RM5000)",
+    "epf_whole_rm_no_cents": "PASS - All EPF amounts are whole RM for salaries RM2700-RM20000",
+    "socso_calculation": "PASS - SOCSO Employee=13.25, Employer=46.35 for RM3000",
+    "eis_calculation": "PASS - EIS Employee=5.3, Employer=5.3 for RM3000",
+    "epf_rates_exist": "PASS - 1001 EPF band records in statutory_rates collection",
+    "generate_payslip_auto_calc": "PASS - Statutory deductions auto-calculate when dialog opens",
+    "dynamic_recalculation": "PASS - Adding commission (500) updated EPF from 298 to 353",
+    "input_clearing_generate": "PASS - Commission and Bonus fields can be cleared to empty (no '0' bug)",
+    "input_clearing_edit": "PASS - Edit Payslip dialog fields can be cleared to empty",
+    "staff_list": "PASS - Abdul Malek found with basic_salary=RM2700, NRIC=990515105203"
+  }
+}

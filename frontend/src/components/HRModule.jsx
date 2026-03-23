@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { axiosInstance } from '../App';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
@@ -18,6 +18,10 @@ import PayslipPrint from './PayslipPrint';
 import PayAdvicePrint from './PayAdvicePrint';
 import { EAFormsTab } from './hr/EAFormsTab';
 
+// Helper: allow clearing number inputs (fix "0" deletion bug)
+const nv = (val) => (val === '' || val === null || val === undefined) ? '' : val;
+const np = (rawVal) => rawVal === '' ? '' : (parseFloat(rawVal) || 0);
+const n0 = (val) => (val === '' || val === null || val === undefined) ? 0 : Number(val) || 0;
 
 const HRModule = () => {
   const [loading, setLoading] = useState(true);
@@ -119,6 +123,102 @@ const HRModule = () => {
     employer_epf_rate: '13',
     is_active: true
   });
+
+  // Debounce timer for statutory recalculation
+  const recalcTimer = useRef(null);
+
+  // Compute gross salary from staff base + form variable earnings
+  const computeGross = useCallback((staffMember, form) => {
+    const base = n0(staffMember?.basic_salary);
+    const fixedAllow = n0(staffMember?.fixed_allowance);
+    const housing = n0(staffMember?.housing_allowance);
+    const transport = n0(staffMember?.transport_allowance);
+    const meal = n0(staffMember?.meal_allowance);
+    const phone = n0(staffMember?.phone_allowance);
+    const otherAllow = n0(staffMember?.other_allowance);
+    const commission = n0(form.commission);
+    const incentives = n0(form.incentives);
+    const bonus = n0(form.bonus);
+    const annualLeave = n0(form.annual_leave_pay);
+    const overtime = n0(form.overtime);
+    return base + fixedAllow + housing + transport + meal + phone + otherAllow +
+           commission + incentives + bonus + annualLeave + overtime;
+  }, []);
+
+  // Debounced API call to recalculate statutory deductions
+  const recalcStatutory = useCallback((staffMember, form, setForm) => {
+    if (recalcTimer.current) clearTimeout(recalcTimer.current);
+    recalcTimer.current = setTimeout(async () => {
+      const gross = computeGross(staffMember, form);
+      if (gross <= 0) return;
+      try {
+        const res = await axiosInstance.post('/hr/statutory/calculate', {
+          gross_salary: gross,
+          nric: staffMember?.nric || '',
+          reference_date: `${form.year}-${String(n0(form.month)).padStart(2, '0')}-01`
+        });
+        const s = res.data;
+        setForm(prev => ({
+          ...prev,
+          epf_employee: s.epf_employee,
+          epf_employer: s.epf_employer,
+          socso_employee: s.socso_employee,
+          socso_employer: s.socso_employer,
+          eis_employee: s.eis_employee,
+          eis_employer: s.eis_employer,
+        }));
+      } catch { /* silent - user can still manually set values */ }
+    }, 400);
+  }, [computeGross]);
+
+  // Helper: update payslip form earning field + trigger statutory recalc
+  const handlePayslipEarning = (field, rawVal) => {
+    const val = np(rawVal);
+    const newForm = { ...payslipForm, [field]: val };
+    setPayslipForm(newForm);
+    recalcStatutory(selectedStaffForPayslip, newForm, setPayslipForm);
+  };
+
+  // Helper: update edit payslip earning field + trigger statutory recalc  
+  const handleEditEarning = (field, rawVal) => {
+    const val = np(rawVal);
+    setEditPayslipData(prev => {
+      const updated = { ...prev, [field]: val };
+      // For edit payslip, all salary fields are in the data itself
+      recalcStatutoryForEdit(updated);
+      return updated;
+    });
+  };
+
+  // Recalc statutory for edit payslip (all fields in editPayslipData)
+  const editRecalcTimer = useRef(null);
+  const recalcStatutoryForEdit = (data) => {
+    if (editRecalcTimer.current) clearTimeout(editRecalcTimer.current);
+    editRecalcTimer.current = setTimeout(async () => {
+      const gross = n0(data.basic_salary) + n0(data.fixed_allowance) + n0(data.housing_allowance) +
+        n0(data.transport_allowance) + n0(data.meal_allowance) + n0(data.phone_allowance) +
+        n0(data.other_allowance) + n0(data.commission) + n0(data.incentives) + n0(data.bonus) +
+        n0(data.annual_leave_pay) + n0(data.overtime) + n0(data.other_earnings);
+      if (gross <= 0) return;
+      try {
+        const res = await axiosInstance.post('/hr/statutory/calculate', {
+          gross_salary: gross,
+          nric: data.nric || '',
+          reference_date: `${data.year}-${String(n0(data.month)).padStart(2, '0')}-01`
+        });
+        const s = res.data;
+        setEditPayslipData(prev => ({
+          ...prev,
+          epf_employee: s.epf_employee,
+          epf_employer: s.epf_employer,
+          socso_employee: s.socso_employee,
+          socso_employer: s.socso_employer,
+          eis_employee: s.eis_employee,
+          eis_employer: s.eis_employer,
+        }));
+      } catch { /* silent */ }
+    }, 400);
+  };
 
   useEffect(() => {
     loadData();
@@ -336,68 +436,71 @@ const HRModule = () => {
     }
   };
 
-  // Calculate statutory deductions for preview
-  const calculateStatutory = (staffMember) => {
-    const basic = staffMember?.basic_salary || 0;
-    const gross = basic + (staffMember?.fixed_allowance || 0) + (staffMember?.housing_allowance || 0) + (staffMember?.transport_allowance || 0) + 
-                  (staffMember?.meal_allowance || 0) + (staffMember?.phone_allowance || 0) + (staffMember?.other_allowance || 0);
-    
-    // Estimate age from NRIC
-    const nric = staffMember?.nric || '';
-    let age = 30;
-    if (nric.length >= 6) {
-      const yy = parseInt(nric.substring(0, 2));
-      const currentYY = new Date().getFullYear() % 100;
-      const year = yy > currentYY + 5 ? 1900 + yy : 2000 + yy;
-      age = new Date().getFullYear() - year;
-    }
-    
-    const isAbove60 = age >= 60;
-    const epfEeRate = isAbove60 ? 0 : 11;
-    const epfErRate = isAbove60 ? 4 : (gross <= 5000 ? 13 : 12);
-    const socsoEeRate = isAbove60 ? 0 : 0.5;
-    const socsoErRate = isAbove60 ? 1.25 : 1.75;
-    const eisEeRate = isAbove60 ? 0 : 0.2;
-    const eisErRate = isAbove60 ? 0 : 0.2;
-    
-    const cappedGross = Math.min(gross, 6000);
-    
-    return {
-      epf_employee: Math.round(gross * epfEeRate) / 100,
-      epf_employer: Math.round(gross * epfErRate) / 100,
-      socso_employee: Math.round(cappedGross * socsoEeRate) / 100,
-      socso_employer: Math.round(cappedGross * socsoErRate) / 100,
-      eis_employee: Math.round(cappedGross * eisEeRate) / 100,
-      eis_employer: Math.round(cappedGross * eisErRate) / 100,
-      age
-    };
-  };
 
   // Payslip Generation
-  const openPayslipDialog = (staffMember) => {
+  const openPayslipDialog = async (staffMember) => {
     setSelectedStaffForPayslip(staffMember);
-    const calc = calculateStatutory(staffMember);
-    setPayslipForm({
+    const form = {
       year: new Date().getFullYear(),
       month: new Date().getMonth() + 1,
-      overtime: 0, bonus: 0, commission: 0, incentives: 0, annual_leave_pay: 0,
-      pcb: 0, cp38: 0, loan_deduction: 0, mid_month_advance: 0, salary_adjustment: 0, unpaid_leave: 0, other_deductions: 0,
-      epf_employee: calc.epf_employee,
-      epf_employer: calc.epf_employer,
-      socso_employee: calc.socso_employee,
-      socso_employer: calc.socso_employer,
-      eis_employee: calc.eis_employee,
-      eis_employer: calc.eis_employer
-    });
+      overtime: '', bonus: '', commission: '', incentives: '', annual_leave_pay: '',
+      pcb: '', cp38: '', loan_deduction: '', mid_month_advance: '', salary_adjustment: '', unpaid_leave: '', other_deductions: '',
+      epf_employee: '', epf_employer: '',
+      socso_employee: '', socso_employer: '',
+      eis_employee: '', eis_employer: ''
+    };
+    setPayslipForm(form);
     setPayslipDialogOpen(true);
+    
+    // Call backend for statutory calculation based on staff's base gross
+    const gross = computeGross(staffMember, form);
+    if (gross > 0) {
+      try {
+        const res = await axiosInstance.post('/hr/statutory/calculate', {
+          gross_salary: gross,
+          nric: staffMember?.nric || '',
+          reference_date: `${form.year}-${String(form.month).padStart(2, '0')}-01`
+        });
+        const s = res.data;
+        setPayslipForm(prev => ({
+          ...prev,
+          epf_employee: s.epf_employee,
+          epf_employer: s.epf_employer,
+          socso_employee: s.socso_employee,
+          socso_employer: s.socso_employer,
+          eis_employee: s.eis_employee,
+          eis_employer: s.eis_employer,
+        }));
+      } catch { /* user can still enter manually */ }
+    }
   };
 
   const handleGeneratePayslip = async () => {
     try {
-      const response = await axiosInstance.post('/hr/payslips/generate', {
+      const payload = {
         staff_id: selectedStaffForPayslip.id,
-        ...payslipForm
-      });
+        year: payslipForm.year,
+        month: payslipForm.month,
+        overtime: n0(payslipForm.overtime),
+        bonus: n0(payslipForm.bonus),
+        commission: n0(payslipForm.commission),
+        incentives: n0(payslipForm.incentives),
+        annual_leave_pay: n0(payslipForm.annual_leave_pay),
+        pcb: n0(payslipForm.pcb),
+        cp38: n0(payslipForm.cp38),
+        loan_deduction: n0(payslipForm.loan_deduction),
+        mid_month_advance: n0(payslipForm.mid_month_advance),
+        salary_adjustment: n0(payslipForm.salary_adjustment),
+        unpaid_leave: n0(payslipForm.unpaid_leave),
+        other_deductions: n0(payslipForm.other_deductions),
+        epf_employee: payslipForm.epf_employee === '' ? null : n0(payslipForm.epf_employee),
+        epf_employer: payslipForm.epf_employer === '' ? null : n0(payslipForm.epf_employer),
+        socso_employee: payslipForm.socso_employee === '' ? null : n0(payslipForm.socso_employee),
+        socso_employer: payslipForm.socso_employer === '' ? null : n0(payslipForm.socso_employer),
+        eis_employee: payslipForm.eis_employee === '' ? null : n0(payslipForm.eis_employee),
+        eis_employer: payslipForm.eis_employer === '' ? null : n0(payslipForm.eis_employer),
+      };
+      const response = await axiosInstance.post('/hr/payslips/generate', payload);
       toast.success(`Payslip generated! Nett Pay: RM ${response.data.nett_pay?.toLocaleString()}`);
       setPayslipDialogOpen(false);
       loadData();
@@ -427,32 +530,32 @@ const HRModule = () => {
     setEditSaving(true);
     try {
       const payload = {
-        basic_salary: editPayslipData.basic_salary,
-        fixed_allowance: editPayslipData.fixed_allowance,
-        housing_allowance: editPayslipData.housing_allowance,
-        transport_allowance: editPayslipData.transport_allowance,
-        meal_allowance: editPayslipData.meal_allowance,
-        phone_allowance: editPayslipData.phone_allowance,
-        other_allowance: editPayslipData.other_allowance,
-        overtime: editPayslipData.overtime,
-        bonus: editPayslipData.bonus,
-        commission: editPayslipData.commission,
-        incentives: editPayslipData.incentives,
-        annual_leave_pay: editPayslipData.annual_leave_pay,
-        other_earnings: editPayslipData.other_earnings,
-        epf_employee: editPayslipData.epf_employee,
-        epf_employer: editPayslipData.epf_employer,
-        socso_employee: editPayslipData.socso_employee,
-        socso_employer: editPayslipData.socso_employer,
-        eis_employee: editPayslipData.eis_employee,
-        eis_employer: editPayslipData.eis_employer,
-        pcb: editPayslipData.pcb,
-        cp38: editPayslipData.cp38,
-        loan_deduction: editPayslipData.loan_deduction,
-        mid_month_advance: editPayslipData.mid_month_advance,
-        salary_adjustment: editPayslipData.salary_adjustment,
-        unpaid_leave: editPayslipData.unpaid_leave,
-        other_deductions: editPayslipData.other_deductions,
+        basic_salary: n0(editPayslipData.basic_salary),
+        fixed_allowance: n0(editPayslipData.fixed_allowance),
+        housing_allowance: n0(editPayslipData.housing_allowance),
+        transport_allowance: n0(editPayslipData.transport_allowance),
+        meal_allowance: n0(editPayslipData.meal_allowance),
+        phone_allowance: n0(editPayslipData.phone_allowance),
+        other_allowance: n0(editPayslipData.other_allowance),
+        overtime: n0(editPayslipData.overtime),
+        bonus: n0(editPayslipData.bonus),
+        commission: n0(editPayslipData.commission),
+        incentives: n0(editPayslipData.incentives),
+        annual_leave_pay: n0(editPayslipData.annual_leave_pay),
+        other_earnings: n0(editPayslipData.other_earnings),
+        epf_employee: n0(editPayslipData.epf_employee),
+        epf_employer: n0(editPayslipData.epf_employer),
+        socso_employee: n0(editPayslipData.socso_employee),
+        socso_employer: n0(editPayslipData.socso_employer),
+        eis_employee: n0(editPayslipData.eis_employee),
+        eis_employer: n0(editPayslipData.eis_employer),
+        pcb: n0(editPayslipData.pcb),
+        cp38: n0(editPayslipData.cp38),
+        loan_deduction: n0(editPayslipData.loan_deduction),
+        mid_month_advance: n0(editPayslipData.mid_month_advance),
+        salary_adjustment: n0(editPayslipData.salary_adjustment),
+        unpaid_leave: n0(editPayslipData.unpaid_leave),
+        other_deductions: n0(editPayslipData.other_deductions),
       };
       await axiosInstance.put(`/hr/payslips/${editPayslipData.id}`, payload);
       toast.success('Payslip updated and journal entry re-posted');
@@ -1186,59 +1289,71 @@ const HRModule = () => {
                 </Select>
               </div>
             </div>
+
+            {/* Gross salary preview */}
+            {selectedStaffForPayslip && (
+              <div className="p-3 bg-blue-50 rounded text-sm" data-testid="gross-salary-preview">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Estimated Gross Salary:</span>
+                  <span className="font-bold text-blue-700">
+                    RM {computeGross(selectedStaffForPayslip, payslipForm).toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            )}
             
             <div className="border-t pt-4">
               <h4 className="font-semibold text-sm text-green-600 mb-2">Variable Earnings (this month)</h4>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Commission (RM)</Label>
-                  <Input type="number" value={payslipForm.commission} onChange={(e) => setPayslipForm({ ...payslipForm, commission: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.commission)} onChange={(e) => handlePayslipEarning('commission', e.target.value)} data-testid="payslip-commission" />
                 </div>
                 <div>
                   <Label className="text-xs">Incentives (RM)</Label>
-                  <Input type="number" value={payslipForm.incentives} onChange={(e) => setPayslipForm({ ...payslipForm, incentives: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.incentives)} onChange={(e) => handlePayslipEarning('incentives', e.target.value)} data-testid="payslip-incentives" />
                 </div>
                 <div>
                   <Label className="text-xs">Bonus (RM)</Label>
-                  <Input type="number" value={payslipForm.bonus} onChange={(e) => setPayslipForm({ ...payslipForm, bonus: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.bonus)} onChange={(e) => handlePayslipEarning('bonus', e.target.value)} data-testid="payslip-bonus" />
                 </div>
                 <div>
                   <Label className="text-xs">Annual Leave Pay (RM)</Label>
-                  <Input type="number" value={payslipForm.annual_leave_pay} onChange={(e) => setPayslipForm({ ...payslipForm, annual_leave_pay: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.annual_leave_pay)} onChange={(e) => handlePayslipEarning('annual_leave_pay', e.target.value)} data-testid="payslip-annual-leave" />
                 </div>
                 <div>
                   <Label className="text-xs">Overtime (RM)</Label>
-                  <Input type="number" value={payslipForm.overtime} onChange={(e) => setPayslipForm({ ...payslipForm, overtime: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.overtime)} onChange={(e) => handlePayslipEarning('overtime', e.target.value)} data-testid="payslip-overtime" />
                 </div>
               </div>
             </div>
             
             <div className="border-t pt-4">
-              <h4 className="font-semibold text-sm text-blue-600 mb-2">Statutory Deductions (Editable)</h4>
+              <h4 className="font-semibold text-sm text-blue-600 mb-2">Statutory Deductions (auto-calculated, editable)</h4>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">EPF (Employee)</Label>
-                  <Input type="number" step="0.01" value={payslipForm.epf_employee} onChange={(e) => setPayslipForm({ ...payslipForm, epf_employee: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" step="0.01" value={nv(payslipForm.epf_employee)} onChange={(e) => setPayslipForm({ ...payslipForm, epf_employee: np(e.target.value) })} data-testid="payslip-epf-ee" />
                 </div>
                 <div>
                   <Label className="text-xs">SOCSO (Employee)</Label>
-                  <Input type="number" step="0.01" value={payslipForm.socso_employee} onChange={(e) => setPayslipForm({ ...payslipForm, socso_employee: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" step="0.01" value={nv(payslipForm.socso_employee)} onChange={(e) => setPayslipForm({ ...payslipForm, socso_employee: np(e.target.value) })} data-testid="payslip-socso-ee" />
                 </div>
                 <div>
                   <Label className="text-xs">EIS (Employee)</Label>
-                  <Input type="number" step="0.01" value={payslipForm.eis_employee} onChange={(e) => setPayslipForm({ ...payslipForm, eis_employee: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" step="0.01" value={nv(payslipForm.eis_employee)} onChange={(e) => setPayslipForm({ ...payslipForm, eis_employee: np(e.target.value) })} data-testid="payslip-eis-ee" />
                 </div>
                 <div>
                   <Label className="text-xs">EPF (Employer)</Label>
-                  <Input type="number" step="0.01" value={payslipForm.epf_employer} onChange={(e) => setPayslipForm({ ...payslipForm, epf_employer: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" step="0.01" value={nv(payslipForm.epf_employer)} onChange={(e) => setPayslipForm({ ...payslipForm, epf_employer: np(e.target.value) })} data-testid="payslip-epf-er" />
                 </div>
                 <div>
                   <Label className="text-xs">SOCSO (Employer)</Label>
-                  <Input type="number" step="0.01" value={payslipForm.socso_employer} onChange={(e) => setPayslipForm({ ...payslipForm, socso_employer: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" step="0.01" value={nv(payslipForm.socso_employer)} onChange={(e) => setPayslipForm({ ...payslipForm, socso_employer: np(e.target.value) })} data-testid="payslip-socso-er" />
                 </div>
                 <div>
                   <Label className="text-xs">EIS (Employer)</Label>
-                  <Input type="number" step="0.01" value={payslipForm.eis_employer} onChange={(e) => setPayslipForm({ ...payslipForm, eis_employer: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" step="0.01" value={nv(payslipForm.eis_employer)} onChange={(e) => setPayslipForm({ ...payslipForm, eis_employer: np(e.target.value) })} data-testid="payslip-eis-er" />
                 </div>
               </div>
             </div>
@@ -1248,27 +1363,27 @@ const HRModule = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">CP39 / PCB Tax (RM)</Label>
-                  <Input type="number" value={payslipForm.pcb} onChange={(e) => setPayslipForm({ ...payslipForm, pcb: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.pcb)} onChange={(e) => setPayslipForm({ ...payslipForm, pcb: np(e.target.value) })} data-testid="payslip-pcb" />
                 </div>
                 <div>
                   <Label className="text-xs">CP38 (RM)</Label>
-                  <Input type="number" value={payslipForm.cp38} onChange={(e) => setPayslipForm({ ...payslipForm, cp38: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.cp38)} onChange={(e) => setPayslipForm({ ...payslipForm, cp38: np(e.target.value) })} data-testid="payslip-cp38" />
                 </div>
                 <div>
                   <Label className="text-xs">Loan (RM)</Label>
-                  <Input type="number" value={payslipForm.loan_deduction} onChange={(e) => setPayslipForm({ ...payslipForm, loan_deduction: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.loan_deduction)} onChange={(e) => setPayslipForm({ ...payslipForm, loan_deduction: np(e.target.value) })} data-testid="payslip-loan" />
                 </div>
                 <div>
                   <Label className="text-xs">Mid-Month Advance (RM)</Label>
-                  <Input type="number" value={payslipForm.mid_month_advance} onChange={(e) => setPayslipForm({ ...payslipForm, mid_month_advance: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.mid_month_advance)} onChange={(e) => setPayslipForm({ ...payslipForm, mid_month_advance: np(e.target.value) })} data-testid="payslip-mid-month" />
                 </div>
                 <div>
                   <Label className="text-xs">Salary Adjustment (RM)</Label>
-                  <Input type="number" value={payslipForm.salary_adjustment} onChange={(e) => setPayslipForm({ ...payslipForm, salary_adjustment: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.salary_adjustment)} onChange={(e) => setPayslipForm({ ...payslipForm, salary_adjustment: np(e.target.value) })} data-testid="payslip-sal-adj" />
                 </div>
                 <div>
                   <Label className="text-xs">Unpaid Leave (RM)</Label>
-                  <Input type="number" value={payslipForm.unpaid_leave} onChange={(e) => setPayslipForm({ ...payslipForm, unpaid_leave: parseFloat(e.target.value) || 0 })} />
+                  <Input type="number" value={nv(payslipForm.unpaid_leave)} onChange={(e) => setPayslipForm({ ...payslipForm, unpaid_leave: np(e.target.value) })} data-testid="payslip-unpaid" />
                 </div>
               </div>
             </div>
@@ -1406,53 +1521,53 @@ const HRModule = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs">Basic Salary</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.basic_salary || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, basic_salary: parseFloat(e.target.value) || 0 })} data-testid="edit-basic-salary" />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.basic_salary)}
+                      onChange={(e) => handleEditEarning('basic_salary', e.target.value)} data-testid="edit-basic-salary" />
                   </div>
                   <div>
                     <Label className="text-xs">Fixed Allowance</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.fixed_allowance || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, fixed_allowance: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.fixed_allowance)}
+                      onChange={(e) => handleEditEarning('fixed_allowance', e.target.value)} />
                   </div>
                   <div>
                     <Label className="text-xs">Housing Allowance</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.housing_allowance || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, housing_allowance: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.housing_allowance)}
+                      onChange={(e) => handleEditEarning('housing_allowance', e.target.value)} />
                   </div>
                   <div>
                     <Label className="text-xs">Transport Allowance</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.transport_allowance || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, transport_allowance: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.transport_allowance)}
+                      onChange={(e) => handleEditEarning('transport_allowance', e.target.value)} />
                   </div>
                   <div>
                     <Label className="text-xs">Commission</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.commission || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, commission: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.commission)}
+                      onChange={(e) => handleEditEarning('commission', e.target.value)} />
                   </div>
                   <div>
                     <Label className="text-xs">Incentives</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.incentives || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, incentives: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.incentives)}
+                      onChange={(e) => handleEditEarning('incentives', e.target.value)} />
                   </div>
                   <div>
                     <Label className="text-xs">Bonus</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.bonus || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, bonus: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.bonus)}
+                      onChange={(e) => handleEditEarning('bonus', e.target.value)} />
                   </div>
                   <div>
                     <Label className="text-xs">Annual Leave Pay</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.annual_leave_pay || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, annual_leave_pay: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.annual_leave_pay)}
+                      onChange={(e) => handleEditEarning('annual_leave_pay', e.target.value)} />
                   </div>
                   <div>
                     <Label className="text-xs">Overtime</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.overtime || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, overtime: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.overtime)}
+                      onChange={(e) => handleEditEarning('overtime', e.target.value)} />
                   </div>
                   <div>
                     <Label className="text-xs">Other Earnings</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.other_earnings || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, other_earnings: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.other_earnings)}
+                      onChange={(e) => handleEditEarning('other_earnings', e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -1463,68 +1578,68 @@ const HRModule = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs">EPF Employee</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.epf_employee || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, epf_employee: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.epf_employee)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, epf_employee: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">EPF Employer</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.epf_employer || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, epf_employer: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.epf_employer)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, epf_employer: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">SOCSO Employee</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.socso_employee || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, socso_employee: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.socso_employee)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, socso_employee: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">SOCSO Employer</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.socso_employer || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, socso_employer: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.socso_employer)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, socso_employer: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">EIS/SIP Employee</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.eis_employee || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, eis_employee: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.eis_employee)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, eis_employee: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">EIS/SIP Employer</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.eis_employer || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, eis_employer: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.eis_employer)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, eis_employer: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">CP39 / PCB Tax</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.pcb || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, pcb: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.pcb)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, pcb: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">CP38</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.cp38 || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, cp38: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.cp38)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, cp38: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">Loan</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.loan_deduction || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, loan_deduction: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.loan_deduction)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, loan_deduction: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">Mid-Month Advance</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.mid_month_advance || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, mid_month_advance: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.mid_month_advance)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, mid_month_advance: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">Salary Adjustment</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.salary_adjustment || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, salary_adjustment: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.salary_adjustment)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, salary_adjustment: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">Unpaid Leave</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.unpaid_leave || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, unpaid_leave: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.unpaid_leave)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, unpaid_leave: np(e.target.value) })} />
                   </div>
                   <div>
                     <Label className="text-xs">Other Deductions</Label>
-                    <Input type="number" step="0.01" value={editPayslipData.other_deductions || 0}
-                      onChange={(e) => setEditPayslipData({ ...editPayslipData, other_deductions: parseFloat(e.target.value) || 0 })} />
+                    <Input type="number" step="0.01" value={nv(editPayslipData.other_deductions)}
+                      onChange={(e) => setEditPayslipData({ ...editPayslipData, other_deductions: np(e.target.value) })} />
                   </div>
                 </div>
               </div>
