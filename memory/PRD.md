@@ -10,11 +10,12 @@ Comprehensive training management platform for MDDRC. Manages training sessions,
 ## Current Status (Mar 2026)
 
 ### EPF Band-Based Calculation + Dynamic Statutory Recalc + Input Fix — COMPLETE (Mar 23, 2026)
-- **EPF Calculation Fixed**: Now uses official band-based lookup (Jadual Ketiga) with 1001 salary bands (RM20 increments up to RM20,000). All EPF amounts are whole RM (no cents). Employer rate: 13% (≤RM5,000) / 12% (>RM5,000). 
-- **Dynamic Statutory Recalculation**: When variable earnings (commission, bonus, overtime, etc.) change in Generate/Edit Payslip dialogs, EPF/SOCSO/EIS auto-recalculate via backend API (400ms debounce). Statutory fields remain manually editable.
-- **Gross Salary Preview**: Blue box shows estimated gross in Generate Payslip dialog.
-- **"0" Input Bug Fixed**: Number inputs now allow clearing to empty before typing. Uses nv()/np()/n0() helpers.
-- **New endpoint**: POST /api/hr/statutory/calculate — returns all 6 statutory amounts for a given gross salary.
+- **EPF Calculation Fixed**: Band-based lookup (Jadual Ketiga) with 1001 salary bands. Whole RM amounts (no cents). Employer rate: 13% (≤RM5,000) / 12% (>RM5,000).
+- **Age-Aware Statutory**: Age 60+ → EPF employee 0%, employer 4%. SOCSO employee 0. Age 57+ → EIS 0.
+- **Dynamic Recalculation**: Variable earnings changes auto-update statutory (400ms debounce).
+- **Gross Preview**: Blue box shows estimated gross in Generate Payslip dialog.
+- **Mobile Scroll Fix**: Dialog uses flex layout with fixed buttons at bottom.
+- **"0" Input Bug Fixed**: Number inputs allow clearing to empty.
 - Testing: 100% backend + frontend (iteration_32)
 
 ### Enhanced HR Payroll Fields — COMPLETE (Mar 22, 2026)

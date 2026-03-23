@@ -667,35 +667,54 @@ async def calculate_statutory_deductions(data: dict, current_user: User = Depend
     
     age = calculate_age_from_nric(nric, reference_date) if nric else 30
     
-    # EPF: band lookup first, percentage fallback
-    epf_lookup = await lookup_statutory_rate("epf", gross_salary)
-    if epf_lookup:
-        epf_employee = epf_lookup["employee_amount"]
-        epf_employer = epf_lookup["employer_amount"]
+    # EPF: age-aware calculation
+    if age >= 60:
+        # Age 60+: Employee 0%, Employer 4%, rounded to whole RM
+        epf_employee = 0.0
+        epf_employer = float(round(gross_salary * 0.04))
     else:
-        epf_calc = calculate_epf(gross_salary, age)
-        epf_employee = epf_calc["employee_amount"]
-        epf_employer = epf_calc["employer_amount"]
+        epf_lookup = await lookup_statutory_rate("epf", gross_salary)
+        if epf_lookup:
+            epf_employee = epf_lookup["employee_amount"]
+            epf_employer = epf_lookup["employer_amount"]
+        else:
+            epf_calc = calculate_epf(gross_salary, age)
+            epf_employee = epf_calc["employee_amount"]
+            epf_employer = epf_calc["employer_amount"]
     
-    # SOCSO: band lookup first, percentage fallback
-    socso_lookup = await lookup_statutory_rate("socso", gross_salary)
-    if socso_lookup:
-        socso_employee = socso_lookup["employee_amount"]
-        socso_employer = socso_lookup["employer_amount"]
+    # SOCSO: age-aware calculation
+    if age >= 60:
+        # Age 60+: Employment Injury only - employer pays, employee exempt
+        socso_lookup = await lookup_statutory_rate("socso", gross_salary)
+        socso_employee = 0.0
+        if socso_lookup:
+            socso_employer = socso_lookup["employer_amount"]
+        else:
+            socso_calc = calculate_socso(gross_salary, age)
+            socso_employer = socso_calc["employer_amount"]
     else:
-        socso_calc = calculate_socso(gross_salary, age)
-        socso_employee = socso_calc["employee_amount"]
-        socso_employer = socso_calc["employer_amount"]
+        socso_lookup = await lookup_statutory_rate("socso", gross_salary)
+        if socso_lookup:
+            socso_employee = socso_lookup["employee_amount"]
+            socso_employer = socso_lookup["employer_amount"]
+        else:
+            socso_calc = calculate_socso(gross_salary, age)
+            socso_employee = socso_calc["employee_amount"]
+            socso_employer = socso_calc["employer_amount"]
     
-    # EIS: band lookup first, percentage fallback
-    eis_lookup = await lookup_statutory_rate("eis", gross_salary)
-    if eis_lookup:
-        eis_employee = eis_lookup["employee_amount"]
-        eis_employer = eis_lookup["employer_amount"]
+    # EIS: age-aware calculation
+    if age >= 57:
+        eis_employee = 0.0
+        eis_employer = 0.0
     else:
-        eis_calc = calculate_eis(gross_salary, age)
-        eis_employee = eis_calc["employee_amount"]
-        eis_employer = eis_calc["employer_amount"]
+        eis_lookup = await lookup_statutory_rate("eis", gross_salary)
+        if eis_lookup:
+            eis_employee = eis_lookup["employee_amount"]
+            eis_employer = eis_lookup["employer_amount"]
+        else:
+            eis_calc = calculate_eis(gross_salary, age)
+            eis_employee = eis_calc["employee_amount"]
+            eis_employer = eis_calc["employer_amount"]
     
     return {
         "gross_salary": gross_salary,
