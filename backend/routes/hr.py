@@ -140,7 +140,7 @@ def calculate_age(date_of_birth: str, reference_date: str = None) -> int:
 
 async def lookup_statutory_rate(rate_type: str, wages: float):
     """Look up statutory contribution from uploaded rate tables.
-    Returns {"employee_amount", "employer_amount"} or None if no table found."""
+    Returns {"employee_amount", "employer_amount", "is_percentage", "employee_rate", "employer_rate"} or None if no table found."""
     rates = await db.statutory_rates.find(
         {"rate_type": rate_type}, {"_id": 0}
     ).sort("min_wages", 1).to_list(500)
@@ -152,17 +152,42 @@ async def lookup_statutory_rate(rate_type: str, wages: float):
         min_w = rate.get("min_wages", 0)
         max_w = rate.get("max_wages", 999999)
         if min_w <= wages <= max_w:
-            return {
-                "employee_amount": round(rate.get("employee_amount", 0), 2),
-                "employer_amount": round(rate.get("employer_amount", 0), 2)
-            }
+            if rate.get("is_percentage"):
+                # EPF: calculate from percentage
+                ee_rate = rate.get("employee_rate", 0)
+                er_rate = rate.get("employer_rate", 0)
+                return {
+                    "employee_amount": round(wages * ee_rate / 100, 2),
+                    "employer_amount": round(wages * er_rate / 100, 2),
+                    "employee_rate": ee_rate,
+                    "employer_rate": er_rate,
+                    "is_percentage": True
+                }
+            else:
+                # SOCSO/EIS: fixed amounts from table
+                return {
+                    "employee_amount": round(rate.get("employee_amount", 0), 2),
+                    "employer_amount": round(rate.get("employer_amount", 0), 2),
+                    "is_percentage": False
+                }
     
     # If wages exceed all bands, use the last band
     if rates:
         last = rates[-1]
+        if last.get("is_percentage"):
+            ee_rate = last.get("employee_rate", 0)
+            er_rate = last.get("employer_rate", 0)
+            return {
+                "employee_amount": round(wages * ee_rate / 100, 2),
+                "employer_amount": round(wages * er_rate / 100, 2),
+                "employee_rate": ee_rate,
+                "employer_rate": er_rate,
+                "is_percentage": True
+            }
         return {
             "employee_amount": round(last.get("employee_amount", 0), 2),
-            "employer_amount": round(last.get("employer_amount", 0), 2)
+            "employer_amount": round(last.get("employer_amount", 0), 2),
+            "is_percentage": False
         }
     return None
 
@@ -824,7 +849,12 @@ async def generate_payslip(data: dict, current_user: User = Depends(get_current_
     
     # EPF: rate table → percentage on GROSS salary
     if epf_lookup:
-        epf = {"employee_rate": 0, "employer_rate": 0, "employee_amount": epf_lookup["employee_amount"], "employer_amount": epf_lookup["employer_amount"]}
+        epf = {
+            "employee_rate": epf_lookup.get("employee_rate", 0),
+            "employer_rate": epf_lookup.get("employer_rate", 0),
+            "employee_amount": epf_lookup["employee_amount"],
+            "employer_amount": epf_lookup["employer_amount"]
+        }
     else:
         epf = calculate_epf(gross_salary, age, staff.get("employee_epf_rate"), staff.get("employer_epf_rate"))
     
