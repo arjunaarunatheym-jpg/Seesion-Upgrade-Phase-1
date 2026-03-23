@@ -138,20 +138,49 @@ def calculate_age(date_of_birth: str, reference_date: str = None) -> int:
         return 30
 
 
-def calculate_epf(basic_salary: float, age: int, custom_employee_rate: float = None, custom_employer_rate: float = None):
-    """Calculate EPF contributions"""
+async def lookup_statutory_rate(rate_type: str, wages: float):
+    """Look up statutory contribution from uploaded rate tables.
+    Returns {"employee_amount", "employer_amount"} or None if no table found."""
+    rates = await db.statutory_rates.find(
+        {"rate_type": rate_type}, {"_id": 0}
+    ).sort("min_wages", 1).to_list(500)
+    
+    if not rates:
+        return None
+    
+    for rate in rates:
+        min_w = rate.get("min_wages", 0)
+        max_w = rate.get("max_wages", 999999)
+        if min_w <= wages <= max_w:
+            return {
+                "employee_amount": round(rate.get("employee_amount", 0), 2),
+                "employer_amount": round(rate.get("employer_amount", 0), 2)
+            }
+    
+    # If wages exceed all bands, use the last band
+    if rates:
+        last = rates[-1]
+        return {
+            "employee_amount": round(last.get("employee_amount", 0), 2),
+            "employer_amount": round(last.get("employer_amount", 0), 2)
+        }
+    return None
+
+
+def calculate_epf(gross_salary: float, age: int, custom_employee_rate: float = None, custom_employer_rate: float = None):
+    """Calculate EPF contributions based on GROSS salary"""
     if age >= 60:
         employer_rate = 4.0
         employee_rate = 0.0
     else:
-        employer_rate = custom_employer_rate if custom_employer_rate else (13.0 if basic_salary <= 5000 else 12.0)
+        employer_rate = custom_employer_rate if custom_employer_rate else (13.0 if gross_salary <= 5000 else 12.0)
         employee_rate = custom_employee_rate if custom_employee_rate else 11.0
     
     return {
         "employee_rate": employee_rate,
         "employer_rate": employer_rate,
-        "employee_amount": round(basic_salary * employee_rate / 100, 2),
-        "employer_amount": round(basic_salary * employer_rate / 100, 2)
+        "employee_amount": round(gross_salary * employee_rate / 100, 2),
+        "employer_amount": round(gross_salary * employer_rate / 100, 2)
     }
 
 
@@ -788,10 +817,28 @@ async def generate_payslip(data: dict, current_user: User = Depends(get_current_
     
     gross_salary = basic_salary + total_allowances + overtime + bonus + commission + incentives + annual_leave_pay + other_earnings
     
-    # Statutory calculations
-    epf = calculate_epf(basic_salary, age, staff.get("employee_epf_rate"), staff.get("employer_epf_rate"))
-    socso = calculate_socso(gross_salary, age)
-    eis = calculate_eis(gross_salary, age)
+    # Statutory calculations — use uploaded rate tables first, fall back to percentage
+    epf_lookup = await lookup_statutory_rate("epf", gross_salary)
+    socso_lookup = await lookup_statutory_rate("socso", gross_salary)
+    eis_lookup = await lookup_statutory_rate("eis", gross_salary)
+    
+    # EPF: rate table → percentage on GROSS salary
+    if epf_lookup:
+        epf = {"employee_rate": 0, "employer_rate": 0, "employee_amount": epf_lookup["employee_amount"], "employer_amount": epf_lookup["employer_amount"]}
+    else:
+        epf = calculate_epf(gross_salary, age, staff.get("employee_epf_rate"), staff.get("employer_epf_rate"))
+    
+    # SOCSO: rate table → percentage on gross (capped at 6000)
+    if socso_lookup:
+        socso = {"employee_rate": 0, "employer_rate": 0, "employee_amount": socso_lookup["employee_amount"], "employer_amount": socso_lookup["employer_amount"]}
+    else:
+        socso = calculate_socso(gross_salary, age)
+    
+    # EIS: rate table → percentage on gross (capped at 6000)
+    if eis_lookup:
+        eis = {"employee_rate": 0, "employer_rate": 0, "employee_amount": eis_lookup["employee_amount"], "employer_amount": eis_lookup["employer_amount"]}
+    else:
+        eis = calculate_eis(gross_salary, age)
     
     # Allow overriding auto-calculated values
     epf_employee = data.get("epf_employee") if data.get("epf_employee") is not None else epf["employee_amount"]

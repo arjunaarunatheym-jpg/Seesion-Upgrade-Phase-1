@@ -354,7 +354,7 @@ const HRModule = () => {
     
     const isAbove60 = age >= 60;
     const epfEeRate = isAbove60 ? 0 : 11;
-    const epfErRate = isAbove60 ? 4 : (basic <= 5000 ? 13 : 12);
+    const epfErRate = isAbove60 ? 4 : (gross <= 5000 ? 13 : 12);
     const socsoEeRate = isAbove60 ? 0 : 0.5;
     const socsoErRate = isAbove60 ? 1.25 : 1.75;
     const eisEeRate = isAbove60 ? 0 : 0.2;
@@ -363,8 +363,8 @@ const HRModule = () => {
     const cappedGross = Math.min(gross, 6000);
     
     return {
-      epf_employee: Math.round(basic * epfEeRate) / 100,
-      epf_employer: Math.round(basic * epfErRate) / 100,
+      epf_employee: Math.round(gross * epfEeRate) / 100,
+      epf_employer: Math.round(gross * epfErRate) / 100,
       socso_employee: Math.round(cappedGross * socsoEeRate) / 100,
       socso_employer: Math.round(cappedGross * socsoErRate) / 100,
       eis_employee: Math.round(cappedGross * eisEeRate) / 100,
