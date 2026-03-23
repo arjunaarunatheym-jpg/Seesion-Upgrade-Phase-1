@@ -9,6 +9,14 @@ Comprehensive training management platform for MDDRC. Manages training sessions,
 
 ## Current Status (Mar 2026)
 
+### EPF Band-Based Calculation + Dynamic Statutory Recalc + Input Fix — COMPLETE (Mar 23, 2026)
+- **EPF Calculation Fixed**: Now uses official band-based lookup (Jadual Ketiga) with 1001 salary bands (RM20 increments up to RM20,000). All EPF amounts are whole RM (no cents). Employer rate: 13% (≤RM5,000) / 12% (>RM5,000). 
+- **Dynamic Statutory Recalculation**: When variable earnings (commission, bonus, overtime, etc.) change in Generate/Edit Payslip dialogs, EPF/SOCSO/EIS auto-recalculate via backend API (400ms debounce). Statutory fields remain manually editable.
+- **Gross Salary Preview**: Blue box shows estimated gross in Generate Payslip dialog.
+- **"0" Input Bug Fixed**: Number inputs now allow clearing to empty before typing. Uses nv()/np()/n0() helpers.
+- **New endpoint**: POST /api/hr/statutory/calculate — returns all 6 statutory amounts for a given gross salary.
+- Testing: 100% backend + frontend (iteration_32)
+
 ### Enhanced HR Payroll Fields — COMPLETE (Mar 22, 2026)
 **Income Fields**: Basic Salary, Fixed Allowance (NEW), Housing Allowance, Transport Allowance, Commission (variable/monthly), Incentives (variable), Bonus (variable), Annual Leave Pay (variable), Overtime
 **Deduction Fields**: EPF, SOCSO, EIS/SIP, CP39/PCB Tax (NEW), CP38 (NEW), Loan (NEW), Mid-Month Advance (NEW), Salary Adjustment (NEW), Unpaid Leave (NEW)
