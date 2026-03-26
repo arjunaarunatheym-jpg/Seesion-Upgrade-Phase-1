@@ -9,6 +9,10 @@ Comprehensive training management platform for MDDRC. Manages training sessions,
 
 ## Current Status (Mar 2026)
 
+### Mobile Dialog Scroll Fix — COMPLETE (Mar 26, 2026)
+- **Global fix**: Added `max-h-[90vh] overflow-y-auto` to base `DialogContent` component
+- All dialogs (Leads, Payslips, Staff, Sessions, etc.) now scrollable on mobile with buttons always reachable
+
 ### EPF Band-Based Calculation + Dynamic Statutory Recalc + Input Fix — COMPLETE (Mar 23, 2026)
 - **EPF Calculation Fixed**: Band-based lookup (Jadual Ketiga) with 1001 salary bands. Whole RM amounts (no cents). Employer rate: 13% (≤RM5,000) / 12% (>RM5,000).
 - **Age-Aware Statutory**: Age 60+ → EPF employee 0%, employer 4%. SOCSO employee 0. Age 57+ → EIS 0.

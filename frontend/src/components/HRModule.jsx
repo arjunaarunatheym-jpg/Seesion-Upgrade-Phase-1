@@ -1266,12 +1266,12 @@ const HRModule = () => {
 
       {/* Generate Payslip Dialog */}
       <Dialog open={payslipDialogOpen} onOpenChange={setPayslipDialogOpen}>
-        <DialogContent className="max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader className="flex-shrink-0">
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
             <DialogTitle>Generate Payslip</DialogTitle>
             <DialogDescription>{selectedStaffForPayslip?.full_name} • NRIC: {selectedStaffForPayslip?.nric || 'N/A'}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2 flex-1 overflow-y-auto min-h-0">
+          <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Year</Label>
@@ -1388,7 +1388,7 @@ const HRModule = () => {
               </div>
             </div>
           </div>
-          <div className="flex justify-end gap-2 pt-3 border-t flex-shrink-0">
+          <div className="flex justify-end gap-2 pt-3 border-t">
             <Button variant="outline" onClick={() => setPayslipDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleGeneratePayslip} className="bg-green-600 hover:bg-green-700">
               <Calculator className="w-4 h-4 mr-2" /> Generate Payslip
@@ -1488,15 +1488,15 @@ const HRModule = () => {
 
       {/* Edit Payslip Dialog */}
       <Dialog open={editPayslipOpen} onOpenChange={(open) => { if (!open) { setEditPayslipOpen(false); setEditPayslipData(null); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader className="flex-shrink-0">
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
             <DialogTitle>Edit Payslip</DialogTitle>
             <DialogDescription>
               {editPayslipData?.full_name} — {editPayslipData ? `${getMonthName(editPayslipData.month)} ${editPayslipData.year}` : ''}
             </DialogDescription>
           </DialogHeader>
           {editPayslipData && (
-            <div className="space-y-4 py-2 flex-1 overflow-y-auto min-h-0">
+            <div className="space-y-4 py-2">
               {/* Staff Info Section */}
               <div className="p-3 bg-gray-50 rounded border">
                 <div className="flex justify-between items-center mb-2">
@@ -1659,15 +1659,14 @@ const HRModule = () => {
                   <span>RM {(((editPayslipData.basic_salary || 0) + (editPayslipData.fixed_allowance || 0) + (editPayslipData.housing_allowance || 0) + (editPayslipData.transport_allowance || 0) + (editPayslipData.meal_allowance || 0) + (editPayslipData.phone_allowance || 0) + (editPayslipData.other_allowance || 0) + (editPayslipData.overtime || 0) + (editPayslipData.bonus || 0) + (editPayslipData.commission || 0) + (editPayslipData.incentives || 0) + (editPayslipData.annual_leave_pay || 0) + (editPayslipData.other_earnings || 0)) - ((editPayslipData.epf_employee || 0) + (editPayslipData.socso_employee || 0) + (editPayslipData.eis_employee || 0) + (editPayslipData.pcb || 0) + (editPayslipData.cp38 || 0) + (editPayslipData.loan_deduction || 0) + (editPayslipData.mid_month_advance || 0) + (editPayslipData.salary_adjustment || 0) + (editPayslipData.unpaid_leave || 0) + (editPayslipData.other_deductions || 0))).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
-            </div>
-          )}
-          {editPayslipData && (
-            <div className="flex gap-2 justify-end pt-3 border-t flex-shrink-0">
-              <Button variant="outline" onClick={() => { setEditPayslipOpen(false); setEditPayslipData(null); }}>Cancel</Button>
-              <Button onClick={handleEditPayslipSave} disabled={editSaving} className="bg-blue-600 hover:bg-blue-700" data-testid="save-edit-payslip-btn">
-                {editSaving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
-                Save & Re-post Journal
-              </Button>
+
+              <div className="flex gap-2 justify-end pt-3 border-t">
+                <Button variant="outline" onClick={() => { setEditPayslipOpen(false); setEditPayslipData(null); }}>Cancel</Button>
+                <Button onClick={handleEditPayslipSave} disabled={editSaving} className="bg-blue-600 hover:bg-blue-700" data-testid="save-edit-payslip-btn">
+                  {editSaving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
+                  Save & Re-post Journal
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
