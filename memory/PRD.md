@@ -10,10 +10,11 @@ Comprehensive training management platform for MDDRC. Manages training sessions,
 ## Current Status (Mar 2026)
 
 ### Clickable KPI Cards with Drill-Down — COMPLETE (Mar 27, 2026)
-- **Admin Dashboard**: All 8 KPI cards (Sessions, Revenue, Outstanding, Trainees, Feedback, Trainer Utilization, Active Staff, Pending Quotes) are clickable — opens drill-down dialog with detail list
-- **Finance Tab**: All 4 cards (Total Invoices, Collected, Outstanding, Payables) are clickable with drill-down
-- New backend endpoint: GET /api/admin/kpi-drilldown/{kpi_type}
-- New component: KpiDrilldown.jsx with type-specific list renderers (invoices, sessions, staff, trainees, feedback, trainers, quotations, payables)
+- **Admin Dashboard**: All 8 KPI cards clickable with drill-down detail lists
+- **Admin Finance Tab**: All 4 finance cards clickable with drill-down
+- **Finance Dashboard (/finance)**: All 4 cards (Total Invoices, Collected, Outstanding, Payables) clickable with drill-down
+- Backend endpoint: GET /api/admin/kpi-drilldown/{kpi_type}
+- Shared component: KpiDrilldown.jsx with type-specific list renderers
 
 ### Mobile Dialog Scroll Fix — COMPLETE (Mar 26, 2026)
 - **Global fix**: Added `max-h-[90vh] overflow-y-auto` to base `DialogContent` component

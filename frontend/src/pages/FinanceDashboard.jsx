@@ -26,6 +26,7 @@ import { PayablesTab } from '../components/finance/PayablesTab';
 import { AuditLogTab } from '../components/finance/AuditLogTab';
 import { SettingsTab } from '../components/finance/SettingsTab';
 import AccountingTab from '../components/finance/AccountingTab';
+import { KpiDrilldownDialog } from '../components/KpiDrilldown';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -112,6 +113,25 @@ const FinanceDashboard = ({ user, onLogout }) => {
   const [currentPeriodStatus, setCurrentPeriodStatus] = useState({ status: 'open', exists: false });
   const [reopenDialog, setReopenDialog] = useState({ open: false, reason: '' });
   
+  // KPI Drill-down State
+  const [drillOpen, setDrillOpen] = useState(false);
+  const [drillData, setDrillData] = useState(null);
+  const [drillLoading, setDrillLoading] = useState(false);
+
+  const handleKpiCardClick = async (type) => {
+    setDrillOpen(true);
+    setDrillLoading(true);
+    setDrillData(null);
+    try {
+      const res = await axiosInstance.get(`/admin/kpi-drilldown/${type}`);
+      setDrillData(res.data);
+    } catch (e) {
+      setDrillData({ type: "error", title: "Error", items: [] });
+    } finally {
+      setDrillLoading(false);
+    }
+  };
+
   // Billing Parties State
   const [billingParties, setBillingParties] = useState([]);
   const [showBillingPartyModal, setShowBillingPartyModal] = useState(false);
@@ -1814,7 +1834,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
               </div>
             ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.98]" onClick={() => handleKpiCardClick('total_invoices')} data-testid="fin-card-total">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-blue-700 flex items-center gap-2">
                     <FileText className="w-4 h-4" />
@@ -1831,7 +1851,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
                 </CardContent>
               </Card>
               
-              <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+              <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.98]" onClick={() => handleKpiCardClick('collected')} data-testid="fin-card-collected">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-green-700 flex items-center gap-2">
                     <CheckCircle className="w-4 h-4" />
@@ -1848,7 +1868,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
                 </CardContent>
               </Card>
               
-              <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+              <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.98]" onClick={() => handleKpiCardClick('outstanding')} data-testid="fin-card-outstanding">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-orange-700 flex items-center gap-2">
                     <Clock className="w-4 h-4" />
@@ -1865,7 +1885,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
                 </CardContent>
               </Card>
               
-              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.98]" onClick={() => handleKpiCardClick('payables')} data-testid="fin-card-payables">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-purple-700 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
@@ -2273,6 +2293,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
           </div>
         </DialogContent>
       </Dialog>
+      <KpiDrilldownDialog open={drillOpen} onClose={() => setDrillOpen(false)} data={drillData} loading={drillLoading} />
     </div>
   );
 };
