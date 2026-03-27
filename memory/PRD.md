@@ -9,6 +9,11 @@ Comprehensive training management platform for MDDRC. Manages training sessions,
 
 ## Current Status (Mar 2026)
 
+### Company Combobox for Session Invoices — COMPLETE (Mar 28, 2026)
+- **Searchable + auto-create**: Replaced static Select dropdown with CompanyCombobox in "Additional Invoices (Other Companies)" section of Session Costing
+- Type to search existing companies, or type a new name and click "Create [name]" to auto-create company record
+- Auto-refreshes company list after creation — no need to leave and create company separately
+
 ### Clickable KPI Cards with Drill-Down — COMPLETE (Mar 27, 2026)
 - **Admin Dashboard**: All 8 KPI cards clickable with drill-down detail lists
 - **Admin Finance Tab**: All 4 finance cards clickable with drill-down

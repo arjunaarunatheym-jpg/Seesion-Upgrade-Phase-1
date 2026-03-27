@@ -12,6 +12,7 @@ import {
   FileText, TrendingUp, User, Building2, Calendar, RefreshCw, FileX, Download, RotateCcw
 } from 'lucide-react';
 import ClaimFormPrint from './ClaimFormPrint';
+import { CompanyCombobox } from './CompanyCombobox';
 
 const SessionCosting = ({ session, onClose, onUpdate }) => {
   const [loading, setLoading] = useState(true);
@@ -578,22 +579,19 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
                       <div key={inv.id || idx} className="p-3 bg-gray-50 rounded-lg space-y-2">
                         <div className="flex items-center gap-3">
                           <div className="flex-1">
-                            <Select 
-                              value={inv.company_id} 
-                              onValueChange={(v) => {
+                            <CompanyCombobox
+                              companies={companies}
+                              value={inv.company_id}
+                              excludeId={session.company_id}
+                              onChange={(compId, compName) => {
                                 const updated = [...additionalInvoices];
-                                updated[idx].company_id = v;
-                                updated[idx].company_name = companies.find(c => c.id === v)?.name || '';
+                                updated[idx].company_id = compId;
+                                updated[idx].company_name = compName;
                                 setAdditionalInvoices(updated);
                               }}
-                            >
-                              <SelectTrigger><SelectValue placeholder="Select Company" /></SelectTrigger>
-                              <SelectContent>
-                                {companies.filter(c => c.id !== session.company_id).map(c => (
-                                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              onCompanyCreated={(newComp) => setCompanies(prev => [...prev, newComp])}
+                              placeholder="Search or type new company..."
+                            />
                           </div>
                           <div className="w-32">
                             <Input
