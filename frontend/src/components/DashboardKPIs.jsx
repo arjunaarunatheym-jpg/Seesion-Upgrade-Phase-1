@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "../components/ui/card";
 import {
   Calendar,
@@ -11,6 +11,7 @@ import {
   FileText,
 } from "lucide-react";
 import { axiosInstance } from "../App";
+import { KpiDrilldownDialog } from "./KpiDrilldown";
 
 const KPI_CONFIG = [
   {
@@ -20,6 +21,7 @@ const KPI_CONFIG = [
     color: "text-blue-600",
     bg: "bg-blue-50",
     format: "number",
+    drilldown: "sessions_this_month",
   },
   {
     key: "revenue_ytd",
@@ -28,6 +30,7 @@ const KPI_CONFIG = [
     color: "text-emerald-600",
     bg: "bg-emerald-50",
     format: "currency",
+    drilldown: "revenue_ytd",
   },
   {
     key: "outstanding_total",
@@ -38,6 +41,7 @@ const KPI_CONFIG = [
     format: "currency",
     subKey: "outstanding_count",
     subLabel: "invoices",
+    drilldown: "outstanding_total",
   },
   {
     key: "total_trainees_ytd",
@@ -46,6 +50,7 @@ const KPI_CONFIG = [
     color: "text-violet-600",
     bg: "bg-violet-50",
     format: "number",
+    drilldown: "total_trainees_ytd",
   },
   {
     key: "avg_feedback_score",
@@ -56,6 +61,7 @@ const KPI_CONFIG = [
     format: "rating",
     subKey: "feedback_count",
     subLabel: "responses",
+    drilldown: "avg_feedback_score",
   },
   {
     key: "trainer_utilization",
@@ -68,6 +74,7 @@ const KPI_CONFIG = [
     subLabel: "of",
     subKey2: "total_trainers",
     subLabel2: "trainers",
+    drilldown: "trainer_utilization",
   },
   {
     key: "staff_count",
@@ -76,6 +83,7 @@ const KPI_CONFIG = [
     color: "text-indigo-600",
     bg: "bg-indigo-50",
     format: "number",
+    drilldown: "staff_count",
   },
   {
     key: "pending_quotations",
@@ -84,6 +92,7 @@ const KPI_CONFIG = [
     color: "text-orange-600",
     bg: "bg-orange-50",
     format: "number",
+    drilldown: "pending_quotations",
   },
 ];
 
@@ -104,8 +113,11 @@ function formatValue(value, format) {
 export function DashboardKPIs() {
   const [kpis, setKpis] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [drillOpen, setDrillOpen] = useState(false);
+  const [drillData, setDrillData] = useState(null);
+  const [drillLoading, setDrillLoading] = useState(false);
 
-  useEffect(() => {
+  useState(() => {
     const fetchKPIs = async () => {
       try {
         const res = await axiosInstance.get("/admin/dashboard-kpis");
@@ -118,6 +130,20 @@ export function DashboardKPIs() {
     };
     fetchKPIs();
   }, []);
+
+  const handleCardClick = async (drilldownType) => {
+    setDrillOpen(true);
+    setDrillLoading(true);
+    setDrillData(null);
+    try {
+      const res = await axiosInstance.get(`/admin/kpi-drilldown/${drilldownType}`);
+      setDrillData(res.data);
+    } catch (e) {
+      setDrillData({ type: "error", title: "Error", items: [] });
+    } finally {
+      setDrillLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -148,8 +174,9 @@ export function DashboardKPIs() {
           return (
             <Card
               key={kpi.key}
-              className="border border-gray-200 hover:shadow-md transition-shadow"
+              className="border border-gray-200 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.98]"
               data-testid={`kpi-${kpi.key}`}
+              onClick={() => handleCardClick(kpi.drilldown)}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
@@ -177,6 +204,7 @@ export function DashboardKPIs() {
           );
         })}
       </div>
+      <KpiDrilldownDialog open={drillOpen} onClose={() => setDrillOpen(false)} data={drillData} loading={drillLoading} />
     </div>
   );
 }

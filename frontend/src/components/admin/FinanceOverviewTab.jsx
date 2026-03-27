@@ -1,13 +1,15 @@
 /**
- * FinanceOverviewTab - Admin finance summary and quick access
+ * FinanceOverviewTab - Admin finance summary with clickable drill-down cards
  */
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { DollarSign } from "lucide-react";
+import { DollarSign, FileText, CheckCircle, Clock, AlertTriangle } from "lucide-react";
 import { axiosInstance } from "../../App";
 import { toast } from "sonner";
+import { KpiDrilldownDialog } from "../KpiDrilldown";
 
 const FinanceOverviewTab = ({
   financeYear,
@@ -15,6 +17,10 @@ const FinanceOverviewTab = ({
   financeAvailableYears,
   financeSummary,
 }) => {
+  const [drillOpen, setDrillOpen] = useState(false);
+  const [drillData, setDrillData] = useState(null);
+  const [drillLoading, setDrillLoading] = useState(false);
+
   const handleRefresh = async () => {
     try {
       const response = await axiosInstance.get('/finance/dashboard');
@@ -26,6 +32,20 @@ const FinanceOverviewTab = ({
       toast.success('Finance data refreshed');
     } catch (error) {
       toast.error('Failed to load finance data');
+    }
+  };
+
+  const handleCardClick = async (type) => {
+    setDrillOpen(true);
+    setDrillLoading(true);
+    setDrillData(null);
+    try {
+      const res = await axiosInstance.get(`/admin/kpi-drilldown/${type}`);
+      setDrillData(res.data);
+    } catch (e) {
+      setDrillData({ type: "error", title: "Error", items: [] });
+    } finally {
+      setDrillLoading(false);
     }
   };
 
@@ -51,11 +71,17 @@ const FinanceOverviewTab = ({
         </div>
       </div>
 
-      {/* Finance Summary Cards */}
+      {/* Finance Summary Cards - Now Clickable */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+        <Card
+          className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.98]"
+          onClick={() => handleCardClick("total_invoices")}
+          data-testid="finance-card-total"
+        >
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-blue-700">Total Invoices</CardTitle>
+            <CardTitle className="text-sm font-medium text-blue-700 flex items-center gap-1.5">
+              <FileText className="w-4 h-4" /> Total Invoices
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-900">
@@ -63,25 +89,43 @@ const FinanceOverviewTab = ({
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+        <Card
+          className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.98]"
+          onClick={() => handleCardClick("collected")}
+          data-testid="finance-card-collected"
+        >
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-green-700">Total Collected</CardTitle>
+            <CardTitle className="text-sm font-medium text-green-700 flex items-center gap-1.5">
+              <CheckCircle className="w-4 h-4" /> Collected
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-900" id="finance-collected">RM {(financeSummary.totalCollected || 0).toLocaleString()}</div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+        <Card
+          className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.98]"
+          onClick={() => handleCardClick("outstanding")}
+          data-testid="finance-card-outstanding"
+        >
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-orange-700">Outstanding</CardTitle>
+            <CardTitle className="text-sm font-medium text-orange-700 flex items-center gap-1.5">
+              <Clock className="w-4 h-4" /> Outstanding
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-900" id="finance-outstanding">RM {(financeSummary.totalOutstanding || 0).toLocaleString()}</div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+        <Card
+          className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 cursor-pointer hover:shadow-md transition-shadow active:scale-[0.98]"
+          onClick={() => handleCardClick("payables")}
+          data-testid="finance-card-payables"
+        >
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-purple-700">Pending Payables</CardTitle>
+            <CardTitle className="text-sm font-medium text-purple-700 flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4" /> Pending Payables
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-900" id="finance-payables">RM {(financeSummary.totalPayables || 0).toLocaleString()}</div>
@@ -128,6 +172,8 @@ const FinanceOverviewTab = ({
           </p>
         </CardContent>
       </Card>
+
+      <KpiDrilldownDialog open={drillOpen} onClose={() => setDrillOpen(false)} data={drillData} loading={drillLoading} />
     </div>
   );
 };
