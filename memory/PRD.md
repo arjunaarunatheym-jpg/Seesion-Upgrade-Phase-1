@@ -1,87 +1,101 @@
-# MDDRC Training Management System - PRD
+# MDDRC Training Management Platform - PRD
 
 ## Original Problem Statement
-Comprehensive training management platform for MDDRC. Manages training sessions, participants, invoicing, and coordination across multiple user roles.
+Comprehensive training management platform for Malaysian Defensive Driving & Riding Centre (MDDRC). Features Admin, HR, Finance, Operations, and Marketing modules with Malaysian statutory compliance.
 
-## Tech Stack
-- Frontend: React 18 + Tailwind CSS + Shadcn UI
-- Backend: FastAPI (Python), Database: MongoDB, Auth: JWT + bcrypt
+## Architecture
+- **Frontend**: React + Shadcn/UI (port 3000)
+- **Backend**: FastAPI + MongoDB (port 8001)
+- **Database**: MongoDB (via MONGO_URL env var)
 
-## Current Status (Mar 2026)
+## Code Architecture (Post-Refactoring)
+```
+/app/backend/
+├── server.py              # 536 lines - App init, middleware, DB, router registration
+├── core/__init__.py       # Shared utilities: db, auth, helpers, path constants
+├── models/__init__.py     # Pydantic models
+├── routes/                # 38 modular route files
+│   ├── __init__.py        # Router registry
+│   ├── auth.py            # Authentication
+│   ├── users.py           # User management + role-creation
+│   ├── sessions_new.py    # Session CRUD + feedback export
+│   ├── programs.py        # Training programs
+│   ├── companies.py       # Company management
+│   ├── hr.py              # HR & payroll (band-based EPF)
+│   ├── marketing.py       # Leads, clients, quotations, PDF generation
+│   ├── finance_invoices.py # Invoice CRUD + deleted invoice numbers
+│   ├── finance_session.py # NEW: Session costing, expenses, profit
+│   ├── finance_payments.py # Payment tracking
+│   ├── finance_reports.py # P&L, AR Aging
+│   ├── finance_billing.py # Billing parties
+│   ├── finance_payables.py # Payables
+│   ├── finance_petty_cash.py # Petty cash
+│   ├── accounting.py      # Journal entries, audit trail
+│   ├── settings.py        # App settings + indemnity/feedback questions
+│   ├── templates.py       # NEW: Excel template downloads
+│   ├── static_files.py    # NEW: Static file serving, uploads, debug
+│   ├── reports_legacy.py  # NEW: Legacy report endpoints
+│   ├── checklists.py      # Checklist templates + trainer checklist
+│   ├── training_reports.py # Training report generation
+│   ├── certificates.py    # Certificate management
+│   ├── feedback.py        # Course feedback + bulk upload
+│   ├── attendance.py      # Attendance tracking
+│   ├── tests.py           # Assessment tests
+│   ├── notifications.py   # Notifications
+│   ├── security.py        # Security audit
+│   ├── admin_kpis.py      # Dashboard KPIs
+│   ├── admin_data_management.py # Data management
+│   ├── health.py          # Health checks
+│   ├── backup.py          # DB backup/export
+│   ├── supervisor.py      # Supervisor portal
+│   ├── super_admin.py     # Super admin
+│   ├── superadmin_portal.py # Superadmin portal
+│   ├── participant_access.py # Participant access
+│   ├── vehicle_details.py # Vehicle details
+│   └── reports.py         # Training reports (old module)
+└── tests/
+    └── test_critical_flows.py # 23 pytest cases
+```
 
-### App Hardening — Testing, Security, Backup, Business Settings — COMPLETE (Mar 28, 2026)
-- **Automated Test Suite**: 23 pytest tests covering Auth, Health, Settings, Companies, Programs, Sessions, Invoices, HR/Payroll, Statutory Calculations, Finance Reports, AR Aging, KPIs, Backup, Leads, Users. All pass.
-- **System Health Check**: GET /api/health (public) + GET /api/health/detailed (admin) — tests DB, collections, statutory rates, settings, admin user, invoice counter
-- **Data Backup/Export**: Full backup (all collections as single JSON), individual collection export (JSON or CSV), collection inventory with record counts. In Admin Settings page.
-- **Password Strength**: Min 8 chars, must include number + letter
-- **Business Settings**: SST rate, Company Reg No, SST Reg No, Bank details, Document prefixes (INV/QUO/CN), EPF/SOCSO/EIS employer numbers, Payment terms — all configurable in Admin Settings without code changes
+## What's Been Implemented
 
-### Financial Reporting Overhaul — COMPLETE (Mar 28, 2026)
-- **Unified P&L**: Journal-based "P&L Statement" is now default tab. Old "CEO P&L" renamed to "P&L by Programme" (secondary)
-- **AR Aging Report**: New "Receivables Aging" tab with 3 views (Summary bar chart, By Invoice with tables, By Company matrix), CSV export, 90+ day overdue alert
-- **Yearly Segregation**: Verified all reports correctly filter by year parameter (2025 vs 2026)
-- **YoY Comparison**: Confirmed working — compares two years side by side with variance % and trend indicators
-- Backend: New GET /api/finance/ar-aging endpoint
-- Frontend: New ARAgingTab.jsx, reordered ProfitLossLedger tabs
+### Completed Features
+- Full Auth system (JWT, role-based access, 8-char password requirement)
+- Training Session CRUD with participant management
+- Invoice generation with sequential numbering
+- Band-based EPF statutory calculations (1001 Malaysian bands)
+- Unified P&L with Journal-based Auditor view + AR Aging
+- Interactive KPI drill-down dashboards (Admin + Finance)
+- Searchable auto-creating Company Combobox for invoices
+- Global mobile-friendly dialogs (overflow scroll fix)
+- App Hardening: 23-case Pytest suite, DB Backup, Health Checks
+- **Server.py Refactoring**: Monolith (16,865 lines) → Modular (536 lines + 38 route files)
+- Checklist template 500 error FIXED (legacy data normalization)
 
-### Company Combobox for Session Invoices — COMPLETE (Mar 28, 2026)
-- **Searchable + auto-create**: Replaced static Select dropdown with CompanyCombobox in "Additional Invoices (Other Companies)" section of Session Costing
-- Type to search existing companies, or type a new name and click "Create [name]" to auto-create company record
-- Auto-refreshes company list after creation — no need to leave and create company separately
-
-### Clickable KPI Cards with Drill-Down — COMPLETE (Mar 27, 2026)
-- **Admin Dashboard**: All 8 KPI cards clickable with drill-down detail lists
-- **Admin Finance Tab**: All 4 finance cards clickable with drill-down
-- **Finance Dashboard (/finance)**: All 4 cards (Total Invoices, Collected, Outstanding, Payables) clickable with drill-down
-- Backend endpoint: GET /api/admin/kpi-drilldown/{kpi_type}
-- Shared component: KpiDrilldown.jsx with type-specific list renderers
-
-### Mobile Dialog Scroll Fix — COMPLETE (Mar 26, 2026)
-- **Global fix**: Added `max-h-[90vh] overflow-y-auto` to base `DialogContent` component
-- All dialogs (Leads, Payslips, Staff, Sessions, etc.) now scrollable on mobile with buttons always reachable
-
-### EPF Band-Based Calculation + Dynamic Statutory Recalc + Input Fix — COMPLETE (Mar 23, 2026)
-- **EPF Calculation Fixed**: Band-based lookup (Jadual Ketiga) with 1001 salary bands. Whole RM amounts (no cents). Employer rate: 13% (≤RM5,000) / 12% (>RM5,000).
-- **Age-Aware Statutory**: Age 60+ → EPF employee 0%, employer 4%. SOCSO employee 0. Age 57+ → EIS 0.
-- **Dynamic Recalculation**: Variable earnings changes auto-update statutory (400ms debounce).
-- **Gross Preview**: Blue box shows estimated gross in Generate Payslip dialog.
-- **Mobile Scroll Fix**: Dialog uses flex layout with fixed buttons at bottom.
-- **"0" Input Bug Fixed**: Number inputs allow clearing to empty.
-- Testing: 100% backend + frontend (iteration_32)
-
-### Enhanced HR Payroll Fields — COMPLETE (Mar 22, 2026)
-**Income Fields**: Basic Salary, Fixed Allowance (NEW), Housing Allowance, Transport Allowance, Commission (variable/monthly), Incentives (variable), Bonus (variable), Annual Leave Pay (variable), Overtime
-**Deduction Fields**: EPF, SOCSO, EIS/SIP, CP39/PCB Tax (NEW), CP38 (NEW), Loan (NEW), Mid-Month Advance (NEW), Salary Adjustment (NEW), Unpaid Leave (NEW)
-- Fixed allowance is stored on staff record (monthly fixed); all others are variable per payslip
-- Generate Payslip, Edit Payslip, View Payslip, and PayslipPrint all updated
-- Testing: 100% backend + frontend (iteration_31)
-
-### Manual Staff-User Link — COMPLETE (Mar 22, 2026)
-- "Link user" button replaces "Not linked" badge, opens dropdown to select user
-- POST /api/hr/staff/{id}/link-user/{user_id} and DELETE /api/hr/staff/{id}/unlink-user
-
-### Dashboard KPIs + Role Protection — COMPLETE (Mar 22, 2026)
-- 8 KPI cards on Admin Dashboard, role guards on 15+ endpoints
-
-### Quick Wins — COMPLETE (Mar 22, 2026)
-- DB Indexing (25 indexes), PWA v2, Loading/Empty States
-
-### Previous: Balance Sheet, Backfill, Mobile Responsive, Payroll Portal
-
-## Known Issues
-- Pre-existing 500 error on checklist template API (P2)
-
-## Feature Backlog
-- (P0) Duplicate Route Refactor (user holding until laptop ready)
-- (P1) Unify P&L Systems
-- (P1) Notification System — in-app bell + email alerts
-- (P1) Trainer Contract Workflow — freelance staff only, per session
-- (P1) Post-Training Evaluation — programme-specific questionnaires, 3mo/6mo follow-up
-- (P1) Supervisor Portal Enhancement — invoices, feedback, certificates
-- (P1) Certificate Generation — PDF template with dynamic fields
-- (P1) SaaS Monetization (Stripe)
-- (P2) Client/Trainer Portals, Native App, PWA Offline
+### Refactoring Completed (Feb 2026)
+- server.py: 16,865 → 536 lines (97% reduction)
+- 280+ endpoints migrated to 38 modular route files
+- 4 new route modules created: static_files.py, templates.py, finance_session.py, reports_legacy.py
+- All 23 pytest cases pass post-refactoring
+- Full frontend UI verified working
 
 ## Test Credentials
 - Admin: arjuna@mddrc.com.my / Dana102229
 - Coordinator: malek@mddrc.com.my / mddrc1
+
+## Prioritized Backlog
+
+### P1 - High Priority
+- Certificate auto-generation & Email notifications
+- Trainer Contract Workflow (freelance staff contracts)
+- Post-Training Evaluation System (3/6 month automated feedback)
+
+### P2 - Medium Priority
+- Balance Sheet report
+- SST Summary report
+
+### Future
+- Multi-tenancy architecture
+- Supervisor Portal / Client Self-Service Portal
+- SaaS Monetization (Stripe Integration)
+- Native Mobile App (Capacitor)
