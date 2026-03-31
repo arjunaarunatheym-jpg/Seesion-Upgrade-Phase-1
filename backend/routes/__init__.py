@@ -32,6 +32,8 @@ from .accounting import router as accounting_router
 from .superadmin_portal import router as superadmin_portal_router
 from .notifications import router as notifications_router
 from .admin_kpis import router as admin_kpis_router
+from .health import router as health_router
+from .backup import router as backup_router
 
 # Create combined router for easy registration
 def get_all_routers():
@@ -64,6 +66,8 @@ def get_all_routers():
         accounting_router,      # /accounting/* (Chart of Accounts, Journal Entries, Trial Balance)
         superadmin_portal_router, # /superadmin/* (Super Admin Portal)
         notifications_router,   # /notifications/* (Email & Broadcast)
+        health_router,          # /health, /health/detailed
+        backup_router,          # /backup/*
     ]
 
 __all__ = [
@@ -95,5 +99,7 @@ __all__ = [
     'superadmin_portal_router',
     'notifications_router',
     'admin_kpis_router',
+    'health_router',
+    'backup_router',
     'get_all_routers',
 ]

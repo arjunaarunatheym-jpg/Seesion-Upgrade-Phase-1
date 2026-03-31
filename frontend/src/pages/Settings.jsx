@@ -9,6 +9,139 @@ import { Upload, Save, Image as ImageIcon, Palette, FileText, FileSignature, Plu
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import CertificateDesigner from "../components/admin/CertificateDesigner";
+import { Badge } from "@/components/ui/badge";
+import { Download, Database, Heart, Shield, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+
+// Inline HealthCheck Component
+const HealthCheck = () => {
+  const [health, setHealth] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const runCheck = async () => {
+    setLoading(true);
+    try {
+      const res = await axiosInstance.get("/health/detailed");
+      setHealth(res.data);
+    } catch {
+      toast.error("Failed to run health check");
+    }
+    setLoading(false);
+  };
+
+  const icon = (status) => {
+    if (status === "pass") return <CheckCircle className="w-4 h-4 text-green-600" />;
+    if (status === "warn") return <AlertTriangle className="w-4 h-4 text-yellow-600" />;
+    return <XCircle className="w-4 h-4 text-red-600" />;
+  };
+
+  return (
+    <div data-testid="health-check-section">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold flex items-center gap-2"><Heart className="w-4 h-4 text-red-500" /> System Health</h4>
+        <Button variant="outline" size="sm" onClick={runCheck} disabled={loading}>{loading ? "Checking..." : "Run Health Check"}</Button>
+      </div>
+      {health && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 mb-2">
+            <Badge className={health.status === "healthy" ? "bg-green-100 text-green-800" : health.status === "degraded" ? "bg-yellow-100 text-yellow-800" : "bg-red-100 text-red-800"}>
+              {health.status?.toUpperCase()}
+            </Badge>
+            <span className="text-xs text-gray-500">{health.summary.passed}/{health.summary.total} passed</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
+            {health.results.map((r, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-gray-50">
+                {icon(r.status)}
+                <span className="flex-1">{r.test}</span>
+                {r.count !== undefined && <span className="text-gray-400">{r.count}</span>}
+                {r.ms !== undefined && <span className="text-gray-400">{r.ms}ms</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Inline BackupExport Component
+const BackupExport = () => {
+  const [collections, setCollections] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(null);
+
+  const loadCollections = async () => {
+    setLoading(true);
+    try {
+      const res = await axiosInstance.get("/backup/collections");
+      setCollections(res.data.collections || []);
+    } catch {
+      toast.error("Failed to load collections");
+    }
+    setLoading(false);
+  };
+
+  const exportCollection = async (name, format = "json") => {
+    setExporting(name);
+    try {
+      const res = await axiosInstance.get(`/backup/export/${name}?format=${format}`, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${name}_${new Date().toISOString().slice(0,10)}.${format}`; a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`${name} exported`);
+    } catch {
+      toast.error("Export failed");
+    }
+    setExporting(null);
+  };
+
+  const exportAll = async () => {
+    setExporting("all");
+    try {
+      const res = await axiosInstance.get("/backup/export-all", { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = `full_backup_${new Date().toISOString().slice(0,10)}.json`; a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Full backup downloaded!");
+    } catch {
+      toast.error("Backup failed");
+    }
+    setExporting(null);
+  };
+
+  return (
+    <div data-testid="backup-section">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold flex items-center gap-2"><Database className="w-4 h-4 text-blue-500" /> Data Backup</h4>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={loadCollections} disabled={loading}>{loading ? "Loading..." : "View Collections"}</Button>
+          <Button size="sm" onClick={exportAll} disabled={exporting === "all"} className="bg-blue-600 hover:bg-blue-700">
+            <Download className="w-3 h-3 mr-1" /> {exporting === "all" ? "Exporting..." : "Full Backup"}
+          </Button>
+        </div>
+      </div>
+      {collections.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">
+          {collections.filter(c => c.count > 0).map(c => (
+            <div key={c.collection} className="flex items-center justify-between text-xs py-2 px-3 rounded border bg-gray-50">
+              <div>
+                <span className="font-medium">{c.collection}</span>
+                <span className="text-gray-400 ml-1">({c.count})</span>
+              </div>
+              <div className="flex gap-1">
+                <button className="text-blue-600 hover:underline" onClick={() => exportCollection(c.collection, "json")} disabled={exporting === c.collection}>JSON</button>
+                <span className="text-gray-300">|</span>
+                <button className="text-green-600 hover:underline" onClick={() => exportCollection(c.collection, "csv")} disabled={exporting === c.collection}>CSV</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Settings = () => {
   const [settings, setSettings] = useState(null);
@@ -32,7 +165,20 @@ const Settings = () => {
     primary_color: "#3b82f6",
     secondary_color: "#6366f1",
     footer_text: "",
-    max_certificate_file_size_mb: 5
+    max_certificate_file_size_mb: 5,
+    company_reg_no: "",
+    sst_reg_no: "",
+    sst_rate: 6.0,
+    default_payment_terms: "Net 30",
+    bank_name: "",
+    bank_account_no: "",
+    bank_account_name: "",
+    invoice_prefix: "INV",
+    quotation_prefix: "QUO",
+    credit_note_prefix: "CN",
+    epf_employer_no: "",
+    socso_employer_no: "",
+    eis_employer_no: "",
   });
 
   useEffect(() => {
@@ -50,7 +196,20 @@ const Settings = () => {
         primary_color: response.data.primary_color || "#3b82f6",
         secondary_color: response.data.secondary_color || "#6366f1",
         footer_text: response.data.footer_text || "",
-        max_certificate_file_size_mb: response.data.max_certificate_file_size_mb || 5
+        max_certificate_file_size_mb: response.data.max_certificate_file_size_mb || 5,
+        company_reg_no: response.data.company_reg_no || "",
+        sst_reg_no: response.data.sst_reg_no || "",
+        sst_rate: response.data.sst_rate ?? 6.0,
+        default_payment_terms: response.data.default_payment_terms || "Net 30",
+        bank_name: response.data.bank_name || "",
+        bank_account_no: response.data.bank_account_no || "",
+        bank_account_name: response.data.bank_account_name || "",
+        invoice_prefix: response.data.invoice_prefix || "INV",
+        quotation_prefix: response.data.quotation_prefix || "QUO",
+        credit_note_prefix: response.data.credit_note_prefix || "CN",
+        epf_employer_no: response.data.epf_employer_no || "",
+        socso_employer_no: response.data.socso_employer_no || "",
+        eis_employer_no: response.data.eis_employer_no || "",
       });
       setLoading(false);
     } catch (error) {
@@ -468,6 +627,116 @@ const Settings = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Business & Registration Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            Business & Registration
+          </CardTitle>
+          <CardDescription>Company registration, SST, bank details, and statutory employer numbers</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Company Registration No.</Label>
+              <Input value={formData.company_reg_no} onChange={(e) => setFormData({ ...formData, company_reg_no: e.target.value })} placeholder="e.g. 1234567-X" data-testid="company-reg-input" />
+            </div>
+            <div>
+              <Label>SST Registration No.</Label>
+              <Input value={formData.sst_reg_no} onChange={(e) => setFormData({ ...formData, sst_reg_no: e.target.value })} placeholder="e.g. W10-1234-56789012" data-testid="sst-reg-input" />
+            </div>
+            <div>
+              <Label>SST Rate (%)</Label>
+              <Input type="number" step="0.1" value={formData.sst_rate} onChange={(e) => setFormData({ ...formData, sst_rate: parseFloat(e.target.value) || 0 })} data-testid="sst-rate-input" />
+              <p className="text-xs text-gray-500 mt-1">Currently 6% for standard SST. Change here if rate is updated.</p>
+            </div>
+            <div>
+              <Label>Default Payment Terms</Label>
+              <Select value={formData.default_payment_terms} onValueChange={(v) => setFormData({ ...formData, default_payment_terms: v })}>
+                <SelectTrigger data-testid="payment-terms-select"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Net 14">Net 14</SelectItem>
+                  <SelectItem value="Net 30">Net 30</SelectItem>
+                  <SelectItem value="Net 45">Net 45</SelectItem>
+                  <SelectItem value="Net 60">Net 60</SelectItem>
+                  <SelectItem value="Due on Receipt">Due on Receipt</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="border-t pt-4 mt-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Bank Details (for payslips & invoices)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label>Bank Name</Label>
+                <Input value={formData.bank_name} onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })} placeholder="e.g. Maybank" data-testid="bank-name-input" />
+              </div>
+              <div>
+                <Label>Account Number</Label>
+                <Input value={formData.bank_account_no} onChange={(e) => setFormData({ ...formData, bank_account_no: e.target.value })} placeholder="e.g. 5123 4567 8901" data-testid="bank-acc-input" />
+              </div>
+              <div>
+                <Label>Account Name</Label>
+                <Input value={formData.bank_account_name} onChange={(e) => setFormData({ ...formData, bank_account_name: e.target.value })} placeholder="Company name on bank account" data-testid="bank-name-acc-input" />
+              </div>
+            </div>
+          </div>
+          <div className="border-t pt-4 mt-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Document Prefixes</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label>Invoice Prefix</Label>
+                <Input value={formData.invoice_prefix} onChange={(e) => setFormData({ ...formData, invoice_prefix: e.target.value })} data-testid="inv-prefix-input" />
+              </div>
+              <div>
+                <Label>Quotation Prefix</Label>
+                <Input value={formData.quotation_prefix} onChange={(e) => setFormData({ ...formData, quotation_prefix: e.target.value })} data-testid="quo-prefix-input" />
+              </div>
+              <div>
+                <Label>Credit Note Prefix</Label>
+                <Input value={formData.credit_note_prefix} onChange={(e) => setFormData({ ...formData, credit_note_prefix: e.target.value })} data-testid="cn-prefix-input" />
+              </div>
+            </div>
+          </div>
+          <div className="border-t pt-4 mt-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Statutory Employer Numbers</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label>EPF Employer No.</Label>
+                <Input value={formData.epf_employer_no} onChange={(e) => setFormData({ ...formData, epf_employer_no: e.target.value })} placeholder="KWSP employer number" data-testid="epf-emp-input" />
+              </div>
+              <div>
+                <Label>SOCSO Employer No.</Label>
+                <Input value={formData.socso_employer_no} onChange={(e) => setFormData({ ...formData, socso_employer_no: e.target.value })} placeholder="PERKESO employer code" data-testid="socso-emp-input" />
+              </div>
+              <div>
+                <Label>EIS Employer No.</Label>
+                <Input value={formData.eis_employer_no} onChange={(e) => setFormData({ ...formData, eis_employer_no: e.target.value })} placeholder="SIP employer number" data-testid="eis-emp-input" />
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* System Health & Data Backup */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Save className="w-5 h-5" />
+            Data Backup & System Health
+          </CardTitle>
+          <CardDescription>Export your data and check system health</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <HealthCheck />
+          <div className="border-t pt-4">
+            <BackupExport />
+          </div>
+        </CardContent>
+      </Card>
+
 
       {/* Indemnity Form Management */}
       <Card>

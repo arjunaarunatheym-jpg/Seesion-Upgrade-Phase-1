@@ -314,6 +314,8 @@ from routes import (
     superadmin_portal_router,
     notifications_router,
     admin_kpis_router,
+    health_router,
+    backup_router,
 )
 
 # Import accounting auto-posting functions (Phase 2)
@@ -355,6 +357,8 @@ api_router.include_router(accounting_router)
 api_router.include_router(superadmin_portal_router)
 api_router.include_router(notifications_router)
 api_router.include_router(admin_kpis_router)
+api_router.include_router(health_router)
+api_router.include_router(backup_router)
 # ==================== END MODULAR ROUTERS ====================
 
 # Static files directory
@@ -1748,9 +1752,14 @@ async def change_password(request: ChangePasswordRequest, current_user: User = D
     if not verify_password(request.current_password, user_doc["password"]):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     
-    # Minimum password length
-    if len(request.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    # Password strength validation
+    pwd = request.new_password
+    if len(pwd) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if not any(c.isdigit() for c in pwd):
+        raise HTTPException(status_code=400, detail="Password must contain at least one number")
+    if not any(c.isalpha() for c in pwd):
+        raise HTTPException(status_code=400, detail="Password must contain at least one letter")
     
     # Hash and update new password
     hashed_password = hash_password(request.new_password)

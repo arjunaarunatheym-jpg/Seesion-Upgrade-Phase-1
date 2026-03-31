@@ -258,6 +258,20 @@ class Settings(BaseModel):
     footer_text: str = ""
     certificate_template_url: Optional[str] = None
     max_certificate_file_size_mb: int = 5
+    # Business Settings
+    company_reg_no: str = ""
+    sst_reg_no: str = ""
+    sst_rate: float = 6.0
+    default_payment_terms: str = "Net 30"
+    bank_name: str = ""
+    bank_account_no: str = ""
+    bank_account_name: str = ""
+    invoice_prefix: str = "INV"
+    quotation_prefix: str = "QUO"
+    credit_note_prefix: str = "CN"
+    epf_employer_no: str = ""
+    socso_employer_no: str = ""
+    eis_employer_no: str = ""
     updated_at: datetime = Field(default_factory=get_malaysia_time)
 
 class SettingsUpdate(BaseModel):
@@ -266,6 +280,20 @@ class SettingsUpdate(BaseModel):
     secondary_color: Optional[str] = None
     footer_text: Optional[str] = None
     max_certificate_file_size_mb: Optional[int] = None
+    # Business Settings
+    company_reg_no: Optional[str] = None
+    sst_reg_no: Optional[str] = None
+    sst_rate: Optional[float] = None
+    default_payment_terms: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_account_no: Optional[str] = None
+    bank_account_name: Optional[str] = None
+    invoice_prefix: Optional[str] = None
+    quotation_prefix: Optional[str] = None
+    credit_note_prefix: Optional[str] = None
+    epf_employer_no: Optional[str] = None
+    socso_employer_no: Optional[str] = None
+    eis_employer_no: Optional[str] = None
 
 
 # ==================== ATTENDANCE MODELS ====================

@@ -9,6 +9,13 @@ Comprehensive training management platform for MDDRC. Manages training sessions,
 
 ## Current Status (Mar 2026)
 
+### App Hardening — Testing, Security, Backup, Business Settings — COMPLETE (Mar 28, 2026)
+- **Automated Test Suite**: 23 pytest tests covering Auth, Health, Settings, Companies, Programs, Sessions, Invoices, HR/Payroll, Statutory Calculations, Finance Reports, AR Aging, KPIs, Backup, Leads, Users. All pass.
+- **System Health Check**: GET /api/health (public) + GET /api/health/detailed (admin) — tests DB, collections, statutory rates, settings, admin user, invoice counter
+- **Data Backup/Export**: Full backup (all collections as single JSON), individual collection export (JSON or CSV), collection inventory with record counts. In Admin Settings page.
+- **Password Strength**: Min 8 chars, must include number + letter
+- **Business Settings**: SST rate, Company Reg No, SST Reg No, Bank details, Document prefixes (INV/QUO/CN), EPF/SOCSO/EIS employer numbers, Payment terms — all configurable in Admin Settings without code changes
+
 ### Financial Reporting Overhaul — COMPLETE (Mar 28, 2026)
 - **Unified P&L**: Journal-based "P&L Statement" is now default tab. Old "CEO P&L" renamed to "P&L by Programme" (secondary)
 - **AR Aging Report**: New "Receivables Aging" tab with 3 views (Summary bar chart, By Invoice with tables, By Company matrix), CSV export, 90+ day overdue alert
