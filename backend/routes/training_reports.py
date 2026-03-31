@@ -381,3 +381,34 @@ async def download_pdf(session_id: str, current_user: User = Depends(get_current
         raise HTTPException(status_code=404, detail="File not found on disk")
     
     return FileResponse(file_path, media_type="application/pdf", filename=f"report_{session_id}.pdf")
+
+
+@router.get("/{session_id}/status")
+async def get_training_report_status(session_id: str, current_user=Depends(get_current_user)):
+    """Get the status of a training report for a session"""
+    if current_user.role not in ["coordinator", "admin", "supervisor"]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    training_report = await db.training_reports.find_one({"session_id": session_id}, {"_id": 0})
+
+    if not training_report:
+        return {
+            "docx_generated": False,
+            "edited_uploaded": False,
+            "pdf_submitted": False,
+            "docx_filename": None,
+            "edited_docx_filename": None,
+            "pdf_filename": None,
+            "status": None
+        }
+
+    return {
+        "docx_generated": bool(training_report.get('docx_filename')),
+        "edited_uploaded": bool(training_report.get('edited_docx_filename')),
+        "pdf_submitted": training_report.get('status') == 'submitted',
+        "docx_filename": training_report.get('docx_filename'),
+        "edited_docx_filename": training_report.get('edited_docx_filename'),
+        "pdf_filename": training_report.get('final_pdf_filename'),
+        "status": training_report.get('status')
+    }
+

@@ -6,7 +6,8 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import List, Optional
 from datetime import datetime
 
-from models import TestResult, CourseFeedback, User
+from models import CourseFeedback, User
+from models.test import TestResult
 from models.audit import AuditLog, AuditLogResponse
 from services.auth_service import get_current_user
 from utils import db

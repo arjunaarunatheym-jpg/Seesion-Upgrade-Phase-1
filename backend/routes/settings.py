@@ -16,6 +16,7 @@ Endpoints: 11
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from datetime import datetime
+from typing import List
 from pathlib import Path
 import shutil
 import uuid
@@ -254,3 +255,70 @@ async def get_certificate_asset(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Asset not found")
     return FileResponse(file_path)
+
+
+# Indemnity Sections Management
+@router.get("/settings/indemnity-sections")
+async def get_indemnity_sections():
+    """Get custom indemnity sections (public - for participant form)"""
+    sections = await db.indemnity_sections.find({}, {"_id": 0}).sort("order", 1).to_list(None)
+    return sections
+
+
+@router.post("/settings/indemnity-sections")
+async def save_indemnity_sections(sections: List[dict], current_user: User = Depends(get_current_user)):
+    """Save custom indemnity sections (admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can manage indemnity sections")
+    await db.indemnity_sections.delete_many({})
+    for idx, section in enumerate(sections):
+        section["order"] = idx
+        section["updated_at"] = get_malaysia_time().isoformat()
+        await db.indemnity_sections.insert_one(section)
+    return {"message": f"Saved {len(sections)} indemnity sections"}
+
+
+# Feedback Questions Management (Admin)
+@router.get("/settings/feedback-questions")
+async def get_feedback_questions():
+    """Get participant feedback questions (public - for participant form)"""
+    questions = await db.feedback_questions.find({}, {"_id": 0}).sort("order", 1).to_list(None)
+    if not questions:
+        return [
+            {"id": "A1", "order": 1, "category": "KUALITI KURSUS", "question": "Penganjur menepati jangkaan saya", "type": "rating", "required": True},
+            {"id": "A2", "order": 2, "category": "KUALITI KURSUS", "question": "Kandungan kursus adalah jelas dan mudah difahami", "type": "rating", "required": True},
+            {"id": "A3", "order": 3, "category": "KUALITI KURSUS", "question": "Hasil pembelajaran adalah selari dengan objektif dan penyampaian kursus", "type": "rating", "required": True},
+            {"id": "A4", "order": 4, "category": "KUALITI KURSUS", "question": "Bahan pembelajaran sangat jelas, tepat, sangat mencukupi dan membantu", "type": "rating", "required": True},
+            {"id": "A5", "order": 5, "category": "KUALITI KURSUS", "question": "Tempoh kursus adalah mencukupi", "type": "rating", "required": True},
+            {"id": "A6", "order": 6, "category": "KUALITI KURSUS", "question": "Keseluruhannya, saya berpuas hati dengan kandungan kursus ini dan akan mencadangkan kursus ini kepada rakan sekerja saya", "type": "rating", "required": True},
+            {"id": "A7", "order": 7, "category": "KUALITI KURSUS", "question": "Cadangan atau Pandangan anda mengenai KUALITI KURSUS", "type": "text", "required": False},
+            {"id": "B1", "order": 8, "category": "PENYEDIA LATIHAN", "question": "Latihan telah disusun dan dilaksanakan dengan baik", "type": "rating", "required": True},
+            {"id": "B2", "order": 9, "category": "PENYEDIA LATIHAN", "question": "Persekitaran kelas adalah kondusif untuk pembelajaran dan membolehkan saya belajar", "type": "rating", "required": True},
+            {"id": "B3", "order": 10, "category": "PENYEDIA LATIHAN", "question": "Saya yakin dengan kebolehan saya mengaplikasikan kemahiran yang telah saya pelajari daripada latihan", "type": "rating", "required": True},
+            {"id": "B4", "order": 11, "category": "PENYEDIA LATIHAN", "question": "Secara keseluruhannya, saya berpuas hati dengan penganjur/penyedia latihan", "type": "rating", "required": True},
+            {"id": "B5", "order": 12, "category": "PENYEDIA LATIHAN", "question": "Cadangan atau Pandangan anda mengenai PENYEDIA LATIHAN / PENGANJUR / KESELURUHAN", "type": "text", "required": False},
+            {"id": "C1", "order": 13, "category": "TRAINER", "question": "Trainer dapat menarik minat peserta dan membuatkan saya berminat dengan subjek latihan", "type": "rating", "required": True},
+            {"id": "C2", "order": 14, "category": "TRAINER", "question": "Trainer mempunyai pemahaman yang mendalam tentang subjek yang diajar", "type": "rating", "required": True},
+            {"id": "C3", "order": 15, "category": "TRAINER", "question": "Trainer mempunyai ilmu terkini tentang perkembangan terkini dalam subjek", "type": "rating", "required": True},
+            {"id": "C4", "order": 16, "category": "TRAINER", "question": "Trainer menggunakan teknologi untuk menjadikan pembelajaran lebih menarik dan interaktif", "type": "rating", "required": True},
+            {"id": "C5", "order": 17, "category": "TRAINER", "question": "Secara keseluruhannya, saya berpuas hati dengan trainer", "type": "rating", "required": True},
+            {"id": "C6", "order": 18, "category": "TRAINER", "question": "Cadangan atau Pandangan anda mengenai TRAINER/PENCERAMAH/PAKAR", "type": "text", "required": False},
+            {"id": "D1", "order": 19, "category": "UMUM", "question": "Sila nyatakan pandangan atau cadangan anda bagi memperbaiki perkhidmatan kami", "type": "text", "required": False},
+        ]
+    return questions
+
+
+@router.post("/settings/feedback-questions")
+async def save_feedback_questions(questions: List[dict], current_user: User = Depends(get_current_user)):
+    """Save feedback questions (admin only)"""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can manage feedback questions")
+    await db.feedback_questions.delete_many({})
+    for idx, question in enumerate(questions):
+        question["order"] = idx + 1
+        question["updated_at"] = get_malaysia_time().isoformat()
+        if "id" not in question or not question["id"]:
+            question["id"] = f"Q{idx+1}"
+        await db.feedback_questions.insert_one(question)
+    return {"message": f"Saved {len(questions)} feedback questions"}
+

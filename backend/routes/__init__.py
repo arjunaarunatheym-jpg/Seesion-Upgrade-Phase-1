@@ -34,6 +34,12 @@ from .notifications import router as notifications_router
 from .admin_kpis import router as admin_kpis_router
 from .health import router as health_router
 from .backup import router as backup_router
+from .static_files import router as static_files_router
+from .templates import router as templates_router
+from .finance_session import router as finance_session_router
+from .reports_legacy import router as reports_legacy_router
+from .vehicle_details import router as vehicle_details_router
+from .admin_data_management import router as admin_data_management_router
 
 # Create combined router for easy registration
 def get_all_routers():
@@ -68,6 +74,12 @@ def get_all_routers():
         notifications_router,   # /notifications/* (Email & Broadcast)
         health_router,          # /health, /health/detailed
         backup_router,          # /backup/*
+        static_files_router,    # /static/*, /uploads/*, /debug/*, /checklist-photos/*
+        templates_router,       # /templates/*
+        finance_session_router, # /finance/session/*, /finance/pdf-layout-preview
+        reports_legacy_router,  # /reports/* (legacy)
+        vehicle_details_router, # /vehicle-details/*
+        admin_data_management_router, # /admin-data/*
     ]
 
 __all__ = [
@@ -101,5 +113,11 @@ __all__ = [
     'admin_kpis_router',
     'health_router',
     'backup_router',
+    'static_files_router',
+    'templates_router',
+    'finance_session_router',
+    'reports_legacy_router',
+    'vehicle_details_router',
+    'admin_data_management_router',
     'get_all_routers',
 ]

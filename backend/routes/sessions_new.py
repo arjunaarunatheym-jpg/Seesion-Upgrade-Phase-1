@@ -1959,3 +1959,77 @@ async def import_session_data(session_id: str, file: UploadFile = File(...), cur
     
     wb.close()
     return results
+
+
+@router.get("/{session_id}/export-feedback-excel")
+async def export_session_feedback_excel(session_id: str, current_user: User = Depends(get_current_user)):
+    """Export all feedback for a session as Excel file"""
+    if current_user.role not in ["admin", "super_admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    feedbacks = await db.course_feedback.find({"session_id": session_id}, {"_id": 0}).to_list(None)
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from io import BytesIO
+    from fastapi.responses import StreamingResponse
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Session Feedback"
+
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+
+    if not feedbacks:
+        ws.append(["No feedback submitted for this session"])
+    else:
+        all_question_ids = set()
+        for fb in feedbacks:
+            for response in fb.get("responses", []):
+                all_question_ids.add(response.get("question_id", ""))
+
+        question_ids = sorted(all_question_ids)
+
+        headers = ["Participant Name", "IC Number", "Submitted At"]
+        for qid in question_ids:
+            headers.append(f"Q: {qid}")
+        headers.append("Comments")
+
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", wrap_text=True)
+
+        for idx, fb in enumerate(feedbacks, 2):
+            participant = await db.users.find_one({"id": fb.get("participant_id")}, {"_id": 0, "full_name": 1, "id_number": 1})
+            ws.cell(row=idx, column=1, value=participant.get("full_name") if participant else "Unknown")
+            ws.cell(row=idx, column=2, value=participant.get("id_number") if participant else "")
+            ws.cell(row=idx, column=3, value=fb.get("submitted_at", ""))
+
+            response_map = {r.get("question_id"): r.get("rating") or r.get("text", "") for r in fb.get("responses", [])}
+            for qcol, qid in enumerate(question_ids, 4):
+                ws.cell(row=idx, column=qcol, value=response_map.get(qid, ""))
+
+            ws.cell(row=idx, column=len(headers), value=fb.get("comments", ""))
+
+        for col in ws.columns:
+            max_length = max((len(str(cell.value or "")) for cell in col), default=10)
+            ws.column_dimensions[col[0].column_letter].width = min(max_length + 2, 40)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    safe_name = session.get("name", "session").replace(" ", "_")[:30]
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=Feedback_{safe_name}.xlsx"}
+    )
+

@@ -1226,3 +1226,28 @@ async def delete_invoice(
         "credit_notes_deleted": credit_notes_deleted.deleted_count,
         "number_added_to_reuse_pool": request.reuse_number and status in ["auto_draft", "draft"]
     }
+
+
+
+@router.get("/deleted-invoice-numbers")
+async def get_deleted_invoice_numbers(current_user: User = Depends(get_current_user)):
+    """Get list of deleted invoice numbers available for reuse"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Admin or Finance access required")
+    deleted_numbers = await db.deleted_invoice_numbers.find(
+        {"is_available": True}, {"_id": 0}
+    ).sort("invoice_number", 1).to_list(100)
+    return deleted_numbers
+
+
+@router.delete("/deleted-invoice-numbers/{invoice_number}")
+async def remove_deleted_invoice_number(invoice_number: str, current_user: User = Depends(get_current_user)):
+    """Remove a deleted invoice number from the reuse pool"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Admin or Finance access required")
+    import urllib.parse
+    decoded_number = urllib.parse.unquote(invoice_number)
+    result = await db.deleted_invoice_numbers.delete_one({"invoice_number": decoded_number})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Invoice number not found in deleted pool")
+    return {"message": f"Invoice number {decoded_number} removed from reuse pool"}

@@ -17,7 +17,7 @@ Endpoints: 12+
 - POST /chief-trainer-feedback/{session_id}
 - GET /chief-trainer-feedback/{session_id}
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from typing import List
 from datetime import datetime
 import uuid
@@ -340,3 +340,127 @@ async def get_chief_trainer_feedback(session_id: str, current_user: User = Depen
     """Get chief trainer feedback for a session"""
     feedback = await db.chief_trainer_feedback.find_one({"session_id": session_id}, {"_id": 0})
     return feedback
+
+
+
+@router.post("/feedback-templates/bulk-upload")
+async def bulk_upload_feedback_questions(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Bulk upload feedback questions from Excel file"""
+    if current_user.role not in ["admin", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Only .xlsx and .xls files are supported")
+
+    try:
+        import pandas as pd
+        import io
+
+        contents = await file.read()
+
+        try:
+            df = pd.read_excel(io.BytesIO(contents), engine='openpyxl')
+        except Exception:
+            try:
+                df = pd.read_excel(io.BytesIO(contents), engine='xlrd')
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {str(e)}")
+
+        df.columns = df.columns.str.strip()
+
+        column_mappings = {
+            'Program Name': ['Program Name', 'PROGRAM NAME', 'Program', 'PROGRAM'],
+            'Question Text': ['Question Text', 'QUESTION TEXT', 'Question', 'QUESTION'],
+            'Question Type': ['Question Type', 'QUESTION TYPE', 'Type', 'TYPE'],
+            'Options': ['Options', 'OPTIONS', 'Choices', 'CHOICES']
+        }
+
+        final_columns = {}
+        for standard_name, alternatives in column_mappings.items():
+            found = False
+            for alt in alternatives:
+                if alt in df.columns:
+                    final_columns[alt] = standard_name
+                    found = True
+                    break
+            if not found and standard_name != 'Options':
+                raise HTTPException(status_code=400, detail=f"Missing required column: {standard_name}")
+
+        df.rename(columns=final_columns, inplace=True)
+
+        errors = []
+        for idx, row in df.iterrows():
+            row_num = idx + 2
+            if pd.isna(row['Program Name']) or str(row['Program Name']).strip() == '':
+                errors.append(f"Row {row_num}: Missing Program Name")
+            if pd.isna(row['Question Text']) or str(row['Question Text']).strip() == '':
+                errors.append(f"Row {row_num}: Missing Question Text")
+            if pd.isna(row['Question Type']) or str(row['Question Type']).strip() == '':
+                errors.append(f"Row {row_num}: Missing Question Type")
+            elif str(row['Question Type']).lower() not in ['rating', 'multiple_choice', 'text']:
+                errors.append(f"Row {row_num}: Question Type must be 'rating', 'multiple_choice', or 'text'")
+
+        if errors:
+            raise HTTPException(status_code=400, detail="Validation errors:\n" + "\n".join(errors))
+
+        added_questions = []
+        programs_not_found = []
+
+        for idx, row in df.iterrows():
+            program_name = str(row['Program Name']).strip()
+            question_text = str(row['Question Text']).strip()
+            question_type = str(row['Question Type']).lower().strip()
+
+            options = []
+            if 'Options' in df.columns and pd.notna(row['Options']) and str(row['Options']).strip():
+                options = [opt.strip() for opt in str(row['Options']).split(',')]
+
+            program = await db.programs.find_one({"name": program_name}, {"_id": 0})
+            if not program:
+                if program_name not in programs_not_found:
+                    programs_not_found.append(program_name)
+                continue
+
+            question_data = {
+                "question_text": question_text,
+                "question_type": question_type,
+                "options": options if question_type == "multiple_choice" else []
+            }
+
+            template = await db.feedback_templates.find_one({"program_id": program["id"]}, {"_id": 0})
+
+            if template:
+                await db.feedback_templates.update_one(
+                    {"id": template["id"]},
+                    {"$push": {"questions": question_data}}
+                )
+                added_questions.append({"program": program_name, "question": question_text, "action": "added_to_existing_template"})
+            else:
+                template_id = str(uuid.uuid4())
+                template_data = {
+                    "id": template_id,
+                    "program_id": program["id"],
+                    "questions": [question_data],
+                    "created_at": datetime.now().isoformat()
+                }
+                await db.feedback_templates.insert_one({**template_data, "_id": template_id})
+                added_questions.append({"program": program_name, "question": question_text, "action": "created_new_template"})
+
+        response = {
+            "message": "Bulk upload successful",
+            "total_uploaded": len(added_questions),
+            "questions": added_questions
+        }
+
+        if programs_not_found:
+            response["warnings"] = f"Programs not found: {', '.join(programs_not_found)}"
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")

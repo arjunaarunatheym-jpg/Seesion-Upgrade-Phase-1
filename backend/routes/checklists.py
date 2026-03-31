@@ -110,6 +110,15 @@ async def get_all_checklist_templates(current_user: User = Depends(get_current_u
     for template in templates:
         if isinstance(template.get('created_at'), str):
             template['created_at'] = datetime.fromisoformat(template['created_at'])
+        # Handle legacy data where items might be strings instead of ChecklistItem objects
+        if template.get('items'):
+            normalized_items = []
+            for item in template['items']:
+                if isinstance(item, str):
+                    normalized_items.append({"name": item, "description": None})
+                elif isinstance(item, dict):
+                    normalized_items.append(item)
+            template['items'] = normalized_items
         result.append(ChecklistTemplate(**template))
     return result
 
@@ -123,6 +132,15 @@ async def get_checklist_template(program_id: str, current_user: User = Depends(g
     
     if isinstance(template.get('created_at'), str):
         template['created_at'] = datetime.fromisoformat(template['created_at'])
+    # Handle legacy data where items might be strings instead of ChecklistItem objects
+    if template.get('items'):
+        normalized_items = []
+        for item in template['items']:
+            if isinstance(item, str):
+                normalized_items.append({"name": item, "description": None})
+            elif isinstance(item, dict):
+                normalized_items.append(item)
+        template['items'] = normalized_items
     return ChecklistTemplate(**template)
 
 
@@ -135,6 +153,15 @@ async def get_checklist_template_alias(program_id: str, current_user: User = Dep
     
     if isinstance(template.get('created_at'), str):
         template['created_at'] = datetime.fromisoformat(template['created_at'])
+    # Handle legacy data where items might be strings instead of ChecklistItem objects
+    if template.get('items'):
+        normalized_items = []
+        for item in template['items']:
+            if isinstance(item, str):
+                normalized_items.append({"name": item, "description": None})
+            elif isinstance(item, dict):
+                normalized_items.append(item)
+        template['items'] = normalized_items
     return ChecklistTemplate(**template)
 
 
@@ -146,6 +173,15 @@ async def get_all_checklist_templates_alias(current_user: User = Depends(get_cur
     for t in templates:
         if isinstance(t.get('created_at'), str):
             t['created_at'] = datetime.fromisoformat(t['created_at'])
+        # Handle legacy data where items might be strings instead of ChecklistItem objects
+        if t.get('items'):
+            normalized_items = []
+            for item in t['items']:
+                if isinstance(item, str):
+                    normalized_items.append({"name": item, "description": None})
+                elif isinstance(item, dict):
+                    normalized_items.append(item)
+            t['items'] = normalized_items
         result.append(ChecklistTemplate(**t))
     return result
 
@@ -444,3 +480,118 @@ async def get_vehicle_checklists(session_id: str, participant_id: str, current_u
             c['submitted_at'] = datetime.fromisoformat(c['submitted_at'])
     
     return checklists
+
+
+
+# Trainer Checklist Models (different from template ChecklistItem)
+class TrainerChecklistItem(BaseModel):
+    item: str
+    status: str  # "good", "needs_repair", "na"
+    comments: Optional[str] = None
+    photo_url: Optional[str] = None
+
+
+class TrainerChecklistSubmit(BaseModel):
+    participant_id: str
+    session_id: str
+    items: List[TrainerChecklistItem]
+    chief_trainer_comments: Optional[str] = None
+
+
+@router.post("/trainer-checklist/submit")
+async def submit_trainer_checklist(checklist_data: TrainerChecklistSubmit, current_user: User = Depends(get_current_user)):
+    """Submit a trainer's vehicle inspection checklist"""
+    if current_user.role not in ["trainer", "admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only trainers can submit vehicle checklists")
+
+    session = await db.sessions.find_one({"id": checklist_data.session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    participant = await db.users.find_one({"id": checklist_data.participant_id}, {"_id": 0})
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    checklist_id = str(uuid.uuid4())
+    now = get_malaysia_time()
+
+    checklist_doc = {
+        "id": checklist_id,
+        "session_id": checklist_data.session_id,
+        "participant_id": checklist_data.participant_id,
+        "participant_name": participant.get("full_name", ""),
+        "trainer_id": current_user.id,
+        "trainer_name": current_user.full_name,
+        "interval": "trainer_inspection",
+        "checklist_items": [item.model_dump() for item in checklist_data.items],
+        "chief_trainer_comments": checklist_data.chief_trainer_comments,
+        "status": "completed",
+        "submitted_at": now.isoformat(),
+        "created_at": now.isoformat()
+    }
+
+    await db.vehicle_checklists.insert_one(checklist_doc)
+
+    access = await get_or_create_participant_access(
+        checklist_data.participant_id,
+        checklist_data.session_id,
+        session.get("program_id")
+    )
+    if access:
+        await db.participant_access.update_one(
+            {"id": access["id"]},
+            {"$set": {"trainer_checklist_submitted": True, "updated_at": now.isoformat()}}
+        )
+
+    return {"message": "Trainer checklist submitted successfully", "checklist_id": checklist_id}
+
+
+@router.get("/trainer-checklist/{session_id}/assigned-participants")
+async def get_trainer_assigned_participants(session_id: str, current_user: User = Depends(get_current_user)):
+    """Get participants assigned to the current trainer for a session"""
+    if current_user.role not in ["trainer", "admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only trainers can view their assigned participants")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    trainer_assignments = session.get("trainer_assignments", [])
+    trainer_assignment = None
+    for ta in trainer_assignments:
+        if ta.get("trainer_id") == current_user.id:
+            trainer_assignment = ta
+            break
+
+    if not trainer_assignment and current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="You are not assigned to this session")
+
+    if trainer_assignment and trainer_assignment.get("participant_ids"):
+        participant_ids = trainer_assignment.get("participant_ids", [])
+    else:
+        participant_ids = session.get("participant_ids", [])
+
+    participants = []
+    for pid in participant_ids:
+        p = await db.users.find_one({"id": pid}, {"_id": 0})
+        if p:
+            existing_checklist = await db.vehicle_checklists.find_one({
+                "session_id": session_id,
+                "participant_id": pid,
+                "trainer_id": current_user.id,
+                "interval": "trainer_inspection"
+            }, {"_id": 0})
+
+            participants.append({
+                "id": p["id"],
+                "full_name": p.get("full_name", ""),
+                "id_number": p.get("id_number", ""),
+                "checklist_submitted": existing_checklist is not None,
+                "checklist_id": existing_checklist.get("id") if existing_checklist else None
+            })
+
+    return {
+        "session_id": session_id,
+        "trainer_role": trainer_assignment.get("role") if trainer_assignment else "admin",
+        "participants": participants
+    }
