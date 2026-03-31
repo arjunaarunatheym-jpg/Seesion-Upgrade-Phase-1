@@ -9,6 +9,14 @@ Comprehensive training management platform for MDDRC. Manages training sessions,
 
 ## Current Status (Mar 2026)
 
+### Financial Reporting Overhaul — COMPLETE (Mar 28, 2026)
+- **Unified P&L**: Journal-based "P&L Statement" is now default tab. Old "CEO P&L" renamed to "P&L by Programme" (secondary)
+- **AR Aging Report**: New "Receivables Aging" tab with 3 views (Summary bar chart, By Invoice with tables, By Company matrix), CSV export, 90+ day overdue alert
+- **Yearly Segregation**: Verified all reports correctly filter by year parameter (2025 vs 2026)
+- **YoY Comparison**: Confirmed working — compares two years side by side with variance % and trend indicators
+- Backend: New GET /api/finance/ar-aging endpoint
+- Frontend: New ARAgingTab.jsx, reordered ProfitLossLedger tabs
+
 ### Company Combobox for Session Invoices — COMPLETE (Mar 28, 2026)
 - **Searchable + auto-create**: Replaced static Select dropdown with CompanyCombobox in "Additional Invoices (Other Companies)" section of Session Costing
 - Type to search existing companies, or type a new name and click "Create [name]" to auto-create company record

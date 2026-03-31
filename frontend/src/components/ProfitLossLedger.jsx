@@ -18,6 +18,7 @@ import {
 import { CEOPnLTab } from './ledger/CEOPnLTab';
 import { YoYComparisonTab } from './ledger/YoYComparisonTab';
 import { AuditorPnLTab } from './ledger/AuditorPnLTab';
+import { ARAgingTab } from './ledger/ARAgingTab';
 import { GeneralLedgerTab } from './ledger/GeneralLedgerTab';
 import { TrainerSubledgerTab } from './ledger/TrainerSubledgerTab';
 import { MarketingSubledgerTab } from './ledger/MarketingSubledgerTab';
@@ -34,7 +35,7 @@ const ProfitLossLedger = () => {
   const [payrollSubledger, setPayrollSubledger] = useState(null);
   const [generalLedger, setGeneralLedger] = useState(null);
   const [companySettings, setCompanySettings] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('auditor-pnl');
   const [expandedRows, setExpandedRows] = useState({});
   
   // Manual entry states
@@ -495,19 +496,23 @@ const ProfitLossLedger = () => {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex flex-wrap gap-1 h-auto w-full justify-start bg-gray-100 p-2 rounded-lg">
-          <TabsTrigger value="overview">Monthly Overview</TabsTrigger>
-          <TabsTrigger value="ceo-pnl" className="text-blue-600">
-            <Briefcase className="w-4 h-4 mr-1" />
-            CEO P&L
-          </TabsTrigger>
           <TabsTrigger value="auditor-pnl" className="text-indigo-600">
             <FileText className="w-4 h-4 mr-1" />
-            Auditor P&L
+            P&L Statement
+          </TabsTrigger>
+          <TabsTrigger value="ceo-pnl" className="text-blue-600">
+            <Briefcase className="w-4 h-4 mr-1" />
+            P&L by Programme
           </TabsTrigger>
           <TabsTrigger value="yoy-comparison" className="text-purple-600">
             <TrendingUp className="w-4 h-4 mr-1" />
             YoY Comparison
           </TabsTrigger>
+          <TabsTrigger value="ar-aging" className="text-rose-600">
+            <Calendar className="w-4 h-4 mr-1" />
+            Receivables Aging
+          </TabsTrigger>
+          <TabsTrigger value="overview">Monthly Overview</TabsTrigger>
           <TabsTrigger value="general-ledger" className="text-emerald-600">
             <BookOpen className="w-4 h-4 mr-1" />
             General Ledger
@@ -614,6 +619,12 @@ const ProfitLossLedger = () => {
             companySettings={companySettings}
           />
         </TabsContent>
+
+        {/* AR Aging Tab */}
+        <TabsContent value="ar-aging">
+          <ARAgingTab formatCurrency={formatCurrency} companySettings={companySettings} />
+        </TabsContent>
+
 
         {/* General Ledger Tab */}
         <TabsContent value="general-ledger">

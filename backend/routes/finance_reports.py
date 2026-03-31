@@ -1576,3 +1576,88 @@ async def get_balance_sheet(
             "difference": round(assets["total"] - total_liabilities_equity, 2),
         },
     }
+
+
+
+@router.get("/ar-aging")
+async def get_ar_aging_report(current_user: User = Depends(get_current_user)):
+    """Accounts Receivable Aging Report — shows unpaid invoices by age bucket."""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    from datetime import datetime, timezone, timedelta
+
+    now = datetime.now(timezone.utc)
+    invoices = await db.invoices.find(
+        {"status": {"$in": ["issued", "approved", "pending", "partial"]}},
+        {"_id": 0}
+    ).to_list(None)
+
+    buckets = {"current": [], "days_31_60": [], "days_61_90": [], "days_91_120": [], "days_120_plus": []}
+    by_company = {}
+
+    for inv in invoices:
+        date_str = inv.get("invoice_date") or inv.get("created_at", "")
+        try:
+            if "T" in str(date_str):
+                inv_date = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
+            else:
+                inv_date = datetime.strptime(str(date_str)[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except Exception:
+            inv_date = now
+
+        days = (now - inv_date).days
+        amount = inv.get("total_amount", 0) or 0
+        company = inv.get("company_name", "Unknown")
+
+        item = {
+            "id": inv.get("id"),
+            "invoice_number": inv.get("invoice_number", ""),
+            "company": company,
+            "amount": amount,
+            "date": str(date_str)[:10] if date_str else "",
+            "days_outstanding": days,
+            "status": inv.get("status", ""),
+        }
+
+        if days <= 30:
+            buckets["current"].append(item)
+        elif days <= 60:
+            buckets["days_31_60"].append(item)
+        elif days <= 90:
+            buckets["days_61_90"].append(item)
+        elif days <= 120:
+            buckets["days_91_120"].append(item)
+        else:
+            buckets["days_120_plus"].append(item)
+
+        if company not in by_company:
+            by_company[company] = {"current": 0, "days_31_60": 0, "days_61_90": 0, "days_91_120": 0, "days_120_plus": 0, "total": 0}
+        if days <= 30:
+            by_company[company]["current"] += amount
+        elif days <= 60:
+            by_company[company]["days_31_60"] += amount
+        elif days <= 90:
+            by_company[company]["days_61_90"] += amount
+        elif days <= 120:
+            by_company[company]["days_91_120"] += amount
+        else:
+            by_company[company]["days_120_plus"] += amount
+        by_company[company]["total"] += amount
+
+    summary = {
+        "current": sum(i["amount"] for i in buckets["current"]),
+        "days_31_60": sum(i["amount"] for i in buckets["days_31_60"]),
+        "days_61_90": sum(i["amount"] for i in buckets["days_61_90"]),
+        "days_91_120": sum(i["amount"] for i in buckets["days_91_120"]),
+        "days_120_plus": sum(i["amount"] for i in buckets["days_120_plus"]),
+    }
+    summary["total"] = sum(summary.values())
+
+    return {
+        "as_of": now.isoformat(),
+        "summary": summary,
+        "buckets": buckets,
+        "by_company": by_company,
+        "total_invoices": len(invoices),
+    }
