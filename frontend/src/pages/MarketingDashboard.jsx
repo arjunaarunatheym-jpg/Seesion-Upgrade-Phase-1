@@ -116,6 +116,23 @@ const MarketingDashboard = ({ user, onLogout }) => {
     loadData();
   }, []);
 
+  // Poll quotations every 10 seconds for real-time status updates
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const [quotationsRes, statsRes] = await Promise.all([
+          axiosInstance.get('/marketing/quotations'),
+          axiosInstance.get('/marketing/stats').catch(() => null),
+        ]);
+        setQuotations(quotationsRes.data || []);
+        if (statsRes?.data) setStats(statsRes.data);
+      } catch (err) {
+        // Silent fail - don't disrupt user with polling errors
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   const loadData = async () => {
     setLoading(true);
     try {
