@@ -15,6 +15,9 @@ import ClaimFormPrint from './ClaimFormPrint';
 import { CompanyCombobox } from './CompanyCombobox';
 
 const SessionCosting = ({ session, onClose, onUpdate }) => {
+  // Format numbers to 2 decimal places with thousands separator
+  const fmtRM = (val) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [costing, setCosting] = useState(null);
@@ -313,7 +316,7 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
         base_amount: invoiceAmount
       });
       
-      toast.success(`Credit Note created: ${response.data.cn_number} (RM ${response.data.amount.toLocaleString()})`);
+      toast.success(`Credit Note created: ${response.data.cn_number} (RM ${fmtRM(response.data.amount)})`);
       await loadData(); // Reload to show the new CN
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create credit note');
@@ -451,11 +454,21 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
     const finalProfit = profitBeforeMarketing - marketingAmount;
     const profitPct = grossRevenue > 0 ? (finalProfit / grossRevenue * 100) : 0;
     
+    // Round all monetary values to 2 decimal places
     return { 
-      invoiceTotal, taxAmount, taxRate, grossRevenue, 
-      trainerTotal, coordTotal, expensesTotal, 
-      profitBeforeMarketing, marketingAmount, finalProfit, profitPct,
-      primaryInvoiceTotal, additionalTotal
+      invoiceTotal: Math.round(invoiceTotal * 100) / 100,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+      taxRate: Math.round(taxRate * 10) / 10,
+      grossRevenue: Math.round(grossRevenue * 100) / 100,
+      trainerTotal: Math.round(trainerTotal * 100) / 100,
+      coordTotal: Math.round(coordTotal * 100) / 100,
+      expensesTotal: Math.round(expensesTotal * 100) / 100,
+      profitBeforeMarketing: Math.round(profitBeforeMarketing * 100) / 100,
+      marketingAmount: Math.round(marketingAmount * 100) / 100,
+      finalProfit: Math.round(finalProfit * 100) / 100,
+      profitPct: Math.round(profitPct * 10) / 10,
+      primaryInvoiceTotal: Math.round(primaryInvoiceTotal * 100) / 100,
+      additionalTotal: Math.round(additionalTotal * 100) / 100
     };
   };
 
@@ -555,7 +568,7 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
                       placeholder="e.g. 400"
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Total: RM {((costing?.pax || 0) * (parseFloat(invoiceData.per_pax_rate) || 0)).toLocaleString()}
+                      Total: RM {fmtRM((costing?.pax || 0) * (parseFloat(invoiceData.per_pax_rate) || 0))}
                     </p>
                   </div>
                 )}
@@ -676,25 +689,25 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
                 <div className="text-sm text-blue-600 bg-blue-50 p-3 rounded mt-4">
                   <div className="flex justify-between">
                     <span>Primary Invoice:</span>
-                    <span>RM {profit.primaryInvoiceTotal.toLocaleString()}</span>
+                    <span>RM {fmtRM(profit.primaryInvoiceTotal)}</span>
                   </div>
                   {profit.additionalTotal > 0 && (
                     <div className="flex justify-between">
                       <span>Additional Invoices ({additionalInvoices.length}):</span>
-                      <span>RM {profit.additionalTotal.toLocaleString()}</span>
+                      <span>RM {fmtRM(profit.additionalTotal)}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold border-t mt-2 pt-2">
                     <span>Total Session Revenue:</span>
-                    <span>RM {profit.invoiceTotal.toLocaleString()}</span>
+                    <span>RM {fmtRM(profit.invoiceTotal)}</span>
                   </div>
                   <div className="flex justify-between text-gray-600 text-xs mt-1">
                     <span>Less Tax ({profit.taxRate.toFixed(1)}%):</span>
-                    <span>RM {profit.taxAmount.toLocaleString()}</span>
+                    <span>RM {fmtRM(profit.taxAmount)}</span>
                   </div>
                   <div className="flex justify-between font-semibold">
                     <span>Gross Revenue:</span>
-                    <span>RM {profit.grossRevenue.toLocaleString()}</span>
+                    <span>RM {fmtRM(profit.grossRevenue)}</span>
                   </div>
                 </div>
               )}
@@ -720,7 +733,7 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
                         <p className="text-sm text-gray-600">{cn.reason}</p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-red-600">- RM {cn.amount?.toLocaleString()}</p>
+                        <p className="font-bold text-red-600">- RM {fmtRM(cn.amount)}</p>
                         <Badge className={cn.status === 'approved' ? 'bg-green-500' : 'bg-yellow-500'}>
                           {cn.status}
                         </Badge>
@@ -814,7 +827,7 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
                   </div>
                   <div className="pt-6">
                     <Badge className="bg-pink-100 text-pink-800">
-                      Total: RM {((parseInt(coordinatorFee.num_days) || 0) * (parseFloat(coordinatorFee.daily_rate) || 0)).toLocaleString()}
+                      Total: RM {fmtRM((parseInt(coordinatorFee.num_days) || 0) * (parseFloat(coordinatorFee.daily_rate) || 0))}
                     </Badge>
                   </div>
                 </div>
@@ -1023,36 +1036,36 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="p-3 bg-white rounded-lg">
                   <p className="text-xs text-gray-500">Invoice Total</p>
-                  <p className="text-lg font-bold">RM {profit.invoiceTotal.toLocaleString()}</p>
+                  <p className="text-lg font-bold">RM {fmtRM(profit.invoiceTotal)}</p>
                 </div>
                 <div className="p-3 bg-white rounded-lg">
                   <p className="text-xs text-gray-500">Less Tax ({profit.taxRate}%)</p>
-                  <p className="text-lg font-bold text-red-600">- RM {profit.taxAmount.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-red-600">- RM {fmtRM(profit.taxAmount)}</p>
                 </div>
                 <div className="p-3 bg-white rounded-lg">
                   <p className="text-xs text-gray-500">Gross Revenue</p>
-                  <p className="text-lg font-bold text-blue-600">RM {profit.grossRevenue.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-blue-600">RM {fmtRM(profit.grossRevenue)}</p>
                 </div>
                 <div className="p-3 bg-white rounded-lg">
                   <p className="text-xs text-gray-500">Trainer Fees</p>
-                  <p className="text-lg font-bold text-purple-600">- RM {profit.trainerTotal.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-purple-600">- RM {fmtRM(profit.trainerTotal)}</p>
                 </div>
                 <div className="p-3 bg-white rounded-lg">
                   <p className="text-xs text-gray-500">Coordinator Fee</p>
-                  <p className="text-lg font-bold text-pink-600">- RM {profit.coordTotal.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-pink-600">- RM {fmtRM(profit.coordTotal)}</p>
                 </div>
                 <div className="p-3 bg-white rounded-lg">
                   <p className="text-xs text-gray-500">Expenses</p>
-                  <p className="text-lg font-bold text-orange-600">- RM {profit.expensesTotal.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-orange-600">- RM {fmtRM(profit.expensesTotal)}</p>
                 </div>
                 <div className="p-3 bg-white rounded-lg">
                   <p className="text-xs text-gray-500">Marketing ({marketing.commission_type === 'percentage' ? `${marketing.commission_rate || 0}%` : 'Fixed'})</p>
-                  <p className="text-lg font-bold text-green-600">- RM {profit.marketingAmount.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-green-600">- RM {fmtRM(profit.marketingAmount)}</p>
                 </div>
                 <div className="p-3 bg-green-100 rounded-lg border-2 border-green-400">
                   <p className="text-xs text-green-700 font-medium">NET PROFIT</p>
                   <p className={`text-2xl font-bold ${profit.finalProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                    RM {profit.finalProfit.toLocaleString()}
+                    RM {fmtRM(profit.finalProfit)}
                   </p>
                   <p className="text-xs text-green-600">{profit.profitPct.toFixed(1)}% margin</p>
                 </div>
