@@ -4,6 +4,26 @@
  */
 
 export const printInvoice = async (invoice, companySettings, logoUrl) => {
+  // Auto-heal: if line_items don't match total_amount, recalculate before rendering
+  const totalAmount = invoice.total_amount || 0;
+  const taxAmount = invoice.tax_amount || 0;
+  const expectedSubtotal = totalAmount - taxAmount;
+  const lineItemsTotal = (invoice.line_items || []).reduce((sum, i) => sum + (i.amount || 0), 0);
+  
+  if (invoice.line_items?.length && Math.abs(lineItemsTotal - expectedSubtotal) > 0.01) {
+    if (invoice.line_items.length === 1) {
+      invoice.line_items[0].amount = expectedSubtotal;
+      invoice.line_items[0].unit_price = expectedSubtotal / (invoice.line_items[0].quantity || 1);
+    } else {
+      const scale = lineItemsTotal > 0 ? expectedSubtotal / lineItemsTotal : 1;
+      invoice.line_items.forEach(item => {
+        item.amount = Math.round((item.amount || 0) * scale * 100) / 100;
+        item.unit_price = Math.round((item.unit_price || 0) * scale * 100) / 100;
+      });
+    }
+    invoice.subtotal = expectedSubtotal;
+  }
+
   const settings = companySettings || {};
   
   // Styling variables from settings
