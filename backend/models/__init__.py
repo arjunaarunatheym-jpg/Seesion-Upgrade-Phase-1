@@ -187,6 +187,8 @@ class Session(BaseModel):
     invoice_status: Optional[str] = None
     company_name: Optional[str] = None
     program_name: Optional[str] = None
+    cert_show_validity: bool = False
+    cert_validity_months: int = 24
 
 class ParticipantData(BaseModel):
     email: Optional[str] = ""
@@ -220,6 +222,8 @@ class SessionCreate(BaseModel):
     commission_type: Optional[str] = None
     commission_rate: Optional[float] = None
     commission_fixed_amount: Optional[float] = None
+    cert_show_validity: bool = False
+    cert_validity_months: int = 24
 
 
 # ==================== PARTICIPANT ACCESS MODELS ====================

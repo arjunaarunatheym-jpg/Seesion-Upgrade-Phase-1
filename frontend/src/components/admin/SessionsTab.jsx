@@ -34,6 +34,8 @@ const initialSessionForm = {
   new_marketing_name: "",
   new_marketing_id: "",
   reuse_invoice_number: "",  // For reusing deleted invoice numbers
+  cert_show_validity: false,
+  cert_validity_months: 24,
 };
 
 const initialNewParticipant = {
@@ -297,6 +299,8 @@ const SessionsTab = ({
         new_marketing_id: sessionForm.new_marketing_id || null,
         // Reuse deleted invoice number
         reuse_invoice_number: sessionForm.reuse_invoice_number || null,
+        cert_show_validity: sessionForm.cert_show_validity || false,
+        cert_validity_months: sessionForm.cert_validity_months ? parseInt(sessionForm.cert_validity_months) : 24,
       });
       
       const participantCount = response.data.participant_count || 0;
@@ -349,6 +353,8 @@ const SessionsTab = ({
         commission_type: editingSession.commission_type || null,
         commission_rate: editingSession.commission_rate ? parseFloat(editingSession.commission_rate) : null,
         commission_fixed_amount: editingSession.commission_fixed_amount ? parseFloat(editingSession.commission_fixed_amount) : null,
+        cert_show_validity: editingSession.cert_show_validity || false,
+        cert_validity_months: editingSession.cert_validity_months ? parseInt(editingSession.cert_validity_months) : 24,
       });
       
       // Also update the lead if company_name changed
@@ -470,6 +476,41 @@ const SessionsTab = ({
                     </div>
                   </div>
                   
+                  {/* Certificate Validity Settings */}
+                  <div className="border-t pt-4 mt-2">
+                    <p className="text-xs text-gray-500 mb-3 font-semibold">Certificate Validity Settings</p>
+                    <div className="flex items-center gap-3 mb-3">
+                      <input
+                        type="checkbox"
+                        id="cert-show-validity"
+                        data-testid="cert-show-validity-toggle"
+                        checked={sessionForm.cert_show_validity}
+                        onChange={(e) => setSessionForm({ ...sessionForm, cert_show_validity: e.target.checked })}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <Label htmlFor="cert-show-validity" className="text-sm cursor-pointer">
+                        Show validity period on certificate
+                      </Label>
+                    </div>
+                    {sessionForm.cert_show_validity && (
+                      <div>
+                        <Label htmlFor="cert-validity-months">Validity Duration</Label>
+                        <select
+                          id="cert-validity-months"
+                          data-testid="cert-validity-months-select"
+                          value={sessionForm.cert_validity_months}
+                          onChange={(e) => setSessionForm({ ...sessionForm, cert_validity_months: parseInt(e.target.value) })}
+                          className="w-full mt-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+                        >
+                          <option value={12}>1 Year</option>
+                          <option value={18}>18 Months</option>
+                          <option value={24}>2 Years</option>
+                          <option value={36}>3 Years</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Reuse Deleted Invoice Number Option */}
                   {deletedInvoiceNumbers.length > 0 && (
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
@@ -1142,6 +1183,40 @@ const SessionsTab = ({
                 </div>
               </div>
               
+              {/* Certificate Validity Settings */}
+              <div className="border-t pt-4 mt-2">
+                <p className="text-xs text-gray-500 mb-3 font-semibold">Certificate Validity Settings</p>
+                <div className="flex items-center gap-3 mb-3">
+                  <input
+                    type="checkbox"
+                    id="edit-cert-show-validity"
+                    data-testid="edit-cert-show-validity-toggle"
+                    checked={editingSession.cert_show_validity || false}
+                    onChange={(e) => setEditingSession({ ...editingSession, cert_show_validity: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <Label htmlFor="edit-cert-show-validity" className="text-sm cursor-pointer">
+                    Show validity period on certificate
+                  </Label>
+                </div>
+                {editingSession.cert_show_validity && (
+                  <div>
+                    <Label>Validity Duration</Label>
+                    <select
+                      data-testid="edit-cert-validity-months-select"
+                      value={editingSession.cert_validity_months || 24}
+                      onChange={(e) => setEditingSession({ ...editingSession, cert_validity_months: parseInt(e.target.value) })}
+                      className="w-full mt-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    >
+                      <option value={12}>1 Year</option>
+                      <option value={18}>18 Months</option>
+                      <option value={24}>2 Years</option>
+                      <option value={36}>3 Years</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
               {/* Coordinator Selection */}
               <div>
                 <Label>Coordinator</Label>

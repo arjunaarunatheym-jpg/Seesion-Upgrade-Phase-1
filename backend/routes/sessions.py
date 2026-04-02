@@ -152,7 +152,9 @@ async def create_session(session_data: SessionCreate, current_user = Depends(get
         supervisor_ids=supervisor_ids,
         participant_ids=participant_ids,
         trainer_assignments=session_data.trainer_assignments,
-        coordinator_id=session_data.coordinator_id
+        coordinator_id=session_data.coordinator_id,
+        cert_show_validity=session_data.cert_show_validity,
+        cert_validity_months=session_data.cert_validity_months,
     )
     
     doc = session_obj.model_dump()

@@ -25,6 +25,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ProtectedRoute from "./components/ProtectedRoute";
+import CertificateVerify from "./pages/CertificateVerify";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
@@ -276,6 +277,8 @@ function App() {
               )
             }
           />
+          <Route path="/verify" element={<CertificateVerify />} />
+          <Route path="/verify/:certNumber" element={<CertificateVerify />} />
           </Routes>
         </BrowserRouter>
         <Toaster position="top-right" />

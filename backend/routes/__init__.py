@@ -40,8 +40,9 @@ from .finance_session import router as finance_session_router
 from .reports_legacy import router as reports_legacy_router
 from .vehicle_details import router as vehicle_details_router
 from .admin_data_management import router as admin_data_management_router
+from .certificate_verify import router as certificate_verify_router
 
-# Create combined router for easy registration
+# Create combined router
 def get_all_routers():
     """Return list of all routers with their prefixes already set"""
     return [
@@ -80,6 +81,7 @@ def get_all_routers():
         reports_legacy_router,  # /reports/* (legacy)
         vehicle_details_router, # /vehicle-details/*
         admin_data_management_router, # /admin-data/*
+        certificate_verify_router, # /verify/* (public cert verification)
     ]
 
 __all__ = [
@@ -119,5 +121,6 @@ __all__ = [
     'reports_legacy_router',
     'vehicle_details_router',
     'admin_data_management_router',
+    'certificate_verify_router',
     'get_all_routers',
 ]

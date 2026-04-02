@@ -322,6 +322,7 @@ from routes import (
     reports_legacy_router,
     vehicle_details_router,
     admin_data_management_router,
+    certificate_verify_router,
 )
 
 # Import accounting auto-posting functions (Phase 2)
@@ -371,6 +372,7 @@ api_router.include_router(finance_session_router)
 api_router.include_router(reports_legacy_router)
 api_router.include_router(vehicle_details_router)
 api_router.include_router(admin_data_management_router)
+api_router.include_router(certificate_verify_router)
 # ==================== END MODULAR ROUTERS ====================
 
 # Static files directory

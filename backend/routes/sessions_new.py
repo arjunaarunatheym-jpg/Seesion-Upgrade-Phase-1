@@ -146,6 +146,62 @@ async def get_sessions(
     return sessions
 
 
+@router.post("")
+async def create_session(session_data: SessionCreate, current_user: User = Depends(get_current_user)):
+    """Create a new training session"""
+    if current_user.role not in ["admin", "assistant_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins and assistant admins can create sessions")
+
+    # Create or link participants
+    participant_ids = []
+    for p_data in session_data.participants:
+        result = await find_or_create_user(
+            p_data.model_dump(),
+            "participant",
+            session_data.company_id
+        )
+        participant_ids.append(result["user_id"])
+
+    # Add existing participants
+    participant_ids.extend(session_data.participant_ids)
+
+    # Create or link supervisors
+    supervisor_ids = []
+    for s_data in session_data.supervisors:
+        result = await find_or_create_user(
+            s_data.model_dump(),
+            "supervisor",
+            session_data.company_id
+        )
+        supervisor_ids.append(result["user_id"])
+
+    supervisor_ids.extend(session_data.supervisor_ids)
+
+    session_obj = Session(
+        name=session_data.name,
+        program_id=session_data.program_id,
+        company_id=session_data.company_id,
+        location=session_data.location,
+        start_date=session_data.start_date,
+        end_date=session_data.end_date,
+        supervisor_ids=supervisor_ids,
+        participant_ids=participant_ids,
+        trainer_assignments=session_data.trainer_assignments,
+        coordinator_id=session_data.coordinator_id,
+        cert_show_validity=session_data.cert_show_validity,
+        cert_validity_months=session_data.cert_validity_months,
+    )
+
+    doc = session_obj.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.sessions.insert_one(doc)
+
+    # Create participant access records
+    for participant_id in participant_ids:
+        await get_or_create_participant_access(participant_id, session_obj.id)
+
+    return {"message": "Session created", "session_id": session_obj.id}
+
 
 @router.get("/calendar")
 async def get_calendar_sessions(current_user: User = Depends(get_current_user)):
