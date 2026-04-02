@@ -25,7 +25,7 @@ const ProgramsTab = ({
   onRefresh,
   onDeleteClick 
 }) => {
-  const [programForm, setProgramForm] = useState({ name: "", description: "", pass_percentage: 70 });
+  const [programForm, setProgramForm] = useState({ name: "", description: "", pass_percentage: 70, certificate_title: "", certificate_subtitle: "" });
   const [programDialogOpen, setProgramDialogOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [editingProgram, setEditingProgram] = useState(null);
@@ -36,7 +36,7 @@ const ProgramsTab = ({
     try {
       await axiosInstance.post("/programs", programForm);
       toast.success("Program created successfully");
-      setProgramForm({ name: "", description: "", pass_percentage: 70 });
+      setProgramForm({ name: "", description: "", pass_percentage: 70, certificate_title: "", certificate_subtitle: "" });
       setProgramDialogOpen(false);
       onRefresh();
     } catch (error) {
@@ -55,6 +55,8 @@ const ProgramsTab = ({
         name: editingProgram.name,
         description: editingProgram.description,
         pass_percentage: editingProgram.pass_percentage,
+        certificate_title: editingProgram.certificate_title || null,
+        certificate_subtitle: editingProgram.certificate_subtitle || null,
       });
       toast.success("Program updated successfully");
       setEditProgramDialogOpen(false);
@@ -123,6 +125,30 @@ const ProgramsTab = ({
                       required
                     />
                   </div>
+                  <div className="border-t pt-4 mt-2">
+                    <p className="text-xs text-gray-500 mb-3">Certificate Display Settings (used on auto-generated certificates)</p>
+                    <div>
+                      <Label htmlFor="cert-title">Certificate Title</Label>
+                      <Input
+                        id="cert-title"
+                        data-testid="cert-title-input"
+                        placeholder="e.g., DEFENSIVE DRIVING COURSE"
+                        value={programForm.certificate_title}
+                        onChange={(e) => setProgramForm({ ...programForm, certificate_title: e.target.value })}
+                      />
+                      <p className="text-xs text-gray-400 mt-1">If blank, programme name will be used</p>
+                    </div>
+                    <div className="mt-2">
+                      <Label htmlFor="cert-subtitle">Certificate Subtitle</Label>
+                      <Input
+                        id="cert-subtitle"
+                        data-testid="cert-subtitle-input"
+                        placeholder="e.g., > With Theory and Practical Training >"
+                        value={programForm.certificate_subtitle}
+                        onChange={(e) => setProgramForm({ ...programForm, certificate_subtitle: e.target.value })}
+                      />
+                    </div>
+                  </div>
                   <Button data-testid="submit-program-button" type="submit" className="w-full">
                     Create Program
                   </Button>
@@ -162,6 +188,11 @@ const ProgramsTab = ({
                             <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
                               Pass Mark: {program.pass_percentage}%
                             </span>
+                            {program.certificate_title && (
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                Cert: {program.certificate_title}
+                              </span>
+                            )}
                             <span className="text-xs text-gray-500">
                               Created: {new Date(program.created_at).toLocaleDateString()}
                             </span>
@@ -323,6 +354,30 @@ const ProgramsTab = ({
                   onChange={(e) => setEditingProgram({ ...editingProgram, pass_percentage: parseFloat(e.target.value) })}
                   required
                 />
+              </div>
+              <div className="border-t pt-4 mt-2">
+                <p className="text-xs text-gray-500 mb-3">Certificate Display Settings</p>
+                <div>
+                  <Label htmlFor="edit-cert-title">Certificate Title</Label>
+                  <Input
+                    id="edit-cert-title"
+                    data-testid="edit-cert-title-input"
+                    placeholder="e.g., DEFENSIVE DRIVING COURSE"
+                    value={editingProgram.certificate_title || ""}
+                    onChange={(e) => setEditingProgram({ ...editingProgram, certificate_title: e.target.value })}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">If blank, programme name will be used</p>
+                </div>
+                <div className="mt-2">
+                  <Label htmlFor="edit-cert-subtitle">Certificate Subtitle</Label>
+                  <Input
+                    id="edit-cert-subtitle"
+                    data-testid="edit-cert-subtitle-input"
+                    placeholder="e.g., > With Theory and Practical Training >"
+                    value={editingProgram.certificate_subtitle || ""}
+                    onChange={(e) => setEditingProgram({ ...editingProgram, certificate_subtitle: e.target.value })}
+                  />
+                </div>
               </div>
               <Button onClick={handleUpdateProgram} className="w-full">
                 Update Program
