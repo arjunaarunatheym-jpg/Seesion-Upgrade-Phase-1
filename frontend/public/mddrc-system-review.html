@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MDDRC Training Management System - Comprehensive Review Report</title>
+<style>
+  @page { size: A4; margin: 20mm; }
+  @media print { 
+    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .page-break { page-break-before: always; }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; line-height: 1.6; color: #1a1a2e; padding: 30px; max-width: 210mm; margin: 0 auto; }
+  
+  .cover { text-align: center; padding: 80px 0 40px; border-bottom: 4px solid #1a365d; margin-bottom: 30px; }
+  .cover h1 { font-size: 28px; color: #1a365d; margin-bottom: 8px; letter-spacing: 1px; }
+  .cover h2 { font-size: 16px; color: #4472C4; font-weight: 400; margin-bottom: 30px; }
+  .cover .meta { font-size: 11px; color: #666; }
+  .cover .badge { display: inline-block; background: #1a365d; color: white; padding: 6px 18px; border-radius: 20px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-top: 20px; }
+  
+  .toc { margin-bottom: 30px; }
+  .toc h3 { color: #1a365d; font-size: 14px; margin-bottom: 12px; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; }
+  .toc ul { list-style: none; }
+  .toc li { padding: 4px 0; border-bottom: 1px dotted #ddd; }
+  .toc li a { color: #4472C4; text-decoration: none; }
+  
+  h2 { font-size: 18px; color: #1a365d; margin: 30px 0 12px; padding: 10px 15px; background: linear-gradient(135deg, #1a365d, #2d5a8e); color: white; border-radius: 4px; }
+  h3 { font-size: 14px; color: #1a365d; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #4472C4; }
+  h4 { font-size: 12px; color: #2d5a8e; margin: 14px 0 6px; }
+  
+  p { margin-bottom: 8px; text-align: justify; }
+  
+  .section { margin-bottom: 20px; }
+  
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 15px 0; }
+  .stat-box { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; text-align: center; }
+  .stat-box .number { font-size: 24px; font-weight: bold; color: #1a365d; }
+  .stat-box .label { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+  
+  .rating-bar { display: flex; align-items: center; margin: 6px 0; }
+  .rating-bar .label { width: 160px; font-size: 10px; font-weight: 600; }
+  .rating-bar .bar-bg { flex: 1; height: 14px; background: #e2e8f0; border-radius: 7px; overflow: hidden; margin: 0 8px; }
+  .rating-bar .bar-fill { height: 100%; border-radius: 7px; }
+  .rating-bar .score { font-size: 10px; font-weight: bold; width: 40px; text-align: right; }
+  
+  .green { background: #48bb78; }
+  .yellow { background: #ecc94b; }
+  .orange { background: #ed8936; }
+  .red { background: #fc8181; }
+  
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10px; }
+  th { background: #4472C4; color: white; padding: 8px 10px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 7px 10px; border-bottom: 1px solid #e2e8f0; }
+  tr:nth-child(even) { background: #f7fafc; }
+  
+  .priority-tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+  .p0 { background: #fed7d7; color: #c53030; }
+  .p1 { background: #feebc8; color: #c05621; }
+  .p2 { background: #fefcbf; color: #975a16; }
+  .p3 { background: #c6f6d5; color: #276749; }
+  
+  .verdict { padding: 15px; border-radius: 6px; margin: 15px 0; }
+  .verdict-good { background: #f0fff4; border-left: 4px solid #48bb78; }
+  .verdict-warn { background: #fffaf0; border-left: 4px solid #ed8936; }
+  .verdict-bad { background: #fff5f5; border-left: 4px solid #fc8181; }
+  
+  .checklist { list-style: none; margin: 10px 0; }
+  .checklist li { padding: 4px 0; padding-left: 22px; position: relative; }
+  .checklist li::before { position: absolute; left: 0; font-size: 12px; }
+  .checklist .done::before { content: "✓"; color: #48bb78; font-weight: bold; }
+  .checklist .missing::before { content: "✗"; color: #fc8181; font-weight: bold; }
+  .checklist .partial::before { content: "~"; color: #ecc94b; font-weight: bold; }
+  
+  .quote { font-style: italic; color: #4a5568; padding: 10px 15px; border-left: 3px solid #4472C4; background: #f7fafc; margin: 12px 0; }
+  
+  .footer { margin-top: 40px; text-align: center; font-size: 9px; color: #999; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+  
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+  
+  .highlight-box { background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 6px; padding: 12px; margin: 10px 0; }
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <img src="" alt="" style="width: 80px; height: auto; margin-bottom: 15px;" onerror="this.style.display='none'">
+  <h1>MDDRC Training Management System</h1>
+  <h2>Comprehensive System Review &amp; Improvement Roadmap</h2>
+  <p class="meta">Prepared: 2 April 2026 | Version: 4.2 | Confidential</p>
+  <div class="badge">Three-Lens Analysis: Advisor | Buyer | Developer</div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc">
+  <h3>Table of Contents</h3>
+  <ul>
+    <li>1. Executive Summary &amp; System Snapshot</li>
+    <li>2. The Advisor's Perspective &mdash; Strategic Recommendations</li>
+    <li>3. The Buyer's Perspective &mdash; What Impresses &amp; What's Missing</li>
+    <li>4. The Developer's Critique &mdash; Technical Gaps &amp; Architecture</li>
+    <li>5. Feature Completeness Scorecard</li>
+    <li>6. Prioritised Improvement Roadmap</li>
+    <li>7. Competitive Gap Analysis</li>
+    <li>8. Revenue &amp; Monetisation Opportunities</li>
+    <li>9. Summary &amp; Final Verdict</li>
+  </ul>
+</div>
+
+<!-- 1. EXECUTIVE SUMMARY -->
+<h2>1. Executive Summary &amp; System Snapshot</h2>
+<div class="section">
+  <p>The MDDRC Training Management System is a comprehensive, full-stack platform managing the entire lifecycle of defensive driving &amp; riding training &mdash; from marketing leads to invoicing, payroll, certificates, and post-training evaluations. It serves <strong>7 distinct user roles</strong> across <strong>10 dedicated dashboards</strong>.</p>
+  
+  <div class="stat-grid">
+    <div class="stat-box"><div class="number">491</div><div class="label">API Endpoints</div></div>
+    <div class="stat-box"><div class="number">119</div><div class="label">UI Components</div></div>
+    <div class="stat-box"><div class="number">38</div><div class="label">Backend Modules</div></div>
+    <div class="stat-box"><div class="number">10</div><div class="label">Role Dashboards</div></div>
+  </div>
+  
+  <div class="stat-grid">
+    <div class="stat-box"><div class="number">7</div><div class="label">User Roles</div></div>
+    <div class="stat-box"><div class="number">25K+</div><div class="label">Lines of Backend Code</div></div>
+    <div class="stat-box"><div class="number">23</div><div class="label">Automated Tests</div></div>
+    <div class="stat-box"><div class="number">PWA</div><div class="label">Mobile Ready</div></div>
+  </div>
+  
+  <h4>Roles Served</h4>
+  <table>
+    <tr><th>Role</th><th>Dashboard</th><th>Key Functions</th></tr>
+    <tr><td>Super Admin</td><td>SuperAdminDashboard</td><td>Full system control, data management, audit trails</td></tr>
+    <tr><td>Admin</td><td>AdminDashboard</td><td>Sessions, programs, companies, staff, reports, settings</td></tr>
+    <tr><td>Finance</td><td>FinanceDashboard</td><td>Invoices, payments, credit notes, payables, petty cash, P&amp;L, GL</td></tr>
+    <tr><td>Coordinator</td><td>CoordinatorDashboard</td><td>Session management, analytics, reporting</td></tr>
+    <tr><td>Marketing</td><td>MarketingDashboard</td><td>Lead pipeline, quotations, client management</td></tr>
+    <tr><td>Trainer</td><td>TrainerDashboard</td><td>Checklists, feedback, earnings</td></tr>
+    <tr><td>Participant</td><td>ParticipantDashboard</td><td>Tests, certificates, training history</td></tr>
+    <tr><td>Supervisor</td><td>SupervisorDashboard</td><td>Session oversight, participant monitoring</td></tr>
+  </table>
+</div>
+
+<!-- 2. ADVISOR'S PERSPECTIVE -->
+<h2 class="page-break">2. The Advisor's Perspective</h2>
+<div class="section">
+  <p class="quote">"You've built an enterprise-grade training management platform. The question now is: how do you turn it from an internal tool into a competitive moat and potential revenue stream?"</p>
+  
+  <h3>2.1 Strategic Strengths</h3>
+  <ul class="checklist">
+    <li class="done"><strong>End-to-End Coverage:</strong> Marketing leads &rarr; Quotations &rarr; Sessions &rarr; Training &rarr; Invoicing &rarr; Payment &rarr; Certificates &rarr; Post-Eval. Very few competitors cover the full chain.</li>
+    <li class="done"><strong>Role-Based Architecture:</strong> 7 distinct roles with dedicated dashboards. This is enterprise-ready design.</li>
+    <li class="done"><strong>Financial Depth:</strong> Double-entry accounting, P&amp;L, General Ledger, AR Aging, YoY Comparison, Payroll &mdash; this goes beyond most training platforms.</li>
+    <li class="done"><strong>Malaysian Market Fit:</strong> RM currency, HRDC compliance, SST awareness, Malaysian timezone &mdash; deeply localised.</li>
+    <li class="done"><strong>PWA Enabled:</strong> Mobile-ready without app store friction.</li>
+  </ul>
+  
+  <h3>2.2 Strategic Gaps to Address</h3>
+  
+  <h4>A. Communication Layer (HIGH IMPACT)</h4>
+  <p>Your system generates events but doesn't communicate them. Every modern SaaS has automated notifications. Without this, admins must manually chase people.</p>
+  <table>
+    <tr><th>Event</th><th>Who Should Be Notified</th><th>Channel</th></tr>
+    <tr><td>Invoice Issued</td><td>Client company (AP/HR dept)</td><td>Email + WhatsApp</td></tr>
+    <tr><td>Payment Received</td><td>Finance team</td><td>Email</td></tr>
+    <tr><td>Session Created</td><td>Coordinator, Trainer, Supervisor</td><td>Email + In-App</td></tr>
+    <tr><td>Certificate Ready</td><td>Participant</td><td>Email + WhatsApp</td></tr>
+    <tr><td>Quotation Approved/Rejected</td><td>Marketing user</td><td>In-App + Email</td></tr>
+    <tr><td>Payment Overdue (30/60/90 days)</td><td>Finance + Admin</td><td>Email + Dashboard Alert</td></tr>
+    <tr><td>Post-Training Eval Due</td><td>Participant</td><td>Email + WhatsApp</td></tr>
+    <tr><td>Contract Expiring</td><td>Admin + Trainer</td><td>Email</td></tr>
+  </table>
+  
+  <h4>B. Client Self-Service Portal (REVENUE MULTIPLIER)</h4>
+  <p>Right now, clients (companies like Sapura) have zero visibility into their training history, invoices, or certificates. A client portal would:</p>
+  <ul>
+    <li>Reduce admin workload by 30-40% (no more "can you resend the invoice?" emails)</li>
+    <li>Enable clients to download invoices, certificates, and training records themselves</li>
+    <li>Create a sticky relationship (clients depend on the portal)</li>
+    <li>Differentiate MDDRC from competitors who still use manual processes</li>
+  </ul>
+  
+  <h4>C. Certificate Verification (TRUST &amp; COMPLIANCE)</h4>
+  <p>A public QR-code-based certificate verification page (e.g., <code>mddrc.online/verify/CERT-12345</code>) would:</p>
+  <ul>
+    <li>Prevent certificate fraud</li>
+    <li>Add credibility for clients presenting to DOSH/JKKP/HRDC</li>
+    <li>Serve as organic marketing (every scan = brand exposure)</li>
+  </ul>
+  
+  <h4>D. Automated Compliance Reporting</h4>
+  <p>If MDDRC could auto-generate HRDC claim forms, DOSH compliance reports, or SST summaries, it would save hours of manual work and reduce errors.</p>
+</div>
+
+<!-- 3. BUYER'S PERSPECTIVE -->
+<h2 class="page-break">3. The Buyer's Perspective</h2>
+<div class="section">
+  <p class="quote">"If I were evaluating this system for purchase or investment, here's what would impress me &mdash; and what would concern me."</p>
+  
+  <h3>3.1 What Impresses</h3>
+  <div class="verdict verdict-good">
+    <strong>Financial Module Depth:</strong> The double-entry accounting with auto-journal posting, AR aging, P&amp;L, General Ledger, marketing/trainer/payroll subledgers, and YoY comparison is enterprise-grade. Most training management systems don't touch this. This alone is a major differentiator.
+  </div>
+  <div class="verdict verdict-good">
+    <strong>Marketing Pipeline:</strong> Lead pipeline management with quotation workflows, client management, and commission tracking built directly into the training platform. This eliminates the need for a separate CRM.
+  </div>
+  <div class="verdict verdict-good">
+    <strong>Operational Completeness:</strong> Attendance, checklists, feedback, test management, vehicle details, indemnity forms, session costing &mdash; covers the actual day-to-day operations, not just the admin layer.
+  </div>
+  <div class="verdict verdict-good">
+    <strong>Data Management &amp; Audit:</strong> SuperAdmin override capabilities with mandatory reason logging, audit trails, and backup/export functionality shows mature thinking about data governance.
+  </div>
+  
+  <h3>3.2 What Concerns Me (as a Buyer)</h3>
+  <div class="verdict verdict-bad">
+    <strong>No Email/Communication Integration:</strong> A system this comprehensive with ZERO automated email/WhatsApp notifications feels incomplete. I'd question whether the team can actually operate efficiently without constant manual follow-ups.
+  </div>
+  <div class="verdict verdict-bad">
+    <strong>No Client-Facing Portal:</strong> If I'm a client company paying RM 50K+ annually for training, I expect a portal to view my invoices, download certificates, and track my employees' training status. Without this, MDDRC looks like an internal tool, not a service platform.
+  </div>
+  <div class="verdict verdict-warn">
+    <strong>Certificate Generation is Manual:</strong> Certificates exist in the system but require manual upload. For a training company doing hundreds of sessions, this doesn't scale. Auto-generation from templates is essential.
+  </div>
+  <div class="verdict verdict-warn">
+    <strong>No Multi-Tenancy:</strong> The system is built for MDDRC only. If the goal is to sell this as SaaS to other training providers, the architecture needs tenant isolation. If it's internal-only, this is fine for now.
+  </div>
+  <div class="verdict verdict-warn">
+    <strong>Test Coverage:</strong> 23 automated tests for 491 endpoints means ~4.7% coverage. For a financial system handling invoices and payroll, this is risky. Critical financial flows should have 80%+ coverage.
+  </div>
+  <div class="verdict verdict-warn">
+    <strong>No 2FA / Advanced Security:</strong> Rate limiting exists, but there's no two-factor authentication. For a system with financial data, payroll, and client information, 2FA should be standard.
+  </div>
+</div>
+
+<!-- 4. DEVELOPER'S CRITIQUE -->
+<h2 class="page-break">4. The Developer's Critique</h2>
+<div class="section">
+  
+  <h3>4.1 Architecture Assessment</h3>
+  <div class="rating-bar">
+    <span class="label">Backend Structure</span>
+    <div class="bar-bg"><div class="bar-fill green" style="width: 90%"></div></div>
+    <span class="score">9/10</span>
+  </div>
+  <div class="rating-bar">
+    <span class="label">Frontend Organisation</span>
+    <div class="bar-bg"><div class="bar-fill green" style="width: 82%"></div></div>
+    <span class="score">8.2/10</span>
+  </div>
+  <div class="rating-bar">
+    <span class="label">Database Design</span>
+    <div class="bar-bg"><div class="bar-fill green" style="width: 78%"></div></div>
+    <span class="score">7.8/10</span>
+  </div>
+  <div class="rating-bar">
+    <span class="label">API Design</span>
+    <div class="bar-bg"><div class="bar-fill green" style="width: 85%"></div></div>
+    <span class="score">8.5/10</span>
+  </div>
+  <div class="rating-bar">
+    <span class="label">Security</span>
+    <div class="bar-bg"><div class="bar-fill yellow" style="width: 60%"></div></div>
+    <span class="score">6/10</span>
+  </div>
+  <div class="rating-bar">
+    <span class="label">Test Coverage</span>
+    <div class="bar-bg"><div class="bar-fill red" style="width: 30%"></div></div>
+    <span class="score">3/10</span>
+  </div>
+  <div class="rating-bar">
+    <span class="label">Error Handling</span>
+    <div class="bar-bg"><div class="bar-fill yellow" style="width: 65%"></div></div>
+    <span class="score">6.5/10</span>
+  </div>
+  <div class="rating-bar">
+    <span class="label">Performance/Scalability</span>
+    <div class="bar-bg"><div class="bar-fill yellow" style="width: 58%"></div></div>
+    <span class="score">5.8/10</span>
+  </div>
+  <div class="rating-bar">
+    <span class="label">Documentation</span>
+    <div class="bar-bg"><div class="bar-fill orange" style="width: 40%"></div></div>
+    <span class="score">4/10</span>
+  </div>
+  
+  <h3>4.2 Technical Improvements Needed</h3>
+  
+  <h4>A. Database Layer</h4>
+  <table>
+    <tr><th>Issue</th><th>Impact</th><th>Recommendation</th></tr>
+    <tr><td>No database indexes defined</td><td>Slow queries as data grows</td><td>Add compound indexes on frequently queried fields (session_id, company_id, status, date ranges)</td></tr>
+    <tr><td>No data validation at DB level</td><td>Inconsistent data possible</td><td>Add MongoDB schema validation for critical collections (invoices, payments)</td></tr>
+    <tr><td>String-based IDs (UUID)</td><td>Larger storage, slower lookups</td><td>Fine for current scale, but consider ObjectId for high-volume collections</td></tr>
+    <tr><td>No database migrations</td><td>Schema changes are manual</td><td>Implement a migration system for schema evolution</td></tr>
+  </table>
+  
+  <h4>B. Security Hardening</h4>
+  <table>
+    <tr><th>Gap</th><th>Risk</th><th>Fix</th></tr>
+    <tr><td>No 2FA</td><td>Account takeover</td><td>Add TOTP-based 2FA for admin/finance roles</td></tr>
+    <tr><td>In-memory rate limiting</td><td>Resets on restart</td><td>Move to Redis-backed rate limiting</td></tr>
+    <tr><td>No password complexity rules</td><td>Weak passwords</td><td>Enforce minimum length, complexity</td></tr>
+    <tr><td>No session invalidation</td><td>Stolen tokens stay valid</td><td>Add token blacklist / refresh token rotation</td></tr>
+    <tr><td>No API request logging</td><td>Can't trace security incidents</td><td>Add structured request logging with user context</td></tr>
+  </table>
+  
+  <h4>C. Frontend Quality</h4>
+  <table>
+    <tr><th>Issue</th><th>Recommendation</th></tr>
+    <tr><td>Large component files (DataManagement.jsx = 1932 lines)</td><td>Break into smaller sub-components (aim for &lt;200 lines each)</td></tr>
+    <tr><td>No loading skeletons</td><td>Add skeleton screens for better perceived performance</td></tr>
+    <tr><td>No offline support despite PWA</td><td>Add service worker caching for critical views</td></tr>
+    <tr><td>No real-time updates (except marketing polling)</td><td>Consider WebSocket for finance/session updates</td></tr>
+    <tr><td>Client-side PDF generation</td><td>Move to server-side PDF for consistency across devices</td></tr>
+  </table>
+  
+  <h4>D. DevOps &amp; Reliability</h4>
+  <table>
+    <tr><th>Gap</th><th>Recommendation</th></tr>
+    <tr><td>23 tests for 491 endpoints (4.7% coverage)</td><td>Target 60%+ for financial/auth endpoints. Add integration tests.</td></tr>
+    <tr><td>No health monitoring / alerting</td><td>Add uptime monitoring (e.g., UptimeRobot) + error tracking (e.g., Sentry)</td></tr>
+    <tr><td>No automated backups</td><td>Schedule daily MongoDB backups with retention policy</td></tr>
+    <tr><td>No CI/CD pipeline</td><td>Add GitHub Actions for lint + test on PR</td></tr>
+    <tr><td>No API documentation</td><td>Enable FastAPI's built-in Swagger docs for developer reference</td></tr>
+  </table>
+</div>
+
+<!-- 5. FEATURE COMPLETENESS SCORECARD -->
+<h2 class="page-break">5. Feature Completeness Scorecard</h2>
+<div class="section">
+  <table>
+    <tr><th>Module</th><th>Status</th><th>Completeness</th><th>Missing Pieces</th></tr>
+    <tr><td>Session Management</td><td style="color:#48bb78; font-weight:bold;">Complete</td><td>95%</td><td>Recurring session templates, resource/room booking</td></tr>
+    <tr><td>Financial - Invoicing</td><td style="color:#48bb78; font-weight:bold;">Complete</td><td>92%</td><td>Recurring invoices, payment reminders</td></tr>
+    <tr><td>Financial - Accounting</td><td style="color:#48bb78; font-weight:bold;">Complete</td><td>88%</td><td>Balance Sheet, SST return summary</td></tr>
+    <tr><td>Financial - Payroll</td><td style="color:#48bb78; font-weight:bold;">Complete</td><td>85%</td><td>Statutory calculations (EPF/SOCSO/EIS auto-compute)</td></tr>
+    <tr><td>Marketing / CRM</td><td style="color:#48bb78; font-weight:bold;">Complete</td><td>85%</td><td>Follow-up reminders, email campaign tracking</td></tr>
+    <tr><td>HR Module</td><td style="color:#48bb78; font-weight:bold;">Complete</td><td>82%</td><td>Leave management, staff appraisals</td></tr>
+    <tr><td>Certificates</td><td style="color:#ecc94b; font-weight:bold;">Partial</td><td>50%</td><td>Auto-generation, QR verification, bulk operations</td></tr>
+    <tr><td>Notifications / Email</td><td style="color:#fc8181; font-weight:bold;">Skeleton</td><td>15%</td><td>Actual email sending, WhatsApp, in-app notifications</td></tr>
+    <tr><td>Client Portal</td><td style="color:#fc8181; font-weight:bold;">Missing</td><td>0%</td><td>Entire module needs building</td></tr>
+    <tr><td>Post-Training Evaluation</td><td style="color:#fc8181; font-weight:bold;">Missing</td><td>0%</td><td>3/6 month automated feedback collection</td></tr>
+    <tr><td>Trainer Contracts</td><td style="color:#fc8181; font-weight:bold;">Missing</td><td>0%</td><td>Contract generation, renewal tracking, freelancer mgmt</td></tr>
+    <tr><td>Document Management</td><td style="color:#ecc94b; font-weight:bold;">Partial</td><td>40%</td><td>Centralised file storage, version control, document templates</td></tr>
+    <tr><td>Reporting / BI</td><td style="color:#48bb78; font-weight:bold;">Good</td><td>75%</td><td>Custom report builder, scheduled reports, export options</td></tr>
+    <tr><td>Mobile Experience</td><td style="color:#ecc94b; font-weight:bold;">Partial</td><td>60%</td><td>PWA installed, but offline mode and push notifications missing</td></tr>
+  </table>
+  
+  <div class="highlight-box">
+    <strong>Overall System Completeness: ~72%</strong><br>
+    Core operations are solid. The biggest gaps are in communication (email/WhatsApp), client self-service, and certificate automation &mdash; all of which directly impact daily operations and client perception.
+  </div>
+</div>
+
+<!-- 6. PRIORITISED ROADMAP -->
+<h2 class="page-break">6. Prioritised Improvement Roadmap</h2>
+<div class="section">
+  
+  <h3>Phase 1: Communication &amp; Certificates (Weeks 1-3)</h3>
+  <p><em>Impact: Eliminates 60% of manual admin work</em></p>
+  <table>
+    <tr><th>#</th><th>Task</th><th>Priority</th><th>Effort</th><th>Business Value</th></tr>
+    <tr><td>1.1</td><td>Email integration (invoice issued, payment received, session created)</td><td><span class="priority-tag p0">P0</span></td><td>2-3 days</td><td>Eliminates manual email forwarding</td></tr>
+    <tr><td>1.2</td><td>WhatsApp integration (certificate ready, payment reminders)</td><td><span class="priority-tag p0">P0</span></td><td>2-3 days</td><td>Instant client communication</td></tr>
+    <tr><td>1.3</td><td>Certificate auto-generation from templates</td><td><span class="priority-tag p0">P0</span></td><td>3-4 days</td><td>Scales certificate issuance</td></tr>
+    <tr><td>1.4</td><td>QR code certificate verification page</td><td><span class="priority-tag p1">P1</span></td><td>1-2 days</td><td>Trust &amp; compliance</td></tr>
+    <tr><td>1.5</td><td>In-app notification centre (bell icon with unread count)</td><td><span class="priority-tag p1">P1</span></td><td>2 days</td><td>Users stay informed without email</td></tr>
+  </table>
+  
+  <h3>Phase 2: Client Experience &amp; Compliance (Weeks 4-6)</h3>
+  <p><em>Impact: Differentiates MDDRC from all competitors</em></p>
+  <table>
+    <tr><th>#</th><th>Task</th><th>Priority</th><th>Effort</th><th>Business Value</th></tr>
+    <tr><td>2.1</td><td>Client self-service portal (invoices, certificates, training history)</td><td><span class="priority-tag p1">P1</span></td><td>5-7 days</td><td>Reduces admin inquiries by 40%</td></tr>
+    <tr><td>2.2</td><td>Post-training evaluation system (3/6 month automated surveys)</td><td><span class="priority-tag p1">P1</span></td><td>3-4 days</td><td>HRDC compliance + quality metrics</td></tr>
+    <tr><td>2.3</td><td>Trainer contract management (generation, renewal, freelancer tracking)</td><td><span class="priority-tag p1">P1</span></td><td>3-4 days</td><td>Legal compliance + operational clarity</td></tr>
+    <tr><td>2.4</td><td>Balance Sheet report &amp; SST Summary</td><td><span class="priority-tag p2">P2</span></td><td>2-3 days</td><td>Completes financial reporting suite</td></tr>
+    <tr><td>2.5</td><td>Automated payment overdue reminders (30/60/90 days)</td><td><span class="priority-tag p1">P1</span></td><td>1-2 days</td><td>Improves cash flow collection</td></tr>
+  </table>
+  
+  <h3>Phase 3: Scale &amp; Harden (Weeks 7-10)</h3>
+  <p><em>Impact: Production-grade reliability</em></p>
+  <table>
+    <tr><th>#</th><th>Task</th><th>Priority</th><th>Effort</th><th>Business Value</th></tr>
+    <tr><td>3.1</td><td>2FA for admin/finance roles</td><td><span class="priority-tag p1">P1</span></td><td>2 days</td><td>Security compliance</td></tr>
+    <tr><td>3.2</td><td>Automated test suite (60%+ coverage on financial flows)</td><td><span class="priority-tag p1">P1</span></td><td>4-5 days</td><td>Prevents regressions</td></tr>
+    <tr><td>3.3</td><td>Database indexing &amp; query optimization</td><td><span class="priority-tag p2">P2</span></td><td>1-2 days</td><td>Performance at scale</td></tr>
+    <tr><td>3.4</td><td>Error tracking (Sentry) &amp; uptime monitoring</td><td><span class="priority-tag p2">P2</span></td><td>1 day</td><td>Proactive issue detection</td></tr>
+    <tr><td>3.5</td><td>Automated daily DB backups</td><td><span class="priority-tag p1">P1</span></td><td>0.5 days</td><td>Disaster recovery</td></tr>
+    <tr><td>3.6</td><td>Server-side PDF generation (replacing client-side)</td><td><span class="priority-tag p2">P2</span></td><td>2-3 days</td><td>Consistent PDFs across all devices</td></tr>
+  </table>
+  
+  <h3>Phase 4: Growth &amp; Monetisation (Weeks 11+)</h3>
+  <table>
+    <tr><th>#</th><th>Task</th><th>Priority</th><th>Effort</th><th>Business Value</th></tr>
+    <tr><td>4.1</td><td>Multi-tenancy architecture</td><td><span class="priority-tag p2">P2</span></td><td>2-3 weeks</td><td>SaaS-ready for other training providers</td></tr>
+    <tr><td>4.2</td><td>Stripe/payment gateway for SaaS billing</td><td><span class="priority-tag p3">P3</span></td><td>3-5 days</td><td>Revenue from other training providers</td></tr>
+    <tr><td>4.3</td><td>Native mobile app (Capacitor)</td><td><span class="priority-tag p3">P3</span></td><td>2-3 weeks</td><td>App store presence</td></tr>
+    <tr><td>4.4</td><td>AI-powered analytics &amp; insights</td><td><span class="priority-tag p3">P3</span></td><td>1-2 weeks</td><td>Predictive revenue, trainer performance scoring</td></tr>
+  </table>
+</div>
+
+<!-- 7. COMPETITIVE GAP ANALYSIS -->
+<h2 class="page-break">7. Competitive Gap Analysis</h2>
+<div class="section">
+  <p>How MDDRC stacks up against typical training management platforms in the Malaysian market:</p>
+  
+  <table>
+    <tr><th>Feature</th><th>MDDRC</th><th>Typical Competitors</th><th>Gap</th></tr>
+    <tr><td>Session/Program Management</td><td style="color:#48bb78; font-weight:bold;">Excellent</td><td>Good</td><td>Ahead</td></tr>
+    <tr><td>Financial Suite (Invoicing + Accounting)</td><td style="color:#48bb78; font-weight:bold;">Excellent</td><td>Basic invoicing only</td><td>Far ahead</td></tr>
+    <tr><td>Marketing / CRM</td><td style="color:#48bb78; font-weight:bold;">Good</td><td>None (use separate CRM)</td><td>Ahead</td></tr>
+    <tr><td>HR / Payroll</td><td style="color:#48bb78; font-weight:bold;">Good</td><td>None (use separate HR system)</td><td>Ahead</td></tr>
+    <tr><td>Email Notifications</td><td style="color:#fc8181; font-weight:bold;">Missing</td><td>Standard feature</td><td style="color:#fc8181; font-weight:bold;">Behind</td></tr>
+    <tr><td>Client Portal</td><td style="color:#fc8181; font-weight:bold;">Missing</td><td>50% have it</td><td style="color:#fc8181; font-weight:bold;">Behind</td></tr>
+    <tr><td>Certificate Auto-Gen + QR Verify</td><td style="color:#ecc94b; font-weight:bold;">Partial</td><td>Most have auto-gen</td><td style="color:#ecc94b; font-weight:bold;">Behind</td></tr>
+    <tr><td>Mobile App / PWA</td><td style="color:#48bb78; font-weight:bold;">PWA</td><td>Mixed</td><td>Even</td></tr>
+    <tr><td>Reporting / BI</td><td style="color:#48bb78; font-weight:bold;">Excellent</td><td>Basic</td><td>Far ahead</td></tr>
+    <tr><td>Multi-Tenancy / SaaS</td><td style="color:#fc8181; font-weight:bold;">Missing</td><td>Some offer it</td><td>N/A (different strategy)</td></tr>
+  </table>
+  
+  <div class="highlight-box">
+    <strong>Key Insight:</strong> MDDRC is far ahead in operational depth (finance, HR, marketing integration) but behind on communication and client-facing features. Fixing the communication gap alone would put MDDRC ahead of 90% of competitors in the Malaysian market.
+  </div>
+</div>
+
+<!-- 8. REVENUE & MONETISATION -->
+<h2>8. Revenue &amp; Monetisation Opportunities</h2>
+<div class="section">
+  
+  <h4>A. Immediate Revenue Protection</h4>
+  <div class="verdict verdict-warn">
+    <strong>Automated Payment Reminders:</strong> If MDDRC has even RM 100K in outstanding receivables, automated 30/60/90-day reminders via email could recover 15-25% faster. At RM 100K outstanding, that's RM 15-25K improved cash flow.
+  </div>
+  
+  <h4>B. SaaS Potential (Medium-Term)</h4>
+  <p>The Malaysian training industry includes hundreds of HRDC-registered providers. If MDDRC's system were offered as SaaS:</p>
+  <table>
+    <tr><th>Tier</th><th>Target</th><th>Price/Month</th><th>Features</th></tr>
+    <tr><td>Starter</td><td>Small providers (1-5 trainers)</td><td>RM 299</td><td>Sessions, invoicing, certificates</td></tr>
+    <tr><td>Professional</td><td>Mid-size (5-20 trainers)</td><td>RM 799</td><td>+ Accounting, HR, marketing CRM</td></tr>
+    <tr><td>Enterprise</td><td>Large providers (20+ trainers)</td><td>RM 1,499</td><td>+ Client portal, API access, white-label</td></tr>
+  </table>
+  <p>Even 20 subscribers at RM 799/month = <strong>RM 191,760/year recurring revenue</strong>.</p>
+  
+  <h4>C. Value-Added Services</h4>
+  <ul>
+    <li><strong>HRDC Claim Automation:</strong> Charge a premium for auto-generating HRDC claim forms from session data</li>
+    <li><strong>Certificate Verification API:</strong> Offer verification-as-a-service to client companies</li>
+    <li><strong>Training Analytics Reports:</strong> Sell insight reports to client companies about their workforce training effectiveness</li>
+  </ul>
+</div>
+
+<!-- 9. FINAL VERDICT -->
+<h2 class="page-break">9. Summary &amp; Final Verdict</h2>
+<div class="section">
+  
+  <h3>Overall Assessment</h3>
+  <div class="rating-bar">
+    <span class="label"><strong>OVERALL SCORE</strong></span>
+    <div class="bar-bg"><div class="bar-fill green" style="width: 76%"></div></div>
+    <span class="score"><strong>7.6/10</strong></span>
+  </div>
+  
+  <div class="two-col">
+    <div>
+      <h4>The Good</h4>
+      <ul class="checklist">
+        <li class="done">Exceptional financial depth for a training platform</li>
+        <li class="done">Complete end-to-end operational coverage</li>
+        <li class="done">Well-structured modular backend (38 files)</li>
+        <li class="done">Role-based access with 7 distinct user types</li>
+        <li class="done">Malaysian market-specific features</li>
+        <li class="done">PWA-enabled for mobile access</li>
+        <li class="done">Audit trail &amp; data management controls</li>
+        <li class="done">Marketing CRM built-in (rare for training platforms)</li>
+      </ul>
+    </div>
+    <div>
+      <h4>The Bad</h4>
+      <ul class="checklist">
+        <li class="missing">Zero automated communications (email/WhatsApp)</li>
+        <li class="missing">No client self-service portal</li>
+        <li class="missing">Certificate generation is manual</li>
+        <li class="missing">Low test coverage (4.7%)</li>
+        <li class="missing">No 2FA or advanced security</li>
+        <li class="partial">Client-side PDF (inconsistent across devices)</li>
+        <li class="partial">No real-time updates (except marketing)</li>
+        <li class="partial">Large monolithic frontend components</li>
+      </ul>
+    </div>
+  </div>
+  
+  <div class="highlight-box" style="margin-top: 20px;">
+    <h4 style="margin-top: 0;">The Bottom Line</h4>
+    <p>MDDRC has built something that most training companies in Malaysia can only dream of &mdash; a fully integrated operations platform covering marketing, training delivery, finance, HR, and compliance in a single system. The foundation is <strong>enterprise-grade</strong>.</p>
+    <p>The critical next step is <strong>communication automation</strong> (email + WhatsApp). This single addition would transform the system from "powerful internal tool" to "complete business platform." Certificate auto-generation and a client portal would then make MDDRC's offering genuinely world-class for the Southeast Asian training market.</p>
+    <p><strong>Estimated time to reach 9/10:</strong> 8-10 weeks of focused development on Phases 1-3.</p>
+  </div>
+</div>
+
+<div class="footer">
+  <p>MDDRC Training Management System &mdash; Comprehensive Review Report</p>
+  <p>Generated: 2 April 2026 | Confidential | Prepared for MDDRC Sdn Bhd Management</p>
+</div>
+
+<script>
+window.onload = function() { 
+  // Auto-print on open if desired
+  // window.print(); 
+};
+</script>
+</body>
+</html>
