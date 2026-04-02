@@ -7,7 +7,7 @@ import requests
 import os
 from datetime import datetime
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://backend-split-5.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://data-integrity-lab-4.preview.emergentagent.com')
 SESSION_ID = "d664b79d-91a1-4968-bd72-de82611cdb1f"
 
 # Test credentials

@@ -7,7 +7,7 @@ import requests
 import os
 import json
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://backend-split-5.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://data-integrity-lab-4.preview.emergentagent.com')
 
 class TestPhase1Setup:
     """Phase 1A - Admin Setup Tests"""

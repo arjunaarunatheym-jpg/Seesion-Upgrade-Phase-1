@@ -12,7 +12,7 @@ from pymongo import MongoClient
 import os
 
 # Configuration
-BASE_URL = "https://backend-split-5.preview.emergentagent.com/api"
+BASE_URL = "https://data-integrity-lab-4.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@example.com"
 ADMIN_PASSWORD = "admin123"
 MONGO_URL = "mongodb://localhost:27017"

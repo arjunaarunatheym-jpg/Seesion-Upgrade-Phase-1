@@ -28,7 +28,7 @@ from typing import Dict, List, Optional
 import uuid
 
 # Configuration from frontend/.env
-BASE_URL = "https://backend-split-5.preview.emergentagent.com/api"
+BASE_URL = "https://data-integrity-lab-4.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "arjuna@mddrc.com.my"
