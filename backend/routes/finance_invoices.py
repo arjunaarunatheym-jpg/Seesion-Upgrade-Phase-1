@@ -854,6 +854,31 @@ async def edit_paid_invoice(
     if request.total_amount is not None and request.total_amount != invoice.get("total_amount"):
         changes.append(f"Amount: RM {invoice.get('total_amount'):,.2f} → RM {request.total_amount:,.2f}")
         update_data["total_amount"] = request.total_amount
+        # Also update subtotal and line_items to keep PDF in sync
+        update_data["subtotal"] = request.total_amount - (invoice.get("tax_amount", 0) or 0)
+        # Update line_items: if single line item, update its amount and unit_price
+        existing_items = invoice.get("line_items", [])
+        if existing_items:
+            updated_items = []
+            new_subtotal = request.total_amount - (invoice.get("tax_amount", 0) or 0)
+            if len(existing_items) == 1:
+                item = {**existing_items[0]}
+                item["amount"] = new_subtotal
+                item["unit_price"] = new_subtotal / (item.get("quantity", 1) or 1)
+                updated_items.append(item)
+            else:
+                # Multiple line items: scale proportionally
+                old_subtotal = invoice.get("subtotal") or sum(i.get("amount", 0) for i in existing_items)
+                if old_subtotal > 0:
+                    scale = new_subtotal / old_subtotal
+                    for item in existing_items:
+                        updated_item = {**item}
+                        updated_item["amount"] = round(item.get("amount", 0) * scale, 2)
+                        updated_item["unit_price"] = round(item.get("unit_price", 0) * scale, 2)
+                        updated_items.append(updated_item)
+                else:
+                    updated_items = existing_items
+            update_data["line_items"] = updated_items
     
     if not changes:
         return {"message": "No changes detected"}
