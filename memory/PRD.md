@@ -1,101 +1,46 @@
-# MDDRC Training Management Platform - PRD
+# MDDRC Training Management System - PRD
 
 ## Original Problem Statement
-Comprehensive training management platform for Malaysian Defensive Driving & Riding Centre (MDDRC). Features Admin, HR, Finance, Operations, and Marketing modules with Malaysian statutory compliance.
+Comprehensive training management platform for Malaysian Defensive Driving and Riding Centre (MDDRC). Manages training sessions, participants, invoicing, HR/payroll, marketing, and compliance.
 
 ## Architecture
-- **Frontend**: React + Shadcn/UI (port 3000)
-- **Backend**: FastAPI + MongoDB (port 8001)
-- **Database**: MongoDB (via MONGO_URL env var)
-
-## Code Architecture (Post-Refactoring)
-```
-/app/backend/
-├── server.py              # 536 lines - App init, middleware, DB, router registration
-├── core/__init__.py       # Shared utilities: db, auth, helpers, path constants
-├── models/__init__.py     # Pydantic models
-├── routes/                # 38 modular route files
-│   ├── __init__.py        # Router registry
-│   ├── auth.py            # Authentication
-│   ├── users.py           # User management + role-creation
-│   ├── sessions_new.py    # Session CRUD + feedback export
-│   ├── programs.py        # Training programs
-│   ├── companies.py       # Company management
-│   ├── hr.py              # HR & payroll (band-based EPF)
-│   ├── marketing.py       # Leads, clients, quotations, PDF generation
-│   ├── finance_invoices.py # Invoice CRUD + deleted invoice numbers
-│   ├── finance_session.py # NEW: Session costing, expenses, profit
-│   ├── finance_payments.py # Payment tracking
-│   ├── finance_reports.py # P&L, AR Aging
-│   ├── finance_billing.py # Billing parties
-│   ├── finance_payables.py # Payables
-│   ├── finance_petty_cash.py # Petty cash
-│   ├── accounting.py      # Journal entries, audit trail
-│   ├── settings.py        # App settings + indemnity/feedback questions
-│   ├── templates.py       # NEW: Excel template downloads
-│   ├── static_files.py    # NEW: Static file serving, uploads, debug
-│   ├── reports_legacy.py  # NEW: Legacy report endpoints
-│   ├── checklists.py      # Checklist templates + trainer checklist
-│   ├── training_reports.py # Training report generation
-│   ├── certificates.py    # Certificate management
-│   ├── feedback.py        # Course feedback + bulk upload
-│   ├── attendance.py      # Attendance tracking
-│   ├── tests.py           # Assessment tests
-│   ├── notifications.py   # Notifications
-│   ├── security.py        # Security audit
-│   ├── admin_kpis.py      # Dashboard KPIs
-│   ├── admin_data_management.py # Data management
-│   ├── health.py          # Health checks
-│   ├── backup.py          # DB backup/export
-│   ├── supervisor.py      # Supervisor portal
-│   ├── super_admin.py     # Super admin
-│   ├── superadmin_portal.py # Superadmin portal
-│   ├── participant_access.py # Participant access
-│   ├── vehicle_details.py # Vehicle details
-│   └── reports.py         # Training reports (old module)
-└── tests/
-    └── test_critical_flows.py # 23 pytest cases
-```
+- **Frontend**: React + Shadcn/UI + Tailwind
+- **Backend**: FastAPI (38 modular route files under /app/backend/routes/)
+- **Database**: MongoDB
+- **PDF**: Client-side HTML-to-print (printInvoice.js)
 
 ## What's Been Implemented
+- Full backend modularization (server.py monolith → 38 route files)
+- Session management with start_date and end_date
+- Invoice lifecycle (create, issue, void, backdate, override, edit-paid, delete)
+- Marketing dashboard with 10s polling for quotation approvals
+- 2-decimal currency formatting (fmtRM) across costing dashboards
+- HR module, payroll, EA forms
+- Profit & Loss / General Ledger reports
+- Certificate management
+- Data Management tab (SuperAdmin)
+- Checklist templates (fixed 500 error)
 
-### Completed Features
-- Full Auth system (JWT, role-based access, 8-char password requirement)
-- Training Session CRUD with participant management
-- Invoice generation with sequential numbering
-- Band-based EPF statutory calculations (1001 Malaysian bands)
-- Unified P&L with Journal-based Auditor view + AR Aging
-- Interactive KPI drill-down dashboards (Admin + Finance)
-- Searchable auto-creating Company Combobox for invoices
-- Global mobile-friendly dialogs (overflow scroll fix)
-- App Hardening: 23-case Pytest suite, DB Backup, Health Checks
-- **Server.py Refactoring**: Monolith (16,865 lines) → Modular (536 lines + 38 route files)
-- Checklist template 500 error FIXED (legacy data normalization)
-
-### Refactoring Completed (Feb 2026)
-- server.py: 16,865 → 536 lines (97% reduction)
-- 280+ endpoints migrated to 38 modular route files
-- 4 new route modules created: static_files.py, templates.py, finance_session.py, reports_legacy.py
-- All 23 pytest cases pass post-refactoring
-- Full frontend UI verified working
-
-## Test Credentials
-- Admin: arjuna@mddrc.com.my / Dana102229
-- Coordinator: malek@mddrc.com.my / mddrc1
+## Completed This Session (2026-04-02)
+- **P0 FIX**: Invoice PDF line items mismatch on override — Root cause: `override_invoice_validation` endpoint updated `total_amount` but not `subtotal`/`line_items`. Fixed by adding line_items recalculation to the override endpoint.
+- **DB Repair**: Synced Sapura Offshore (INV/0002) and Sapura Drilling (INV/0003) invoices.
+- **Belt-and-suspenders**: Frontend `InvoicesTab.jsx` now re-fetches invoice from API before printing PDF.
+- **P1 Verified**: Session End Date already fully implemented (frontend + backend).
 
 ## Prioritized Backlog
+### P0
+- (none currently)
 
-### P1 - High Priority
-- Certificate auto-generation & Email notifications
-- Trainer Contract Workflow (freelance staff contracts)
-- Post-Training Evaluation System (3/6 month automated feedback)
+### P1
+- Certificate auto-generation and Email notifications
+- Trainer Contract Workflow (freelance staff)
+- Post-Training Evaluation System (automated 3/6 month feedback)
 
-### P2 - Medium Priority
-- Balance Sheet report
-- SST Summary report
+### P2
+- Balance Sheet report and SST Summary report
 
 ### Future
 - Multi-tenancy architecture
 - Supervisor Portal / Client Self-Service Portal
 - SaaS Monetization (Stripe Integration)
-- Native Mobile App (Capacitor)
+- Native Mobile App conversion (Capacitor)

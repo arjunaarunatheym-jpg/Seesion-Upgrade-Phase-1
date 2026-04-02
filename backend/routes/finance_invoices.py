@@ -1051,17 +1051,40 @@ async def override_invoice_validation(
         to_value=f"RM {request.total_amount:,.2f}"
     )
     
-    await db.invoices.update_one(
-        {"id": invoice_id},
-        {"$set": {
-            "total_amount": request.total_amount,
-            "validation_overridden": True,
-            "override_reason": request.reason,
-            "overridden_by": current_user.id,
-            "overridden_at": get_malaysia_time().isoformat(),
-            "updated_at": get_malaysia_time().isoformat()
-        }}
-    )
+    # Recalculate subtotal and line_items to keep PDF in sync
+    new_subtotal = request.total_amount - (invoice.get("tax_amount", 0) or 0)
+    updated_line_items = None
+    existing_items = invoice.get("line_items", [])
+    if existing_items:
+        if len(existing_items) == 1:
+            item = {**existing_items[0]}
+            item["amount"] = new_subtotal
+            item["unit_price"] = new_subtotal / (item.get("quantity", 1) or 1)
+            updated_line_items = [item]
+        else:
+            old_subtotal = invoice.get("subtotal") or sum(i.get("amount", 0) for i in existing_items)
+            if old_subtotal > 0:
+                scale = new_subtotal / old_subtotal
+                updated_line_items = []
+                for item in existing_items:
+                    ui = {**item}
+                    ui["amount"] = round(item.get("amount", 0) * scale, 2)
+                    ui["unit_price"] = round(item.get("unit_price", 0) * scale, 2)
+                    updated_line_items.append(ui)
+
+    update_fields = {
+        "total_amount": request.total_amount,
+        "subtotal": new_subtotal,
+        "validation_overridden": True,
+        "override_reason": request.reason,
+        "overridden_by": current_user.id,
+        "overridden_at": get_malaysia_time().isoformat(),
+        "updated_at": get_malaysia_time().isoformat()
+    }
+    if updated_line_items is not None:
+        update_fields["line_items"] = updated_line_items
+
+    await db.invoices.update_one({"id": invoice_id}, {"$set": update_fields})
     
     return {
         "message": "Invoice amount overridden successfully",

@@ -153,13 +153,17 @@ const InvoicesTab = ({
 
   const handlePrintInvoice = async (invoice) => {
     try {
+      // Re-fetch invoice from API to guarantee fresh data (line_items, subtotal, etc.)
+      const freshRes = await axiosInstance.get(`/finance/invoices`);
+      const freshInvoice = (freshRes.data || []).find(i => i.id === invoice.id) || invoice;
+
       // Get app settings for logo
       const appSettings = await axiosInstance.get('/settings');
       const logoUrl = appSettings.data?.logo_url || companySettings?.logo_url;
       
       // Import and use print function
       const { printInvoice } = await import('../../utils/printInvoice');
-      printInvoice(invoice, companySettings, logoUrl);
+      printInvoice(freshInvoice, companySettings, logoUrl);
     } catch (error) {
       console.error("Print error:", error);
       toast.error("Failed to generate invoice PDF");
