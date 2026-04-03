@@ -2137,3 +2137,118 @@ async def delete_session_note(session_id: str, note_id: str, current_user: User 
         raise HTTPException(status_code=403, detail="You can only delete your own notes")
     await db.session_notes.delete_one({"id": note_id})
     return {"message": "Note deleted"}
+
+
+@router.get("/{session_id}/supervisor-data")
+async def get_supervisor_session_data(session_id: str, current_user: User = Depends(get_current_user)):
+    """Get comprehensive session data for supervisor view"""
+    if current_user.role not in ["supervisor", "admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    participant_ids = session.get("participant_ids", [])
+    if not participant_ids:
+        return {"participants": [], "invoices": [], "stats": {}}
+
+    # Bulk fetch
+    users = await db.users.find(
+        {"id": {"$in": participant_ids}},
+        {"_id": 0, "password": 0, "hashed_password": 0}
+    ).to_list(500)
+    user_map = {u["id"]: u for u in users}
+
+    attendances = await db.attendance.find(
+        {"session_id": session_id, "participant_id": {"$in": participant_ids}}, {"_id": 0}
+    ).to_list(1000)
+    att_map = {}
+    for a in attendances:
+        pid = a["participant_id"]
+        if pid not in att_map:
+            att_map[pid] = []
+        att_map[pid].append(a)
+
+    test_results = await db.test_results.find(
+        {"session_id": session_id, "participant_id": {"$in": participant_ids}}, {"_id": 0}
+    ).to_list(2000)
+    pre_map = {}
+    post_map = {}
+    for tr in test_results:
+        pid = tr["participant_id"]
+        if tr.get("test_type") in ["pre", "pre_test"]:
+            pre_map[pid] = tr
+        elif tr.get("test_type") in ["post", "post_test"]:
+            post_map[pid] = tr
+
+    cert_records = await db.participant_access.find(
+        {"session_id": session_id, "participant_id": {"$in": participant_ids}, "certificate_url": {"$exists": True, "$ne": None}},
+        {"_id": 0}
+    ).to_list(500)
+    cert_map = {c["participant_id"]: c.get("certificate_url") for c in cert_records}
+
+    # Build participant data
+    enriched = []
+    attended_count = 0
+    pre_pass = 0
+    post_pass = 0
+    cert_count = 0
+    for pid in participant_ids:
+        u = user_map.get(pid, {})
+        pre = pre_map.get(pid)
+        post = post_map.get(pid)
+        att = att_map.get(pid, [])
+        has_cert = pid in cert_map
+        has_attended = len(att) > 0
+
+        if has_attended:
+            attended_count += 1
+        if pre and pre.get("passed"):
+            pre_pass += 1
+        if post and post.get("passed"):
+            post_pass += 1
+        if has_cert:
+            cert_count += 1
+
+        enriched.append({
+            "id": pid,
+            "full_name": u.get("full_name", "Unknown"),
+            "id_number": u.get("id_number", ""),
+            "attended": has_attended,
+            "attendance_days": len(att),
+            "pre_test_score": pre.get("score") if pre else None,
+            "pre_test_passed": pre.get("passed") if pre else None,
+            "post_test_score": post.get("score") if post else None,
+            "post_test_passed": post.get("passed") if post else None,
+            "has_certificate": has_cert,
+            "certificate_url": cert_map.get(pid, ""),
+        })
+
+    # Get invoices for this session
+    invoices_list = []
+    inv_query = {"session_id": session_id}
+    invoices_raw = await db.invoices.find(inv_query, {"_id": 0}).to_list(20)
+    for inv in invoices_raw:
+        invoices_list.append({
+            "id": inv.get("id"),
+            "invoice_number": inv.get("invoice_number", ""),
+            "total_amount": inv.get("total_amount", 0),
+            "status": inv.get("status", ""),
+            "invoice_date": inv.get("invoice_date", inv.get("created_at", "")),
+        })
+
+    total = len(participant_ids)
+    return {
+        "participants": enriched,
+        "invoices": invoices_list,
+        "stats": {
+            "total_participants": total,
+            "attended": attended_count,
+            "attendance_rate": round((attended_count / total * 100) if total > 0 else 0, 1),
+            "pre_test_passed": pre_pass,
+            "post_test_passed": post_pass,
+            "post_test_pass_rate": round((post_pass / total * 100) if total > 0 else 0, 1),
+            "certificates_issued": cert_count,
+        }
+    }

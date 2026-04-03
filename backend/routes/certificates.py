@@ -65,7 +65,7 @@ async def get_my_certificates(current_user: User = Depends(get_current_user)):
 @router.get("/session/{session_id}")
 async def get_session_certificates(session_id: str, current_user: User = Depends(get_current_user)):
     """Get all certificates for a session"""
-    if current_user.role not in ["admin", "coordinator"]:
+    if current_user.role not in ["admin", "coordinator", "supervisor"]:
         raise HTTPException(status_code=403, detail="Only admins and coordinators can access certificates")
     
     access_records = await db.participant_access.find(

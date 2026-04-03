@@ -38,14 +38,28 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - **Trainer Dashboard - Participant Photos & Emergency Contacts**: Participant list shows profile photos (or placeholder) and emergency contact details
 - **Trainer Dashboard - Session Notes**: New tab + backend API (GET/POST/DELETE /api/sessions/{id}/notes) for trainers to record observations per session
 - **Backend**: Added profile_photo, emergency_contact_name, emergency_contact_phone, contact_phone to assigned-participants response
+- **Coordinator Dashboard - At-a-Glance Cards**: Summary row (active sessions, total participants, completion count, action items)
+- **Coordinator Dashboard - Action Required**: Amber alert section showing pending pre-tests, post-tests, feedback per session
+- **Coordinator Dashboard - Traffic Lights**: Green/Yellow/Red session status badges on each session card
+- **Coordinator Dashboard - Name Tooltips**: Truncated names with hover tooltips in participant tables
+- **Supervisor Dashboard REBUILD** (was 4.2/10):
+  - Staff Progress Summary (5 stat cards: staff count, attended, pass rate, post-test passed, certs issued)
+  - Staff Progress Table (per-participant: attended, pre-test, post-test, certificate with check/cross icons)
+  - Attendance Tab with CSV Export button
+  - Test Results Tab (pre/post scores + pass/fail badges)
+  - Certificates Tab (download button per participant)
+  - Invoice Tab (invoice number, amount, status, date)
+  - Human-friendly date formatting throughout
+  - New backend endpoint: GET /api/sessions/{id}/supervisor-data (comprehensive bulk query)
+  - Supervisor role added to certificate session access
 
 ## Prioritized Backlog
 ### P0
-- Supervisor Dashboard Rebuild (weakest role at 4.2/10 — show names not IDs, staff progress, bulk certs, invoice visibility)
 - Certificate auto-generation from PDF template (waiting for user's template upload)
 
 ### P1
-- Coordinator Dashboard Improvements (To-Do summary, session status traffic lights)
+- Coordinator Dashboard Improvements (To-Do summary, session status traffic lights) — DONE
+- Supervisor Dashboard Rebuild — DONE
 - Email integration (Resend) — invoice issued, payment received, cert ready
 - WhatsApp integration (cert ready, payment reminders)
 - Trainer Contract Workflow (freelance staff)
