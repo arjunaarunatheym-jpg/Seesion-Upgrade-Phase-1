@@ -189,6 +189,7 @@ class Session(BaseModel):
     program_name: Optional[str] = None
     cert_show_validity: bool = False
     cert_validity_months: int = 24
+    schedule: Optional[list] = None
 
 class ParticipantData(BaseModel):
     email: Optional[str] = ""
@@ -224,6 +225,7 @@ class SessionCreate(BaseModel):
     commission_fixed_amount: Optional[float] = None
     cert_show_validity: bool = False
     cert_validity_months: int = 24
+    schedule: Optional[list] = None
 
 
 # ==================== PARTICIPANT ACCESS MODELS ====================

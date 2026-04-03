@@ -190,6 +190,7 @@ async def create_session(session_data: SessionCreate, current_user: User = Depen
         coordinator_id=session_data.coordinator_id,
         cert_show_validity=session_data.cert_show_validity,
         cert_validity_months=session_data.cert_validity_months,
+        schedule=session_data.schedule,
     )
 
     doc = session_obj.model_dump()

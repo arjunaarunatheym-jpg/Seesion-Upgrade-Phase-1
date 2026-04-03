@@ -58,7 +58,9 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
     full_name: "", 
     id_number: "",
     contact_email: "",
-    contact_phone: ""
+    contact_phone: "",
+    emergency_contact_name: "",
+    emergency_contact_phone: "",
   });
   const [activeTab, setActiveTab] = useState("overview");
   const [companySettings, setCompanySettings] = useState({});
@@ -79,7 +81,9 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
         full_name: user.full_name || "",
         id_number: user.id_number || "",
         contact_email: user.contact_email || "",
-        contact_phone: user.contact_phone || ""
+        contact_phone: user.contact_phone || "",
+        emergency_contact_name: user.emergency_contact_name || "",
+        emergency_contact_phone: user.emergency_contact_phone || "",
       });
       setShowVerificationDialog(true);
     }
@@ -193,8 +197,7 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
   
   const handleRefreshStatus = async () => {
     toast.info("Refreshing...", { duration: 1000 });
-    // Force a hard reload to get completely fresh data
-    window.location.reload();
+    await loadData();
   };
 
   const handleDownloadCertificate = async (sessionId) => {
@@ -413,7 +416,9 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
         full_name: verificationData.full_name.trim(),
         id_number: verificationData.id_number.trim(),
         contact_email: verificationData.contact_email.trim(),
-        contact_phone: verificationData.contact_phone.trim()
+        contact_phone: verificationData.contact_phone.trim(),
+        emergency_contact_name: verificationData.emergency_contact_name?.trim() || "",
+        emergency_contact_phone: verificationData.emergency_contact_phone?.trim() || "",
       });
       
       setShowVerificationDialog(false);
@@ -565,6 +570,30 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
                 </div>
               </div>
             </div>
+            <div className="border-t pt-4 mt-4">
+              <p className="text-sm text-gray-600 mb-3">Emergency Contact (in case of incidents during training)</p>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="verify-emergency-name">Emergency Contact Name</Label>
+                  <Input
+                    id="verify-emergency-name"
+                    value={verificationData.emergency_contact_name}
+                    onChange={(e) => setVerificationData({ ...verificationData, emergency_contact_name: e.target.value })}
+                    placeholder="e.g., Ahmad Bin Ali"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="verify-emergency-phone">Emergency Contact Phone</Label>
+                  <Input
+                    id="verify-emergency-phone"
+                    type="tel"
+                    value={verificationData.emergency_contact_phone}
+                    onChange={(e) => setVerificationData({ ...verificationData, emergency_contact_phone: e.target.value })}
+                    placeholder="e.g., 012-345 6789"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button onClick={handleVerification} className="w-full">
@@ -643,30 +672,30 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="flex flex-wrap w-full mb-8 h-auto justify-start gap-2 bg-gray-100 p-2 rounded-lg md:grid md:grid-cols-5">
-            <TabsTrigger value="overview" data-testid="overview-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <FileText className="w-4 h-4 mr-2" />
-              <span className="text-sm">Overview</span>
+          <TabsList className="flex flex-wrap w-full mb-8 h-auto justify-start gap-1.5 bg-gray-100 p-1.5 rounded-lg md:grid md:grid-cols-6">
+            <TabsTrigger value="overview" data-testid="overview-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
+              <FileText className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Overview</span>
             </TabsTrigger>
-            <TabsTrigger value="details" data-testid="details-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <Users className="w-4 h-4 mr-2" />
-              <span className="text-sm">My Details</span>
+            <TabsTrigger value="details" data-testid="details-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
+              <Users className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">My Details</span>
             </TabsTrigger>
-            <TabsTrigger value="certificates" data-testid="certificates-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <Award className="w-4 h-4 mr-2" />
-              <span className="text-sm">Certificates</span>
+            <TabsTrigger value="certificates" data-testid="certificates-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
+              <Award className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Certs</span>
             </TabsTrigger>
-            <TabsTrigger value="tests" data-testid="tests-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <ClipboardCheck className="w-4 h-4 mr-2" />
-              <span className="text-sm">Tests</span>
+            <TabsTrigger value="tests" data-testid="tests-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
+              <ClipboardCheck className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Tests</span>
             </TabsTrigger>
-            <TabsTrigger value="checklists" data-testid="checklists-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <ClipboardCheck className="w-4 h-4 mr-2" />
-              <span className="text-sm">Checklists</span>
+            <TabsTrigger value="checklists" data-testid="checklists-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
+              <ClipboardCheck className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Checklists</span>
             </TabsTrigger>
-            <TabsTrigger value="settings" data-testid="settings-tab" className="flex-1 min-w-[120px] md:min-w-0">
-              <Settings className="w-4 h-4 mr-2" />
-              <span className="text-sm">Settings</span>
+            <TabsTrigger value="settings" data-testid="settings-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
+              <Settings className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Settings</span>
             </TabsTrigger>
           </TabsList>
 
@@ -675,8 +704,10 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
             <OverviewTab
               sessions={sessions}
               participantAccess={participantAccess}
-              testResults={testResults}
-              onFeedback={handleFeedback}
+              availableTests={availableTests}
+              attendanceToday={attendanceToday}
+              vehicleDetails={vehicleDetails}
+              user={user}
             />
           </TabsContent>
 

@@ -139,6 +139,7 @@ async def update_own_profile(profile_data: dict, request: Request, current_user:
     # Fields all users can update
     allowed_fields = [
         "full_name", "id_number", "phone", "emergency_contact", "emergency_phone",
+        "emergency_contact_name", "emergency_contact_phone",
         "blood_type", "medical_conditions", "contact_email", "contact_phone",
         "social_popup_dismissed", "profile_verified", "indemnity_accepted",
         "indemnity_accepted_at", "indemnity_signature", "indemnity_signed_name",

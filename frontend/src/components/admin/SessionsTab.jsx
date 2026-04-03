@@ -36,6 +36,7 @@ const initialSessionForm = {
   reuse_invoice_number: "",  // For reusing deleted invoice numbers
   cert_show_validity: false,
   cert_validity_months: 24,
+  schedule: [],
 };
 
 const initialNewParticipant = {
@@ -301,6 +302,7 @@ const SessionsTab = ({
         reuse_invoice_number: sessionForm.reuse_invoice_number || null,
         cert_show_validity: sessionForm.cert_show_validity || false,
         cert_validity_months: sessionForm.cert_validity_months ? parseInt(sessionForm.cert_validity_months) : 24,
+        schedule: (sessionForm.schedule || []).filter(s => s.time && s.activity),
       });
       
       const participantCount = response.data.participant_count || 0;
@@ -355,6 +357,7 @@ const SessionsTab = ({
         commission_fixed_amount: editingSession.commission_fixed_amount ? parseFloat(editingSession.commission_fixed_amount) : null,
         cert_show_validity: editingSession.cert_show_validity || false,
         cert_validity_months: editingSession.cert_validity_months ? parseInt(editingSession.cert_validity_months) : 24,
+        schedule: (editingSession.schedule || []).filter(s => s.time && s.activity),
       });
       
       // Also update the lead if company_name changed
@@ -509,6 +512,48 @@ const SessionsTab = ({
                         </select>
                       </div>
                     )}
+                  </div>
+
+                  {/* Training Schedule */}
+                  <div className="border-t pt-4 mt-2">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs text-gray-500 font-semibold">Training Schedule (visible to participants)</p>
+                      <Button type="button" variant="outline" size="sm"
+                        onClick={() => setSessionForm({ ...sessionForm, schedule: [...(sessionForm.schedule || []), { time: "", activity: "" }] })}
+                        className="text-xs h-7"
+                      >+ Add Row</Button>
+                    </div>
+                    {(sessionForm.schedule || []).map((item, idx) => (
+                      <div key={idx} className="flex gap-2 mb-2 items-center">
+                        <Input
+                          placeholder="e.g., 08:00"
+                          value={item.time}
+                          onChange={(e) => {
+                            const updated = [...sessionForm.schedule];
+                            updated[idx] = { ...updated[idx], time: e.target.value };
+                            setSessionForm({ ...sessionForm, schedule: updated });
+                          }}
+                          className="w-24 text-xs"
+                        />
+                        <Input
+                          placeholder="e.g., Theory Session"
+                          value={item.activity}
+                          onChange={(e) => {
+                            const updated = [...sessionForm.schedule];
+                            updated[idx] = { ...updated[idx], activity: e.target.value };
+                            setSessionForm({ ...sessionForm, schedule: updated });
+                          }}
+                          className="flex-1 text-xs"
+                        />
+                        <Button type="button" variant="ghost" size="sm"
+                          onClick={() => {
+                            const updated = sessionForm.schedule.filter((_, i) => i !== idx);
+                            setSessionForm({ ...sessionForm, schedule: updated });
+                          }}
+                          className="text-red-500 text-xs h-7 px-2"
+                        >X</Button>
+                      </div>
+                    ))}
                   </div>
 
                   {/* Reuse Deleted Invoice Number Option */}
