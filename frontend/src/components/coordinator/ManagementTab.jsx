@@ -301,8 +301,8 @@ const ManagementTab = ({
                     return (
                       <tr key={p.id} className="border-b hover:bg-gray-50">
                         <td className="p-3">
-                          <p className="font-medium text-gray-900">{p.full_name}</p>
-                          <p className="text-xs text-gray-500">{p.email}</p>
+                          <p className="font-medium text-gray-900 truncate max-w-[200px]" title={p.full_name}>{p.full_name}</p>
+                          <p className="text-xs text-gray-500 truncate max-w-[200px]" title={p.email}>{p.email}</p>
                         </td>
                         <td className="p-3 text-gray-700">{p.id_number || 'N/A'}</td>
                         <td className="p-3 text-center">

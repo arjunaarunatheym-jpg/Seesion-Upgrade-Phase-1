@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { LogOut, Calendar, Users, FileText, BarChart3, Camera, Upload, Sparkles, Save, Send, Edit, Trash2, Clock, MessageSquare, Download, CheckCircle, Search, Eye, Building2, BookOpen, Plus, DollarSign, Wallet } from "lucide-react";
+import { LogOut, Calendar, Users, FileText, BarChart3, Camera, Upload, Sparkles, Save, Send, Edit, Trash2, Clock, MessageSquare, Download, CheckCircle, Search, Eye, Building2, BookOpen, Plus, DollarSign, Wallet, AlertCircle } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import MyEarnings from "../components/MyEarnings";
 import MyPayroll from "../components/MyPayroll";
@@ -1014,6 +1014,40 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
     totalTestsTaken: testResults.length
   };
 
+  // Compute session status (traffic light)
+  const getSessionStatus = (session) => {
+    const st = sessionStats[session.id];
+    if (!st || st.participantCount === 0) return { color: "gray", label: "No Data" };
+    const postDone = st.postTestCompleted >= st.participantCount;
+    const fbDone = st.feedbackCompleted >= st.participantCount;
+    if (postDone && fbDone) return { color: "green", label: "Complete" };
+    if (st.postTestCompleted > 0 || st.feedbackCompleted > 0 || st.preTestCompleted > 0) return { color: "yellow", label: "In Progress" };
+    return { color: "red", label: "Action Needed" };
+  };
+
+  const statusColors = {
+    green: "bg-emerald-100 text-emerald-800 border-emerald-300",
+    yellow: "bg-amber-100 text-amber-800 border-amber-300",
+    red: "bg-red-100 text-red-800 border-red-300",
+    gray: "bg-gray-100 text-gray-600 border-gray-300",
+  };
+
+  // Compute aggregate stats + action items
+  const totalParticipantsAll = sessions.reduce((sum, s) => sum + (sessionStats[s.id]?.participantCount || 0), 0);
+  const actionItems = sessions.flatMap(s => {
+    const st = sessionStats[s.id];
+    if (!st || st.participantCount === 0) return [];
+    const items = [];
+    const pending = (total, done) => total - done;
+    if (pending(st.participantCount, st.preTestCompleted) > 0)
+      items.push({ session: s.company_name || s.name, text: `${pending(st.participantCount, st.preTestCompleted)} pre-test pending`, type: "pre" });
+    if (pending(st.participantCount, st.postTestCompleted) > 0)
+      items.push({ session: s.company_name || s.name, text: `${pending(st.participantCount, st.postTestCompleted)} post-test pending`, type: "post" });
+    if (pending(st.participantCount, st.feedbackCompleted) > 0)
+      items.push({ session: s.company_name || s.name, text: `${pending(st.participantCount, st.feedbackCompleted)} feedback pending`, type: "fb" });
+    return items;
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50">
       {/* Header */}
@@ -1059,6 +1093,51 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* At-a-Glance Summary Cards */}
+        {!loading && sessions.length > 0 && (
+          <div className="mb-6 space-y-4" data-testid="coordinator-summary">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-white rounded-lg border p-4 shadow-sm">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Active Sessions</p>
+                <p className="text-2xl font-bold text-indigo-700 mt-1">{sessions.length}</p>
+              </div>
+              <div className="bg-white rounded-lg border p-4 shadow-sm">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Total Participants</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{totalParticipantsAll}</p>
+              </div>
+              <div className="bg-white rounded-lg border p-4 shadow-sm">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Sessions Complete</p>
+                <p className="text-2xl font-bold text-emerald-700 mt-1">
+                  {sessions.filter(s => getSessionStatus(s).color === "green").length}/{sessions.length}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg border p-4 shadow-sm">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Action Items</p>
+                <p className={`text-2xl font-bold mt-1 ${actionItems.length > 0 ? 'text-red-600' : 'text-emerald-700'}`}>{actionItems.length}</p>
+              </div>
+            </div>
+            {/* Action Required Section */}
+            {actionItems.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4" data-testid="action-required-section">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                  <h3 className="font-semibold text-amber-900 text-sm">Action Required</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                  {actionItems.slice(0, 6).map((item, i) => (
+                    <div key={i} className="text-xs bg-white rounded px-3 py-2 border border-amber-100">
+                      <span className="font-medium text-gray-900">{item.session}:</span>{' '}
+                      <span className="text-gray-600">{item.text}</span>
+                    </div>
+                  ))}
+                  {actionItems.length > 6 && (
+                    <div className="text-xs text-amber-700 px-3 py-2">+{actionItems.length - 6} more items...</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {loading ? (
           <div className="space-y-6" data-testid="coordinator-loading">
             <div className="flex gap-2 bg-gray-100 p-2 rounded-lg">
@@ -1143,6 +1222,11 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                         >
                           <h3 className="font-bold text-gray-900 text-lg">{session.company_name || "Unknown Company"}</h3>
                           <p className="text-base text-gray-700 mt-1">{session.program_name || "Unknown Program"}</p>
+                          <div className="mt-2">
+                            <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full border ${statusColors[getSessionStatus(session).color]}`} data-testid={`session-status-${session.id}`}>
+                              {getSessionStatus(session).label}
+                            </span>
+                          </div>
                           <div className="mt-3 space-y-2">
                             <p className="text-sm text-gray-600">Session: {session.name}</p>
                             <p className="text-sm text-gray-600 flex items-center gap-2">
