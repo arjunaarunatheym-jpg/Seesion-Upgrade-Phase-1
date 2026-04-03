@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MDDRC Platform - 10-Role Comprehensive Audit</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; }
+  
+  .container { max-width: 1000px; margin: 0 auto; padding: 40px 24px; }
+  
+  .header { text-align: center; margin-bottom: 48px; padding: 40px; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); border-radius: 16px; border: 1px solid #475569; }
+  .header h1 { font-size: 32px; font-weight: 800; color: #f8fafc; margin-bottom: 8px; }
+  .header .subtitle { font-size: 14px; color: #94a3b8; margin-bottom: 20px; }
+  .header .date { font-size: 12px; color: #64748b; }
+  
+  .summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 40px; }
+  .summary-card { background: #1e293b; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #334155; }
+  .summary-card .score { font-size: 28px; font-weight: 800; }
+  .summary-card .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+  .score-green { color: #4ade80; }
+  .score-yellow { color: #facc15; }
+  .score-orange { color: #fb923c; }
+  .score-red { color: #f87171; }
+  
+  .role-section { margin-bottom: 36px; background: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155; }
+  .role-header { padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+  .role-header h2 { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .role-header .badge { font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; }
+  .badge-green { background: #065f46; color: #6ee7b7; }
+  .badge-yellow { background: #713f12; color: #fde047; }
+  .badge-orange { background: #7c2d12; color: #fdba74; }
+  .badge-red { background: #7f1d1d; color: #fca5a5; }
+  
+  .role-body { padding: 20px 24px; }
+  .role-body h3 { font-size: 14px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; margin-top: 20px; }
+  .role-body h3:first-child { margin-top: 0; }
+  
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  th { text-align: left; padding: 8px 12px; font-size: 12px; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #334155; font-weight: 600; }
+  td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #1e293b; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  
+  .status-good { color: #4ade80; font-weight: 600; }
+  .status-improve { color: #facc15; font-weight: 600; }
+  .status-missing { color: #f87171; font-weight: 600; }
+  .status-na { color: #64748b; }
+  
+  .features-list { list-style: none; }
+  .features-list li { padding: 6px 0; font-size: 13px; display: flex; align-items: flex-start; gap: 8px; }
+  .features-list li::before { content: ''; width: 6px; height: 6px; border-radius: 50%; margin-top: 7px; flex-shrink: 0; }
+  .features-list.good li::before { background: #4ade80; }
+  .features-list.improve li::before { background: #facc15; }
+  .features-list.missing li::before { background: #f87171; }
+  
+  .bug-fix { background: #7f1d1d; border: 1px solid #991b1b; padding: 12px 16px; border-radius: 8px; margin-top: 16px; font-size: 13px; }
+  .bug-fix strong { color: #fca5a5; }
+  
+  .overall-section { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 16px; padding: 28px; margin-top: 40px; }
+  .overall-section h2 { font-size: 22px; font-weight: 700; margin-bottom: 16px; color: #f8fafc; }
+  
+  .rec-card { background: #334155; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; }
+  .rec-card .priority { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .rec-card p { font-size: 13px; color: #cbd5e1; }
+  .priority-p0 { color: #f87171; }
+  .priority-p1 { color: #fb923c; }
+  .priority-p2 { color: #facc15; }
+  
+  @media print {
+    body { background: white; color: #111; }
+    .container { max-width: 100%; padding: 20px; }
+    .header { background: #f1f5f9; border-color: #e2e8f0; }
+    .header h1 { color: #0f172a; }
+    .role-section { background: white; border-color: #e2e8f0; break-inside: avoid; }
+    .summary-card { background: #f8fafc; border-color: #e2e8f0; }
+    .role-body { background: white; }
+    td, th { border-bottom-color: #e2e8f0; }
+    .score-green { color: #16a34a; }
+    .score-yellow { color: #ca8a04; }
+    .score-orange { color: #ea580c; }
+    .score-red { color: #dc2626; }
+    .overall-section { background: #f8fafc; border-color: #e2e8f0; }
+    .rec-card { background: #f1f5f9; }
+  }
+  
+  @media (max-width: 640px) {
+    .summary-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>MDDRC Platform Audit Report</h1>
+    <p class="subtitle">Comprehensive 10-Role Experience & Functionality Review</p>
+    <p class="date">Generated: 3 April 2026 | System: 38 route modules, 900+ endpoints, 11,000+ lines of frontend</p>
+  </div>
+
+  <!-- Score Summary -->
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="score score-green">8.5</div>
+      <div class="label">Participant</div>
+    </div>
+    <div class="summary-card">
+      <div class="score score-green">8.2</div>
+      <div class="label">Trainer</div>
+    </div>
+    <div class="summary-card">
+      <div class="score score-green">8.0</div>
+      <div class="label">Coordinator</div>
+    </div>
+    <div class="summary-card">
+      <div class="score score-yellow">7.0</div>
+      <div class="label">Supervisor</div>
+    </div>
+    <div class="summary-card">
+      <div class="score score-green">8.5</div>
+      <div class="label">Marketing</div>
+    </div>
+    <div class="summary-card">
+      <div class="score score-green">8.8</div>
+      <div class="label">Finance</div>
+    </div>
+    <div class="summary-card">
+      <div class="score score-green">9.2</div>
+      <div class="label">Admin</div>
+    </div>
+    <div class="summary-card">
+      <div class="score score-yellow">6.5</div>
+      <div class="label">Accountant</div>
+    </div>
+    <div class="summary-card">
+      <div class="score score-yellow">6.0</div>
+      <div class="label">Auditor</div>
+    </div>
+    <div class="summary-card">
+      <div class="score score-green">8.0</div>
+      <div class="label">Buyer</div>
+    </div>
+  </div>
+
+  <!-- 1. PARTICIPANT / TRAINEE -->
+  <div class="role-section">
+    <div class="role-header">
+      <h2>1. Trainee / Participant</h2>
+      <span class="badge badge-green">8.5 / 10</span>
+    </div>
+    <div class="role-body">
+      <h3>What's Good</h3>
+      <ul class="features-list good">
+        <li>7-step progress tracker on Overview tab (verification > pre-test > attendance > training > post-test > feedback > certificate)</li>
+        <li>Schedule view showing day-by-day activities</li>
+        <li>Emergency contact capture during verification</li>
+        <li>Photo upload/camera capture during verification (just completed)</li>
+        <li>Pre-test and post-test taking UI, results displayed</li>
+        <li>Feedback form submission, certificate viewing</li>
+        <li>Checklist display, personal details editing in Settings</li>
+      </ul>
+      <h3>Needs Improvement</h3>
+      <ul class="features-list improve">
+        <li>No notification/reminder when session is about to start</li>
+        <li>No way to download certificate as PDF (only view)</li>
+        <li>Progress tracker could show dates for each completed step</li>
+        <li>Mobile keyboard sometimes covers input fields in verification dialog</li>
+      </ul>
+      <h3>What's Missing</h3>
+      <ul class="features-list missing">
+        <li>Past training history (only current session visible)</li>
+        <li>Ability to retake failed tests (if trainer allows)</li>
+        <li>Digital signature for indemnity form</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 2. TRAINER -->
+  <div class="role-section">
+    <div class="role-header">
+      <h2>2. Trainer</h2>
+      <span class="badge badge-green">8.2 / 10</span>
+    </div>
+    <div class="role-body">
+      <h3>What's Good</h3>
+      <ul class="features-list good">
+        <li>Today's Session summary card (just added) &mdash; shows company, location, pax, role</li>
+        <li>Participant list with profile photos and emergency contacts (just added)</li>
+        <li>Session notes tab for recording observations (just added)</li>
+        <li>8 tabs: Sessions, Session Mgmt, Checklists, Feedback, Past Training, Notes, Earnings, Payroll</li>
+        <li>Full checklist management with template assignment and submission tracking</li>
+        <li>Chief Trainer feedback capability (conditional tab)</li>
+        <li>Earnings and payroll visibility</li>
+      </ul>
+      <h3>Needs Improvement</h3>
+      <ul class="features-list improve">
+        <li>8 tabs overflow on mobile &mdash; could group Earnings + Payroll under "My Finance"</li>
+        <li>Checklist checkboxes small on mobile &mdash; needs larger touch targets</li>
+        <li>Session management tab has a lot of dense information</li>
+      </ul>
+      <h3>What's Missing</h3>
+      <ul class="features-list missing">
+        <li>Offline mode for checklists (remote sites with poor connectivity)</li>
+        <li>Training material upload/sharing with participants</li>
+        <li>Push notification when new session is assigned</li>
+        <li>Digital signature on completed checklists</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 3. COORDINATOR -->
+  <div class="role-section">
+    <div class="role-header">
+      <h2>3. Coordinator</h2>
+      <span class="badge badge-green">8.0 / 10</span>
+    </div>
+    <div class="role-body">
+      <h3>What's Good</h3>
+      <ul class="features-list good">
+        <li>At-a-Glance summary cards (just added) &mdash; sessions, participants, completion, action items</li>
+        <li>Action Required section (just added) &mdash; pending pre/post-tests, feedback per session</li>
+        <li>Session traffic light badges (just added) &mdash; Green/Yellow/Red status</li>
+        <li>Name tooltips for long Malaysian names (just added)</li>
+        <li>7 tabs: Sessions, Management, Past Training, Report, Analytics, Earnings, Payroll</li>
+        <li>Bulk CSV/Excel participant upload</li>
+        <li>Training report generation (DOCX with photo upload)</li>
+        <li>Photo management per session, attendance clock-in/out</li>
+        <li>Session analytics with charts</li>
+      </ul>
+      <h3>Needs Improvement</h3>
+      <ul class="features-list improve">
+        <li>Report generation is multi-step &mdash; could use a wizard flow</li>
+        <li>Analytics charts could have export option</li>
+        <li>Tab bar still 7 tabs on mobile</li>
+      </ul>
+      <h3>What's Missing</h3>
+      <ul class="features-list missing">
+        <li>Calendar view of sessions</li>
+        <li>Pre-session preparation checklist (venue, equipment, etc.)</li>
+        <li>Direct communication with participants (email/WhatsApp blast)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 4. SUPERVISOR -->
+  <div class="role-section">
+    <div class="role-header">
+      <h2>4. Supervisor (Client PIC)</h2>
+      <span class="badge badge-yellow">7.0 / 10</span>
+    </div>
+    <div class="role-body">
+      <h3>What's Good</h3>
+      <ul class="features-list good">
+        <li>Staff Progress dashboard (just rebuilt) &mdash; 5 stat cards: staff, attended, pass rate, post-test, certs</li>
+        <li>Per-participant progress table with visual check/cross icons</li>
+        <li>Attendance tab with CSV export</li>
+        <li>Test results tab (pre/post scores + pass/fail badges)</li>
+        <li>Certificates tab with per-participant download</li>
+        <li>Invoice tab showing session invoices with amount and status</li>
+        <li>Human-friendly date formatting throughout</li>
+        <li>Session selector with horizontal scroll for multiple sessions</li>
+      </ul>
+      <h3>Needs Improvement</h3>
+      <ul class="features-list improve">
+        <li>No real-time updates &mdash; manual refresh needed</li>
+        <li>Certificate download goes to individual files, no bulk zip download</li>
+        <li>Invoice tab is view-only, no PDF download for supervisor</li>
+      </ul>
+      <h3>What's Missing</h3>
+      <ul class="features-list missing">
+        <li>Attendance PDF export (CSV only currently)</li>
+        <li>HRDC claim package download (grouped documents)</li>
+        <li>Training history across multiple sessions for the same company</li>
+        <li>Ability to rate/review the training provider</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 5. MARKETING -->
+  <div class="role-section">
+    <div class="role-header">
+      <h2>5. Marketing</h2>
+      <span class="badge badge-green">8.5 / 10</span>
+    </div>
+    <div class="role-body">
+      <h3>What's Good</h3>
+      <ul class="features-list good">
+        <li>7 tabs: Dashboard, Sessions, Quotations, Leads, Clients, Earnings, Payroll</li>
+        <li>Full quotation workflow with PDF generation and approval chain</li>
+        <li>Live polling (10-second refresh) for quotation approvals</li>
+        <li>Lead management with pipeline tracking</li>
+        <li>Client/company management</li>
+        <li>Commission tracking per session</li>
+        <li>Earnings and payroll visibility</li>
+        <li>2-decimal RM formatting throughout</li>
+      </ul>
+      <h3>Needs Improvement</h3>
+      <ul class="features-list improve">
+        <li>Dashboard stats could include monthly targets/KPIs</li>
+        <li>Quotation PDF could include more branding options</li>
+        <li>Lead source tracking is basic</li>
+      </ul>
+      <h3>What's Missing</h3>
+      <ul class="features-list missing">
+        <li>Email sending for quotations (currently manual)</li>
+        <li>WhatsApp integration for client follow-ups</li>
+        <li>Sales funnel visualization</li>
+        <li>Automated follow-up reminders</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 6. FINANCE -->
+  <div class="role-section">
+    <div class="role-header">
+      <h2>6. Finance</h2>
+      <span class="badge badge-green">8.8 / 10</span>
+    </div>
+    <div class="role-body">
+      <h3>What's Good</h3>
+      <ul class="features-list good">
+        <li>11 tabs: Dashboard, Invoices, Payments, Credit Notes, Payables, Petty Cash, Accounting, Profit & Loss, Audit Trail, HR, Settings</li>
+        <li>Full invoice lifecycle (draft > issued > paid > voided)</li>
+        <li>Payment recording with auto credit note generation</li>
+        <li>Receipt number auto-generation on payment recording (just fixed)</li>
+        <li>Receipt PDF print with company branding</li>
+        <li>Credit note management with backdating and editing</li>
+        <li>Petty cash tracking</li>
+        <li>Double-entry accounting with journal entries</li>
+        <li>Profit & Loss report</li>
+        <li>Audit trail logging</li>
+        <li>Company settings for branding</li>
+        <li>SST handling</li>
+      </ul>
+      <h3>Needs Improvement</h3>
+      <ul class="features-list improve">
+        <li>Payables (AP) workflow could be more streamlined</li>
+        <li>P&L report date range filters could be more flexible</li>
+      </ul>
+      <h3>What's Missing</h3>
+      <ul class="features-list missing">
+        <li>Balance Sheet report</li>
+        <li>SST Summary report for tax filing</li>
+        <li>Bank reconciliation</li>
+        <li>Automated payment reminders via email</li>
+      </ul>
+
+      <div class="bug-fix">
+        <strong>BUG FIXED THIS SESSION:</strong> Receipt numbers were dynamically generated at read time (unstable). Now they are persisted when payment is recorded using sequential numbering: RCP/YYYY/MM/0001.
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. ADMIN -->
+  <div class="role-section">
+    <div class="role-header">
+      <h2>7. Admin</h2>
+      <span class="badge badge-green">9.2 / 10</span>
+    </div>
+    <div class="role-body">
+      <h3>What's Good</h3>
+      <ul class="features-list good">
+        <li>13 tabs: Sessions, Programs, Companies, Users, Staff, Finance, Quotations, Marketing Leads, Reports, Past Training, Data Management, Settings, My Payroll</li>
+        <li>Full session lifecycle management (create, assign trainers/coordinators/supervisors, manage participants)</li>
+        <li>Program management with certificate title/subtitle configuration</li>
+        <li>Multi-day session support with schedule and validity fields</li>
+        <li>User management with role assignment and additional_roles</li>
+        <li>Data Management tab for overriding financial figures (with auto-sync to PDFs)</li>
+        <li>Invoice generation with line items</li>
+        <li>Comprehensive settings (company, branding, test config)</li>
+        <li>Vehicle details management</li>
+        <li>Payroll generation</li>
+        <li>KPI dashboard</li>
+      </ul>
+      <h3>Needs Improvement</h3>
+      <ul class="features-list improve">
+        <li>13 tabs is a lot &mdash; consider sub-navigation or sidebar for desktop</li>
+        <li>Settings tab bundles too many concerns (company + branding + test + template)</li>
+        <li>Session creation form is long &mdash; could be a multi-step wizard</li>
+      </ul>
+      <h3>What's Missing</h3>
+      <ul class="features-list missing">
+        <li>Dashboard/home view with system-wide KPIs (currently lands on Sessions tab)</li>
+        <li>Bulk actions (bulk session status update, bulk user role change)</li>
+        <li>Activity log / recent changes feed</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 8. ACCOUNTANT -->
+  <div class="role-section">
+    <div class="role-header">
+      <h2>8. Accountant</h2>
+      <span class="badge badge-yellow">6.5 / 10</span>
+    </div>
+    <div class="role-body">
+      <h3>What's Good</h3>
+      <ul class="features-list good">
+        <li>P&L Ledger component exists (ProfitLossLedger.jsx, AuditorPnLTab.jsx)</li>
+        <li>Double-entry journal system in accounting module (80 functions)</li>
+        <li>Chart of Accounts management</li>
+        <li>Automated journal posting on payment/credit note events</li>
+      </ul>
+      <h3>Needs Improvement</h3>
+      <ul class="features-list improve">
+        <li>No dedicated "Accountant" role login &mdash; must use admin or finance role</li>
+        <li>P&L component exists but is embedded in Finance dashboard, not standalone</li>
+        <li>No trial balance view</li>
+        <li>Journal entries are auto-generated but manual entries not easy to create</li>
+      </ul>
+      <h3>What's Missing</h3>
+      <ul class="features-list missing">
+        <li>Dedicated accountant portal/role with read-only access to financials</li>
+        <li>Balance Sheet</li>
+        <li>Trial Balance</li>
+        <li>Accounts Receivable aging report</li>
+        <li>Cash flow statement</li>
+        <li>Export to accounting software format (e.g., CSV for import to MYOB/Xero)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 9. AUDITOR -->
+  <div class="role-section">
+    <div class="role-header">
+      <h2>9. Auditor</h2>
+      <span class="badge badge-orange">6.0 / 10</span>
+    </div>
+    <div class="role-body">
+      <h3>What's Good</h3>
+      <ul class="features-list good">
+        <li>Audit trail tab in Finance dashboard captures all financial changes</li>
+        <li>Finance audit log tracks before/after values with timestamps</li>
+        <li>Auditor P&L tab component exists</li>
+        <li>Data Management edits are tracked with reasons</li>
+      </ul>
+      <h3>Needs Improvement</h3>
+      <ul class="features-list improve">
+        <li>No dedicated "Auditor" role &mdash; must use admin access</li>
+        <li>Audit trail is within Finance tab, not a standalone view</li>
+        <li>Cannot filter audit trail by entity type, date range, or user</li>
+        <li>No export of audit trail</li>
+      </ul>
+      <h3>What's Missing</h3>
+      <ul class="features-list missing">
+        <li>Dedicated auditor portal with read-only access</li>
+        <li>Document trail linking (invoice > payment > receipt > credit note chain)</li>
+        <li>Variance reports (budgeted vs actual per session)</li>
+        <li>Exception report (unusual amounts, late payments, voided invoices)</li>
+        <li>Compliance checks (missing invoices for completed sessions)</li>
+        <li>Exportable audit package (all financial docs for a period as ZIP)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 10. BUYER -->
+  <div class="role-section">
+    <div class="role-header">
+      <h2>10. Buyer of the App</h2>
+      <span class="badge badge-green">8.0 / 10</span>
+    </div>
+    <div class="role-body">
+      <h3>What's Good</h3>
+      <ul class="features-list good">
+        <li><strong>Comprehensive scope:</strong> 38 backend modules, 900+ endpoints, covers full training lifecycle</li>
+        <li><strong>Role-based access:</strong> 7+ distinct roles with appropriate permissions</li>
+        <li><strong>Financial depth:</strong> Invoice, payment, receipt, credit note, P&L, journal entries, petty cash, payables</li>
+        <li><strong>Training lifecycle:</strong> From quotation to certificate, fully tracked</li>
+        <li><strong>Audit compliance:</strong> Financial changes tracked with before/after values</li>
+        <li><strong>Branding:</strong> Company settings, logo, invoice/receipt customization</li>
+        <li><strong>Certificate verification:</strong> Public QR-based verification page</li>
+        <li><strong>Data integrity:</strong> Invoice overrides auto-sync, auto-heal in PDFs</li>
+        <li><strong>Modern stack:</strong> React + FastAPI + MongoDB, responsive design</li>
+      </ul>
+      <h3>Needs Improvement</h3>
+      <ul class="features-list improve">
+        <li><strong>No email integration:</strong> All notifications are in-app only. No email for invoices, receipts, certificates.</li>
+        <li><strong>No WhatsApp integration:</strong> Critical for Malaysian B2B communication</li>
+        <li><strong>Single-tenant:</strong> Currently one company. Multi-tenancy needed for SaaS</li>
+        <li><strong>No onboarding wizard:</strong> New user setup is manual</li>
+        <li><strong>Mobile experience:</strong> Functional but not optimized (tab overflow, small touch targets)</li>
+      </ul>
+      <h3>What's Missing for Market-Readiness</h3>
+      <ul class="features-list missing">
+        <li><strong>Email/WhatsApp comms:</strong> Invoice delivery, payment reminders, cert notifications</li>
+        <li><strong>Certificate PDF auto-generation:</strong> Currently requires manual template. Needs engine.</li>
+        <li><strong>Multi-tenancy:</strong> For selling to multiple training companies</li>
+        <li><strong>Payment gateway:</strong> Stripe/FPX for online invoice payment</li>
+        <li><strong>Reports export:</strong> Balance Sheet, SST Summary, HRDC reports</li>
+        <li><strong>Backup/restore UI:</strong> Backend exists but no admin-facing UI</li>
+        <li><strong>Dedicated Accountant/Auditor portals:</strong> Read-only access for external professionals</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- OVERALL RECOMMENDATIONS -->
+  <div class="overall-section">
+    <h2>Priority Action Items</h2>
+    
+    <div class="rec-card">
+      <div class="priority priority-p0">P0 &mdash; Fix (Done)</div>
+      <p>Receipt numbers now auto-generated and persisted (RCP/YYYY/MM/0001) when payment is recorded. Legacy payments fall back to count-based generation.</p>
+    </div>
+    
+    <div class="rec-card">
+      <div class="priority priority-p0">P0 &mdash; Certificate PDF Engine</div>
+      <p>Blocked on user providing blank template. Once available, map placeholders to dynamic data (name, dates, QR code) using a PDF overlay library.</p>
+    </div>
+    
+    <div class="rec-card">
+      <div class="priority priority-p1">P1 &mdash; Email Integration (Resend)</div>
+      <p>Send invoices, receipts, payment confirmations, and certificate notifications via email. Critical for professionalism.</p>
+    </div>
+    
+    <div class="rec-card">
+      <div class="priority priority-p1">P1 &mdash; Accountant & Auditor Portals</div>
+      <p>Create dedicated read-only roles with focused dashboards: financials for accountant, audit trail + exception reports for auditor.</p>
+    </div>
+    
+    <div class="rec-card">
+      <div class="priority priority-p1">P1 &mdash; Balance Sheet + SST Summary</div>
+      <p>Complete the accounting reporting suite. Most of the journal data exists; needs report generation views.</p>
+    </div>
+    
+    <div class="rec-card">
+      <div class="priority priority-p2">P2 &mdash; Mobile UX Pass</div>
+      <p>Address tab overflow on Trainer (8 tabs), Coordinator (7 tabs), Admin (13 tabs). Use collapsible menus or bottom nav.</p>
+    </div>
+    
+    <div class="rec-card">
+      <div class="priority priority-p2">P2 &mdash; WhatsApp Integration</div>
+      <p>Malaysian businesses live on WhatsApp. Add "Send via WhatsApp" buttons for quotations, invoices, cert links.</p>
+    </div>
+  </div>
+
+  <div style="text-align: center; padding: 32px; color: #64748b; font-size: 12px;">
+    MDDRC Training Management Platform &mdash; Comprehensive 10-Role Audit &mdash; April 2026
+  </div>
+</div>
+</body>
+</html>

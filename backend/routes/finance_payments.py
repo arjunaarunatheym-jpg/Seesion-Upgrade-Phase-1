@@ -54,6 +54,27 @@ class DeletePaymentRequest(BaseModel):
 
 
 # ============ HELPER FUNCTIONS ============
+async def generate_receipt_number():
+    """Generate unique receipt number: RCP/YYYY/MM/0001"""
+    now = get_malaysia_time()
+    year = now.year
+    month = now.month
+    prefix = f"RCP/{year}/{month:02d}/"
+
+    last_receipt = await db.payments.find_one(
+        {"receipt_number": {"$regex": f"^RCP/{year}/{month:02d}/"}},
+        sort=[("receipt_number", -1)]
+    )
+
+    if last_receipt and last_receipt.get("receipt_number"):
+        last_num = int(last_receipt["receipt_number"].split("/")[-1])
+        new_num = last_num + 1
+    else:
+        new_num = 1
+
+    return f"{prefix}{new_num:04d}"
+
+
 async def generate_credit_note_number():
     """Generate unique credit note number: CN/MDDRC/YYYY/MM/0001"""
     now = get_malaysia_time()
@@ -155,6 +176,7 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
         "payment_method": payment_data.payment_method,
         "reference_number": payment_data.reference_number,
         "notes": payment_data.notes,
+        "receipt_number": await generate_receipt_number(),
         "recorded_by": current_user.id,
         "created_at": get_malaysia_time().isoformat()
     }
@@ -287,10 +309,13 @@ async def get_receipt_data(payment_id: str, current_user: User = Depends(get_cur
     if not settings:
         settings = {"company_name": "MDDRC SDN BHD"}
     
-    receipt_count = await db.payments.count_documents({})
-    year = get_malaysia_time().year
-    month = get_malaysia_time().month
-    receipt_number = f"RCP/{year}/{month:02d}/{receipt_count:04d}"
+    # Use stored receipt number, fallback to generated one for legacy payments
+    receipt_number = payment.get("receipt_number")
+    if not receipt_number:
+        receipt_count = await db.payments.count_documents({})
+        year = get_malaysia_time().year
+        month = get_malaysia_time().month
+        receipt_number = f"RCP/{year}/{month:02d}/{receipt_count:04d}"
     
     return {
         "receipt_number": receipt_number,

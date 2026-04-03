@@ -37,7 +37,8 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - **Trainer Dashboard - Today's Session card**: Amber summary card showing today's active sessions with company, location, participant count, trainer role
 - **Trainer Dashboard - Participant Photos & Emergency Contacts**: Participant list shows profile photos (or placeholder) and emergency contact details
 - **Trainer Dashboard - Session Notes**: New tab + backend API (GET/POST/DELETE /api/sessions/{id}/notes) for trainers to record observations per session
-- **Backend**: Added profile_photo, emergency_contact_name, emergency_contact_phone, contact_phone to assigned-participants response
+- **Receipt Number Fix**: Auto-generated and persisted (RCP/YYYY/MM/0001) when payment is recorded. Legacy payments use count-based fallback.
+- **10-Role Audit Report**: Generated comprehensive HTML audit at /mddrc-10-role-audit.html
 - **Coordinator Dashboard - At-a-Glance Cards**: Summary row (active sessions, total participants, completion count, action items)
 - **Coordinator Dashboard - Action Required**: Amber alert section showing pending pre-tests, post-tests, feedback per session
 - **Coordinator Dashboard - Traffic Lights**: Green/Yellow/Red session status badges on each session card
