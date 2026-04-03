@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MDDRC - Email & WhatsApp Integration Advisory</title>
+<style>
+  @page { size: A4; margin: 20mm; }
+  @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; line-height: 1.6; color: #1a1a2e; padding: 30px; max-width: 210mm; margin: 0 auto; }
+
+  .cover { text-align: center; padding: 50px 0 30px; border-bottom: 4px solid #1a365d; margin-bottom: 30px; }
+  .cover h1 { font-size: 26px; color: #1a365d; margin-bottom: 6px; }
+  .cover h2 { font-size: 14px; color: #4472C4; font-weight: 400; margin-bottom: 20px; }
+  .cover .meta { font-size: 11px; color: #666; }
+
+  h2 { font-size: 17px; color: white; margin: 28px 0 12px; padding: 10px 15px; background: #1a365d; border-radius: 4px; }
+  h3 { font-size: 13px; color: #1a365d; margin: 18px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #4472C4; }
+  h4 { font-size: 11.5px; color: #2d5a8e; margin: 12px 0 6px; }
+  p { margin-bottom: 8px; text-align: justify; }
+  ul, ol { margin: 8px 0 8px 20px; }
+  li { margin-bottom: 4px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10px; }
+  th { background: #4472C4; color: white; padding: 8px 10px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 7px 10px; border-bottom: 1px solid #e2e8f0; }
+  tr:nth-child(even) { background: #f7fafc; }
+
+  .verdict { padding: 12px 15px; border-radius: 6px; margin: 12px 0; }
+  .verdict-good { background: #f0fff4; border-left: 4px solid #48bb78; }
+  .verdict-warn { background: #fffaf0; border-left: 4px solid #ed8936; }
+  .verdict-info { background: #ebf8ff; border-left: 4px solid #4472C4; }
+
+  .highlight-box { background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 6px; padding: 12px; margin: 12px 0; }
+
+  .flow-box { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; margin: 12px 0; font-family: 'Courier New', monospace; font-size: 10.5px; line-height: 1.8; white-space: pre-line; }
+
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+  .badge-green { background: #c6f6d5; color: #276749; }
+  .badge-orange { background: #feebc8; color: #c05621; }
+  .badge-blue { background: #bee3f8; color: #2a4365; }
+  .badge-red { background: #fed7d7; color: #c53030; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+  .footer { margin-top: 40px; text-align: center; font-size: 9px; color: #999; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>Email and WhatsApp Integration</h1>
+  <h2>Advisory and Implementation Plan for MDDRC</h2>
+  <p class="meta">Prepared: 2 April 2026 | Confidential</p>
+</div>
+
+<h2>1. Email Integration</h2>
+
+<h3>1.1 How It Works</h3>
+<p>Your system already generates events (invoice issued, session created, payment received, certificate ready). The integration hooks into those events and auto-sends formatted HTML emails with attachments (e.g., invoice PDF, certificate PDF).</p>
+
+<h3>1.2 Service Comparison</h3>
+<table>
+  <tr><th>Feature</th><th>Resend</th><th>SendGrid</th></tr>
+  <tr><td>Free Tier</td><td>3,000 emails/month</td><td>100 emails/day (~3,000/month)</td></tr>
+  <tr><td>Setup Complexity</td><td><span class="badge badge-green">Simple</span></td><td><span class="badge badge-orange">Moderate</span></td></tr>
+  <tr><td>API Quality</td><td>Modern, clean REST API</td><td>Well-documented, mature</td></tr>
+  <tr><td>Delivery Reliability</td><td>High (newer infra)</td><td>Very high (industry standard)</td></tr>
+  <tr><td>Email Templates</td><td>Built-in + custom HTML</td><td>Built-in + custom HTML</td></tr>
+  <tr><td>Attachments</td><td>Yes (PDF, images)</td><td>Yes (PDF, images)</td></tr>
+  <tr><td>Analytics</td><td>Opens, clicks, bounces</td><td>Detailed analytics dashboard</td></tr>
+  <tr><td>Pricing (paid)</td><td>$20/month for 50K emails</td><td>$20/month for 40K emails</td></tr>
+</table>
+
+<div class="verdict verdict-good">
+  <strong>Recommendation: Resend</strong> - Simpler setup, modern API, generous free tier. Perfect for MDDRC's volume (likely under 500 emails/month initially).
+</div>
+
+<h3>1.3 What You Need To Provide</h3>
+<table>
+  <tr><th>Requirement</th><th>Details</th><th>Why</th></tr>
+  <tr><td><strong>Sender Email</strong></td><td>e.g., noreply@mddrc.com.my or admin@mddrc.com.my</td><td>The "from" address on all emails</td></tr>
+  <tr><td><strong>DNS Access</strong></td><td>Access to your domain's DNS settings (where you registered mddrc.com.my)</td><td>To add SPF/DKIM records so emails don't go to spam</td></tr>
+  <tr><td><strong>API Key</strong></td><td>Generated from Resend dashboard after signup</td><td>Authenticates your system to send emails</td></tr>
+</table>
+
+<h3>1.4 DNS Verification Steps</h3>
+<ol>
+  <li>Sign up at <strong>resend.com</strong></li>
+  <li>Add your domain mddrc.com.my</li>
+  <li>Resend will give you 2-3 DNS records to add (TXT records for SPF/DKIM)</li>
+  <li>Add those records in your domain registrar (e.g., GoDaddy, Namecheap, etc.)</li>
+  <li>Wait 5-30 minutes for DNS propagation</li>
+  <li>Click "Verify" in Resend dashboard</li>
+  <li>Done - you can now send emails from @mddrc.com.my</li>
+</ol>
+
+<h3>1.5 What Gets Built</h3>
+<table>
+  <tr><th>#</th><th>Component</th><th>Description</th></tr>
+  <tr><td>1</td><td>Email Service Module</td><td>Backend service that connects to Resend API and sends HTML emails</td></tr>
+  <tr><td>2</td><td>Email Templates</td><td>Professional HTML templates for each event type (branded with MDDRC logo)</td></tr>
+  <tr><td>3</td><td>Notification Settings</td><td>Admin UI to toggle which events trigger emails (ON/OFF per event type)</td></tr>
+  <tr><td>4</td><td>Email Log</td><td>Table showing all sent emails - recipient, subject, status, timestamp</td></tr>
+  <tr><td>5</td><td>Attachment Support</td><td>Auto-attach invoice PDF or certificate PDF to relevant emails</td></tr>
+</table>
+
+<h3>1.6 Email Events and Recipients</h3>
+<table>
+  <tr><th>Event</th><th>Recipient</th><th>Content</th><th>Priority</th></tr>
+  <tr><td>Invoice Issued</td><td>Client company (AP/HR email)</td><td>Invoice PDF attached, amount, due date</td><td><span class="badge badge-red">P0</span></td></tr>
+  <tr><td>Certificate Ready</td><td>Participant</td><td>Certificate PDF attached, congratulations message</td><td><span class="badge badge-red">P0</span></td></tr>
+  <tr><td>Payment Received</td><td>Finance team + Client</td><td>Receipt confirmation, payment details</td><td><span class="badge badge-orange">P1</span></td></tr>
+  <tr><td>Session Created</td><td>Coordinator, Trainer</td><td>Session details, date, location, company</td><td><span class="badge badge-orange">P1</span></td></tr>
+  <tr><td>Payment Overdue (30 days)</td><td>Client company</td><td>Friendly reminder, invoice ref, amount outstanding</td><td><span class="badge badge-orange">P1</span></td></tr>
+  <tr><td>Payment Overdue (60 days)</td><td>Client company</td><td>Firmer reminder, escalation notice</td><td><span class="badge badge-blue">P2</span></td></tr>
+  <tr><td>Payment Overdue (90 days)</td><td>Client company + Admin</td><td>Final notice, flagged for management attention</td><td><span class="badge badge-blue">P2</span></td></tr>
+  <tr><td>Quotation Approved/Rejected</td><td>Marketing user</td><td>Quotation status update, next steps</td><td><span class="badge badge-blue">P2</span></td></tr>
+  <tr><td>Post-Training Eval Due</td><td>Participant</td><td>Survey link, training reference</td><td><span class="badge badge-blue">P2</span></td></tr>
+</table>
+
+<h2>2. WhatsApp Integration</h2>
+
+<h3>2.1 Options Comparison</h3>
+
+<div class="two-col">
+  <div class="verdict verdict-good">
+    <h4>Option A: Click-to-Send Links (Free)</h4>
+    <ul>
+      <li>Zero cost, zero setup</li>
+      <li>Generates wa.me/60xxx?text=... links</li>
+      <li>"Send via WhatsApp" button next to invoices, certs, reminders</li>
+      <li>Opens WhatsApp with pre-filled message</li>
+      <li><strong>Not automated</strong> - someone clicks to send</li>
+      <li>Best for: quick start, manual follow-ups</li>
+    </ul>
+  </div>
+  <div class="verdict verdict-warn">
+    <h4>Option B: Twilio WhatsApp API (Paid)</h4>
+    <ul>
+      <li>~RM 0.15-0.30 per message</li>
+      <li>Fully automated - no manual clicks</li>
+      <li>Requires Facebook Business verification (1-2 weeks)</li>
+      <li>Pre-approved message templates only</li>
+      <li>Professional sender identity</li>
+      <li>Best for: high volume, full automation</li>
+    </ul>
+  </div>
+</div>
+
+<h3>2.2 Twilio WhatsApp Setup Requirements (if Option B)</h3>
+<table>
+  <tr><th>Requirement</th><th>Details</th><th>Time</th></tr>
+  <tr><td>Twilio Account</td><td>Sign up at twilio.com, add credit</td><td>5 minutes</td></tr>
+  <tr><td>WhatsApp Business Profile</td><td>Register via Twilio + Facebook Business Manager</td><td>1-2 weeks</td></tr>
+  <tr><td>Message Templates</td><td>Submit templates for approval (e.g., invoice reminder, cert notification)</td><td>24-48 hours per template</td></tr>
+  <tr><td>Dedicated Phone Number</td><td>Twilio provides a WhatsApp-enabled number</td><td>Included with Twilio</td></tr>
+</table>
+
+<h3>2.3 WhatsApp Message Templates (examples)</h3>
+<table>
+  <tr><th>Template</th><th>Message</th></tr>
+  <tr><td>Invoice Reminder</td><td>"Salam, this is a friendly reminder that invoice [invoice_number] for RM [amount] is due on [due_date]. Please arrange payment at your earliest convenience. - MDDRC"</td></tr>
+  <tr><td>Certificate Ready</td><td>"Tahniah! Your certificate of competency for [programme] is ready. Certificate No: [cert_number]. Verify at mddrc.online/verify/[cert_number]"</td></tr>
+  <tr><td>Session Reminder</td><td>"Reminder: Your training session for [programme] is scheduled on [date] at [venue]. Please arrive 15 minutes early. - MDDRC"</td></tr>
+</table>
+
+<div class="verdict verdict-info">
+  <strong>Recommendation:</strong> Start with <strong>Option A (free click-to-send links)</strong> immediately. This gives you WhatsApp capability today with zero cost. Upgrade to Twilio API later when volume justifies automation.
+</div>
+
+<h2>3. Recommended Implementation Plan</h2>
+
+<h3>Phase 1: Email (Week 1)</h3>
+<table>
+  <tr><th>Day</th><th>Task</th></tr>
+  <tr><td>Day 1</td><td>You: Sign up for Resend, verify DNS, share API key</td></tr>
+  <tr><td>Day 1-2</td><td>I build: Email service module + invoice issued notification + cert ready notification</td></tr>
+  <tr><td>Day 2-3</td><td>I build: Admin notification settings page (toggle ON/OFF per event)</td></tr>
+  <tr><td>Day 3</td><td>I build: Email log + payment received notification</td></tr>
+  <tr><td>Day 3</td><td>Testing and go-live</td></tr>
+</table>
+
+<h3>Phase 2: WhatsApp Links (Week 1, parallel)</h3>
+<table>
+  <tr><th>Day</th><th>Task</th></tr>
+  <tr><td>Day 1</td><td>Add "Send via WhatsApp" buttons on invoice page, cert page, overdue list</td></tr>
+  <tr><td>Day 2</td><td>Pre-filled message templates for each event type</td></tr>
+  <tr><td>Day 2</td><td>Testing and go-live</td></tr>
+</table>
+
+<h3>Phase 3: WhatsApp API Automation (Week 3+, optional)</h3>
+<table>
+  <tr><th>Day</th><th>Task</th></tr>
+  <tr><td>Week 2</td><td>You: Register Twilio + Facebook Business verification</td></tr>
+  <tr><td>Week 3</td><td>You: Submit message templates for WhatsApp approval</td></tr>
+  <tr><td>Week 3</td><td>I build: Twilio WhatsApp backend + auto-send on events</td></tr>
+</table>
+
+<h2>4. How The Notification Flow Works</h2>
+
+<div class="flow-box">
+<strong>Session Completed</strong>
+  Auto-email certificate PDF to each participant
+  Admin sees "Send via WhatsApp" button per participant
+  In-app notification to Finance ("certificates issued, ready for invoicing")
+
+<strong>Invoice Issued</strong>
+  Auto-email invoice PDF to client company's AP email
+  Marketing user sees "Send via WhatsApp" button
+  30 days later: auto-email payment reminder
+  60 days: second reminder + "Send WhatsApp Reminder" button appears
+  90 days: final notice email + flagged on Finance dashboard
+
+<strong>Payment Received</strong>
+  Auto-email receipt to client
+  Finance gets in-app notification
+  Outstanding balance auto-updated on dashboard
+
+<strong>Quotation Approved</strong>
+  Auto-email to marketing user
+  In-app notification on Marketing dashboard
+</div>
+
+<h2>5. Monthly Cost Estimate</h2>
+
+<table>
+  <tr><th>Service</th><th>Volume Estimate</th><th>Monthly Cost</th></tr>
+  <tr><td>Resend (Email)</td><td>~200-500 emails/month</td><td><strong>FREE</strong> (under 3,000 limit)</td></tr>
+  <tr><td>WhatsApp Links</td><td>Unlimited</td><td><strong>FREE</strong></td></tr>
+  <tr><td>Twilio WhatsApp (if upgraded)</td><td>~100-200 messages/month</td><td><strong>~RM 30-60/month</strong></td></tr>
+</table>
+
+<div class="highlight-box">
+  <strong>Total cost to start: RM 0/month</strong><br>
+  Email (Resend free tier) + WhatsApp click-to-send links = full communication coverage at zero cost. Upgrade to Twilio WhatsApp API only when automation demand grows.
+</div>
+
+<h2>6. Your Action Items</h2>
+
+<table>
+  <tr><th>#</th><th>Action</th><th>Time Needed</th></tr>
+  <tr><td>1</td><td>Sign up at <strong>resend.com</strong></td><td>2 minutes</td></tr>
+  <tr><td>2</td><td>Add domain mddrc.com.my and get DNS records</td><td>5 minutes</td></tr>
+  <tr><td>3</td><td>Add SPF/DKIM DNS records at your domain registrar</td><td>10 minutes</td></tr>
+  <tr><td>4</td><td>Wait for DNS verification</td><td>5-30 minutes</td></tr>
+  <tr><td>5</td><td>Copy API key from Resend dashboard and share with me</td><td>1 minute</td></tr>
+  <tr><td>6</td><td>Confirm which sender email to use (e.g., noreply@mddrc.com.my)</td><td>1 minute</td></tr>
+  <tr><td>7</td><td>Provide client company email addresses (for invoice recipients)</td><td>As needed</td></tr>
+</table>
+
+<div class="footer">
+  <p>MDDRC Email and WhatsApp Integration Advisory</p>
+  <p>Prepared: 2 April 2026 | Confidential</p>
+</div>
+
+</body>
+</html>
