@@ -1391,9 +1391,9 @@ async def backfill_journal_entries(
             if inv.get("session_id"):
                 session = await db.sessions.find_one({"id": inv["session_id"]}, {"_id": 0})
             
-            # For paid invoices, force revenue recognition
-            if inv.get("status") == "paid":
-                session = {**(session or {}), "completion_status": "completed"}
+            # For all invoices, force revenue recognition to match CEO P&L
+            # (CEO P&L counts all issued/paid invoices as revenue)
+            session = {**(session or {}), "completion_status": "completed"}
             
             original_date = inv.get("invoice_date") or inv.get("created_at", "")[:10]
             if not original_date or len(original_date) < 10:
@@ -1856,6 +1856,67 @@ async def backfill_journal_entries(
     total_found = sum(r["found"] for r in results.values())
     total_skipped = sum(r["skipped"] for r in results.values())
     
+    # ---- 11. FIX DEFERRED REVENUE MISCLASSIFICATION ----
+    # Move invoice entries that posted to 2300 (Deferred Revenue) → 4000 (Training Revenue)
+    deferred_reclass = {"found": 0, "created": 0, "skipped": 0, "errors": []}
+    deferred_entries = await db.journal_entries.find({
+        "source_module": "invoice",
+        "status": "posted",
+        "lines.account_code": "2300"
+    }, {"_id": 0}).to_list(1000)
+    deferred_reclass["found"] = len(deferred_entries)
+
+    for entry in deferred_entries:
+        source_id = entry.get("source_id")
+        inv_number = entry.get("source_reference", "Unknown")
+        deferred_amount = 0
+        for line in entry.get("lines", []):
+            if line.get("account_code") == "2300" and line.get("credit", 0) > 0:
+                deferred_amount = line["credit"]
+        if deferred_amount <= 0:
+            deferred_reclass["skipped"] += 1
+            continue
+
+        reclass_id = f"{source_id}_reclass"
+        existing = await db.journal_entries.find_one({
+            "source_module": "deferred_reclass",
+            "source_id": reclass_id,
+            "status": {"$ne": "voided"}
+        })
+        if existing:
+            deferred_reclass["skipped"] += 1
+            continue
+
+        entry_date = entry.get("date", get_malaysia_time().strftime("%Y-%m-%d"))
+        try:
+            result = await create_auto_journal_entry(
+                entry_date=entry_date,
+                description=f"Revenue reclassification: {inv_number} - Deferred → Training Revenue",
+                source_module="deferred_reclass",
+                source_id=reclass_id,
+                source_reference=f"RECLASS-{inv_number}",
+                lines=[
+                    {"account_code": "2300", "debit": deferred_amount, "credit": 0, "memo": f"Reclassify deferred → revenue for {inv_number}"},
+                    {"account_code": "4000", "debit": 0, "credit": deferred_amount, "memo": f"Training Revenue recognized - {inv_number}"},
+                ],
+                created_by_id=user_id,
+                created_by_name=user_name,
+                skip_date_check=True
+            )
+            if result.get("journal_entry") and not result.get("is_duplicate"):
+                deferred_reclass["created"] += 1
+            elif result.get("is_duplicate"):
+                deferred_reclass["skipped"] += 1
+            elif result.get("error"):
+                deferred_reclass["errors"].append(f"{inv_number}: {result['error']}")
+        except Exception as e:
+            deferred_reclass["errors"].append(f"{inv_number}: {str(e)}")
+
+    results["deferred_reclass"] = deferred_reclass
+    total_created += deferred_reclass["created"]
+    total_found += deferred_reclass["found"]
+    total_skipped += deferred_reclass["skipped"]
+
     return {
         "message": f"Backfill complete. {total_created} journal entries created from {total_found} transactions ({total_skipped} already synced).",
         "results": results,
@@ -3940,3 +4001,7 @@ async def export_balance_sheet_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=balance_sheet_{year}_{month}.xlsx"}
     )
+
+
+# sync-journals endpoint removed — consolidated into /backfill
+
