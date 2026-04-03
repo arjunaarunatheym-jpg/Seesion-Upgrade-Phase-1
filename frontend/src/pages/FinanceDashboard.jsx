@@ -26,6 +26,7 @@ import { PayablesTab } from '../components/finance/PayablesTab';
 import { AuditLogTab } from '../components/finance/AuditLogTab';
 import { SettingsTab } from '../components/finance/SettingsTab';
 import AccountingTab from '../components/finance/AccountingTab';
+import { BalanceSheetTab } from '../components/finance/BalanceSheetTab';
 import { KpiDrilldownDialog } from '../components/KpiDrilldown';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
@@ -1782,6 +1783,10 @@ const FinanceDashboard = ({ user, onLogout }) => {
               <BarChart3 className="w-4 h-4 mr-1 hidden sm:inline" />
               P&L Ledger
             </TabsTrigger>
+            <TabsTrigger value="balance-sheet" className="flex-shrink-0 text-xs sm:text-sm" data-testid="balance-sheet-tab">
+              <Globe className="w-4 h-4 mr-1 hidden sm:inline" />
+              Balance Sheet
+            </TabsTrigger>
             <TabsTrigger value="petty-cash" className="flex-shrink-0 text-xs sm:text-sm">
               <Wallet className="w-4 h-4 mr-1 hidden sm:inline" />
               Petty Cash
@@ -1974,6 +1979,11 @@ const FinanceDashboard = ({ user, onLogout }) => {
           {/* Profit & Loss Ledger Tab */}
           <TabsContent value="profit-loss">
             <ProfitLossLedger />
+          </TabsContent>
+
+          {/* Balance Sheet Tab */}
+          <TabsContent value="balance-sheet">
+            <BalanceSheetTab />
           </TabsContent>
 
           {/* Petty Cash Tab */}

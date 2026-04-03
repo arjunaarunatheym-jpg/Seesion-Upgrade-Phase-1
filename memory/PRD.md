@@ -39,6 +39,7 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - **Trainer Dashboard - Session Notes**: New tab + backend API (GET/POST/DELETE /api/sessions/{id}/notes) for trainers to record observations per session
 - **Receipt Number Fix**: Auto-generated and persisted (RCP/YYYY/MM/0001) when payment is recorded. Legacy payments use count-based fallback.
 - **10-Role Audit Report**: Generated comprehensive HTML audit at /mddrc-10-role-audit.html
+- **Balance Sheet Tab**: New tab in Finance dashboard — Assets/Liabilities/Equity with collapsible sections, date filter, print button, summary cards, balance check indicator. Uses existing journal entries and Chart of Accounts.
 - **Coordinator Dashboard - At-a-Glance Cards**: Summary row (active sessions, total participants, completion count, action items)
 - **Coordinator Dashboard - Action Required**: Amber alert section showing pending pre-tests, post-tests, feedback per session
 - **Coordinator Dashboard - Traffic Lights**: Green/Yellow/Red session status badges on each session card
