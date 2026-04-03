@@ -586,6 +586,10 @@ async def get_trainer_assigned_participants(session_id: str, current_user: User 
                 "id": p["id"],
                 "full_name": p.get("full_name", ""),
                 "id_number": p.get("id_number", ""),
+                "profile_photo": p.get("profile_photo", ""),
+                "emergency_contact_name": p.get("emergency_contact_name", ""),
+                "emergency_contact_phone": p.get("emergency_contact_phone", ""),
+                "contact_phone": p.get("contact_phone", ""),
                 "checklist_submitted": existing_checklist is not None,
                 "checklist_id": existing_checklist.get("id") if existing_checklist else None
             })

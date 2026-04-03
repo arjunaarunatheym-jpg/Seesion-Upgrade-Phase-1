@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useTheme } from "../context/ThemeContext";
-import { LogOut, Calendar, ClipboardCheck, Users, FileText, ChevronDown, ChevronRight, MessageSquare, Search, Eye, Building2, BookOpen, DollarSign, Settings, Wallet } from "lucide-react";
+import { LogOut, Calendar, ClipboardCheck, Users, FileText, ChevronDown, ChevronRight, MessageSquare, Search, Eye, Building2, BookOpen, DollarSign, Settings, Wallet, MapPin, Clock, Phone, AlertTriangle, StickyNote, Trash2, Send, User } from "lucide-react";
 import MyEarnings from "../components/MyEarnings";
 import MyPayroll from "../components/MyPayroll";
 import { ChecklistsTab } from "../components/trainer/ChecklistsTab";
@@ -53,6 +53,21 @@ const TrainerDashboard = ({ user, onLogout }) => {
   // Check if user has additional roles
   const hasCoordinatorRole = user.additional_roles?.includes('coordinator') || user.role === 'coordinator';
   const hasMarketingRole = user.additional_roles?.includes('marketing') || user.role === 'marketing';
+
+  // Session notes state
+  const [sessionNotes, setSessionNotes] = useState([]);
+  const [newNote, setNewNote] = useState("");
+  const [submittingNote, setSubmittingNote] = useState(false);
+
+  // Compute today's sessions
+  const getTodaySessions = () => {
+    const today = new Date().toISOString().split('T')[0];
+    return sessions.filter(s => {
+      const start = s.start_date?.split('T')[0];
+      const end = s.end_date?.split('T')[0] || start;
+      return start <= today && today <= end;
+    });
+  };
 
   // Load session access status
   const loadSessionAccess = async (sessionId) => {
@@ -117,6 +132,34 @@ const TrainerDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const loadSessionNotes = async (sessionId) => {
+    try {
+      const res = await axiosInstance.get(`/sessions/${sessionId}/notes`);
+      setSessionNotes(res.data || []);
+    } catch { setSessionNotes([]); }
+  };
+
+  const handleAddNote = async () => {
+    if (!selectedSession || !newNote.trim()) return;
+    setSubmittingNote(true);
+    try {
+      await axiosInstance.post(`/sessions/${selectedSession.id}/notes`, { content: newNote.trim() });
+      setNewNote("");
+      toast.success("Note added");
+      loadSessionNotes(selectedSession.id);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to add note");
+    } finally { setSubmittingNote(false); }
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    if (!selectedSession) return;
+    try {
+      await axiosInstance.delete(`/sessions/${selectedSession.id}/notes/${noteId}`);
+      toast.success("Note deleted");
+      loadSessionNotes(selectedSession.id);
+    } catch { toast.error("Failed to delete note"); }
+  };
 
   useEffect(() => {
     loadSessions();
@@ -132,10 +175,11 @@ const TrainerDashboard = ({ user, onLogout }) => {
     }
   }, []);
 
-  // Load session access when selectedSession changes
+  // Load session access and notes when selectedSession changes
   useEffect(() => {
     if (selectedSession) {
       loadSessionAccess(selectedSession.id);
+      loadSessionNotes(selectedSession.id);
     }
   }, [selectedSession]);
 
@@ -429,6 +473,37 @@ const TrainerDashboard = ({ user, onLogout }) => {
       </header>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
+        {/* Today's Session Summary Card */}
+        {(() => {
+          const todaySessions = getTodaySessions();
+          if (todaySessions.length === 0) return null;
+          return (
+            <Card className="mb-6 border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-orange-50" data-testid="todays-session-card">
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-full bg-amber-500 flex items-center justify-center">
+                    <Calendar className="w-4 h-4 text-white" />
+                  </div>
+                  <h2 className="font-bold text-lg text-amber-900">Today's Session{todaySessions.length > 1 ? 's' : ''}</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {todaySessions.map(s => (
+                    <div key={s.id} className="p-3 bg-white rounded-lg border border-amber-200 flex flex-col gap-1">
+                      <p className="font-semibold text-gray-900">{s.company_name || "Unknown Company"}</p>
+                      <p className="text-sm text-gray-700">{s.program_name || "Unknown Program"}</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 mt-1">
+                        <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{s.location || "TBD"}</span>
+                        <span className="flex items-center gap-1"><Users className="w-3 h-3" />{sessionParticipants[s.id]?.length || s.participant_ids?.length || 0} pax</span>
+                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{s.start_date?.split('T')[0]} to {s.end_date?.split('T')[0] || s.start_date?.split('T')[0]}</span>
+                      </div>
+                      <Badge className="self-start mt-1 text-xs" variant="outline">{getMyRole(s)}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
         {/* Session Selector */}
         {sessions.length > 0 && (
           <Card className="mb-6">
@@ -489,6 +564,10 @@ const TrainerDashboard = ({ user, onLogout }) => {
             <TabsTrigger value="past-training" data-testid="past-training-tab" className="flex-1 min-w-[140px] md:min-w-0">
               <FileText className="w-4 h-4 mr-2" />
               <span className="text-sm">Past Training</span>
+            </TabsTrigger>
+            <TabsTrigger value="session-notes" data-testid="session-notes-tab" className="flex-1 min-w-[140px] md:min-w-0">
+              <StickyNote className="w-4 h-4 mr-2" />
+              <span className="text-sm">Notes</span>
             </TabsTrigger>
             <TabsTrigger value="my-earnings" data-testid="my-earnings-tab" className="flex-shrink-0 bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
               <Wallet className="w-4 h-4 sm:mr-2" />
@@ -581,13 +660,28 @@ const TrainerDashboard = ({ user, onLogout }) => {
                                 {participants.map((participant) => (
                                   <div
                                     key={participant.id}
-                                    className="p-3 bg-gray-50 rounded-lg border"
+                                    className="p-3 bg-gray-50 rounded-lg border flex items-start gap-3"
                                   >
-                                    <p className="font-medium text-gray-900">{participant.full_name}</p>
-                                    <p className="text-sm text-gray-600">{participant.email}</p>
-                                    {participant.id_number && (
-                                      <p className="text-xs text-gray-500 mt-1">ID: {participant.id_number}</p>
+                                    {participant.profile_photo ? (
+                                      <img src={participant.profile_photo} alt="" className="w-10 h-10 rounded-full object-cover border flex-shrink-0" />
+                                    ) : (
+                                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                        <User className="w-5 h-5 text-gray-400" />
+                                      </div>
                                     )}
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium text-gray-900 truncate">{participant.full_name}</p>
+                                      <p className="text-sm text-gray-600 truncate">{participant.email}</p>
+                                      {participant.id_number && (
+                                        <p className="text-xs text-gray-500 mt-0.5">IC: {participant.id_number}</p>
+                                      )}
+                                      {(participant.emergency_contact_name || participant.emergency_contact_phone) && (
+                                        <div className="mt-1.5 pt-1.5 border-t border-gray-200 flex items-center gap-1 text-xs text-orange-700">
+                                          <Phone className="w-3 h-3" />
+                                          <span>Emergency: {participant.emergency_contact_name}{participant.emergency_contact_phone ? ` (${participant.emergency_contact_phone})` : ''}</span>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -946,6 +1040,66 @@ const TrainerDashboard = ({ user, onLogout }) => {
                     </div>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Session Notes Tab */}
+          <TabsContent value="session-notes">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <StickyNote className="w-5 h-5" />
+                  Session Notes
+                </CardTitle>
+                <CardDescription>
+                  {selectedSession ? `Notes for ${selectedSession.company_name} - ${selectedSession.program_name}` : 'Select a session above to view/add notes'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!selectedSession ? (
+                  <div className="text-center py-12">
+                    <StickyNote className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+                    <p className="text-gray-500">Select a session above to manage notes</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Add note */}
+                    <div className="flex gap-2">
+                      <Input
+                        value={newNote}
+                        onChange={(e) => setNewNote(e.target.value)}
+                        placeholder="Add a note about this session..."
+                        className="flex-1"
+                        data-testid="session-note-input"
+                        onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleAddNote()}
+                      />
+                      <Button onClick={handleAddNote} disabled={submittingNote || !newNote.trim()} size="sm" data-testid="add-note-btn">
+                        <Send className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    {/* Notes list */}
+                    {sessionNotes.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-6">No notes yet for this session.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {sessionNotes.map(note => (
+                          <div key={note.id} className="p-3 bg-gray-50 rounded-lg border flex justify-between items-start gap-2">
+                            <div>
+                              <p className="text-sm text-gray-900">{note.content}</p>
+                              <p className="text-xs text-gray-500 mt-1">{note.trainer_name} &middot; {new Date(note.created_at).toLocaleString()}</p>
+                            </div>
+                            {note.trainer_id === user.id && (
+                              <button onClick={() => handleDeleteNote(note.id)} className="text-gray-400 hover:text-red-500 flex-shrink-0" data-testid={`delete-note-${note.id}`}>
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

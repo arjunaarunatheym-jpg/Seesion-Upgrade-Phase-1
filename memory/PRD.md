@@ -32,13 +32,21 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - **Session creation endpoint**: Restored POST /sessions in sessions_new.py (was orphaned in old sessions.py)
 - **.gitignore fix**: Removed *.env blocking that prevented deployment
 
+## Completed This Session (2026-04-03)
+- **Participant Photo Upload**: Fixed verification dialog to send profile_photo (Base64) to backend during first-time verification
+- **Trainer Dashboard - Today's Session card**: Amber summary card showing today's active sessions with company, location, participant count, trainer role
+- **Trainer Dashboard - Participant Photos & Emergency Contacts**: Participant list shows profile photos (or placeholder) and emergency contact details
+- **Trainer Dashboard - Session Notes**: New tab + backend API (GET/POST/DELETE /api/sessions/{id}/notes) for trainers to record observations per session
+- **Backend**: Added profile_photo, emergency_contact_name, emergency_contact_phone, contact_phone to assigned-participants response
+
 ## Prioritized Backlog
 ### P0
+- Supervisor Dashboard Rebuild (weakest role at 4.2/10 — show names not IDs, staff progress, bulk certs, invoice visibility)
 - Certificate auto-generation from PDF template (waiting for user's template upload)
-- QR code generation on certificates (ready to implement when template arrives)
 
 ### P1
-- Email integration (invoice issued, payment received, cert ready)
+- Coordinator Dashboard Improvements (To-Do summary, session status traffic lights)
+- Email integration (Resend) — invoice issued, payment received, cert ready
 - WhatsApp integration (cert ready, payment reminders)
 - Trainer Contract Workflow (freelance staff)
 - Post-Training Evaluation System (3/6 month feedback)

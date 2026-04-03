@@ -2090,3 +2090,50 @@ async def export_session_feedback_excel(session_id: str, current_user: User = De
         headers={"Content-Disposition": f"attachment; filename=Feedback_{safe_name}.xlsx"}
     )
 
+
+
+@router.get("/{session_id}/notes")
+async def get_session_notes(session_id: str, current_user: User = Depends(get_current_user)):
+    """Get trainer notes for a session"""
+    if current_user.role not in ["trainer", "admin", "super_admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    notes = await db.session_notes.find(
+        {"session_id": session_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return notes
+
+
+@router.post("/{session_id}/notes")
+async def add_session_note(session_id: str, data: dict, current_user: User = Depends(get_current_user)):
+    """Add a note to a session"""
+    if current_user.role not in ["trainer", "admin", "super_admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    note = {
+        "id": str(uuid.uuid4()),
+        "session_id": session_id,
+        "trainer_id": current_user.id,
+        "trainer_name": current_user.full_name,
+        "content": data.get("content", "").strip(),
+        "created_at": get_malaysia_time().isoformat()
+    }
+    if not note["content"]:
+        raise HTTPException(status_code=400, detail="Note content is required")
+    await db.session_notes.insert_one(note)
+    note.pop("_id", None)
+    return note
+
+
+@router.delete("/{session_id}/notes/{note_id}")
+async def delete_session_note(session_id: str, note_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a session note (only the author or admin)"""
+    note = await db.session_notes.find_one({"id": note_id, "session_id": session_id}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    if note["trainer_id"] != current_user.id and current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="You can only delete your own notes")
+    await db.session_notes.delete_one({"id": note_id})
+    return {"message": "Note deleted"}
