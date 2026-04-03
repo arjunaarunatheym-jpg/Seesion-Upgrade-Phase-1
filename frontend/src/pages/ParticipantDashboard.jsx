@@ -412,14 +412,18 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
     
     try {
       // Update user profile with verified name, IC, and contact details
-      await axiosInstance.put("/users/profile", {
+      const profilePayload = {
         full_name: verificationData.full_name.trim(),
         id_number: verificationData.id_number.trim(),
         contact_email: verificationData.contact_email.trim(),
         contact_phone: verificationData.contact_phone.trim(),
         emergency_contact_name: verificationData.emergency_contact_name?.trim() || "",
         emergency_contact_phone: verificationData.emergency_contact_phone?.trim() || "",
-      });
+      };
+      if (verificationData.profile_photo) {
+        profilePayload.profile_photo = verificationData.profile_photo;
+      }
+      await axiosInstance.put("/users/profile", profilePayload);
       
       setShowVerificationDialog(false);
       setShowIndemnityDialog(true);
