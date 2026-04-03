@@ -145,7 +145,7 @@ async def update_own_profile(profile_data: dict, request: Request, current_user:
         "indemnity_accepted_at", "indemnity_signature", "indemnity_signed_name",
         "indemnity_signed_ic", "indemnity_signed_date", "indemnity_sections_accepted",
         "indemnity_training_id", "indemnity_trainer_name", "indemnity_vehicle_reg",
-        "indemnity_locked"
+        "indemnity_locked", "profile_photo"
     ]
     
     for field in allowed_fields:

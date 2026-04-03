@@ -571,6 +571,45 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
               </div>
             </div>
             <div className="border-t pt-4 mt-4">
+              <p className="text-sm text-gray-600 mb-3">Profile Photo (visible to trainers for identification)</p>
+              <div className="flex items-center gap-4">
+                {verificationData.profile_photo ? (
+                  <img src={verificationData.profile_photo} alt="Profile" className="w-16 h-16 rounded-full object-cover border-2 border-gray-200" />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-xs border-2 border-dashed border-gray-300">No Photo</div>
+                )}
+                <div className="flex flex-col gap-2">
+                  <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-medium hover:bg-gray-50">
+                    <span>Upload Photo</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 2 * 1024 * 1024) { toast.error("Photo must be under 2MB"); return; }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setVerificationData({ ...verificationData, profile_photo: ev.target.result });
+                        reader.readAsDataURL(file);
+                      }
+                    }} />
+                  </label>
+                  <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-medium hover:bg-gray-50">
+                    <span>Take Photo</span>
+                    <input type="file" accept="image/*" capture="user" className="hidden" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 2 * 1024 * 1024) { toast.error("Photo must be under 2MB"); return; }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setVerificationData({ ...verificationData, profile_photo: ev.target.result });
+                        reader.readAsDataURL(file);
+                      }
+                    }} />
+                  </label>
+                  {verificationData.profile_photo && (
+                    <button onClick={() => setVerificationData({ ...verificationData, profile_photo: "" })} className="text-xs text-red-500 hover:underline text-left">Remove</button>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="border-t pt-4 mt-4">
               <p className="text-sm text-gray-600 mb-3">Emergency Contact (in case of incidents during training)</p>
               <div className="space-y-3">
                 <div className="space-y-2">
