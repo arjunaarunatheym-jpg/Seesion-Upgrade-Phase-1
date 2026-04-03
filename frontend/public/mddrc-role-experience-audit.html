@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MDDRC - User Role Experience Audit</title>
+<style>
+  @page { size: A4; margin: 18mm; }
+  @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } .page-break { page-break-before: always; } }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10.5px; line-height: 1.55; color: #1a1a2e; padding: 28px; max-width: 210mm; margin: 0 auto; }
+
+  .cover { text-align: center; padding: 50px 0 30px; border-bottom: 4px solid #1a365d; margin-bottom: 25px; }
+  .cover h1 { font-size: 24px; color: #1a365d; margin-bottom: 6px; }
+  .cover h2 { font-size: 13px; color: #4472C4; font-weight: 400; margin-bottom: 20px; }
+  .cover .meta { font-size: 10px; color: #666; }
+  .cover .badge { display: inline-block; background: #1a365d; color: white; padding: 5px 16px; border-radius: 16px; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; margin-top: 16px; }
+
+  h2 { font-size: 16px; color: white; margin: 24px 0 10px; padding: 9px 14px; border-radius: 4px; }
+  .h2-participant { background: #2d5a8e; }
+  .h2-trainer { background: #6b46c1; }
+  .h2-coordinator { background: #2f855a; }
+  .h2-supervisor { background: #c05621; }
+  .h2-summary { background: #1a365d; }
+
+  h3 { font-size: 12px; color: #1a365d; margin: 14px 0 6px; padding-bottom: 3px; border-bottom: 2px solid #4472C4; }
+  h4 { font-size: 11px; color: #2d5a8e; margin: 10px 0 5px; }
+  p { margin-bottom: 6px; text-align: justify; }
+  ul { margin: 6px 0 6px 18px; }
+  li { margin-bottom: 3px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10px; }
+  th { background: #4472C4; color: white; padding: 7px 8px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; }
+  td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  tr:nth-child(even) { background: #f7fafc; }
+
+  .good { padding: 10px 12px; border-radius: 5px; margin: 10px 0; background: #f0fff4; border-left: 4px solid #48bb78; }
+  .warn { padding: 10px 12px; border-radius: 5px; margin: 10px 0; background: #fffaf0; border-left: 4px solid #ed8936; }
+  .bad { padding: 10px 12px; border-radius: 5px; margin: 10px 0; background: #fff5f5; border-left: 4px solid #fc8181; }
+  .info { padding: 10px 12px; border-radius: 5px; margin: 10px 0; background: #ebf8ff; border-left: 4px solid #4472C4; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 8px; font-weight: 700; text-transform: uppercase; }
+  .badge-good { background: #c6f6d5; color: #276749; }
+  .badge-ok { background: #fefcbf; color: #975a16; }
+  .badge-bad { background: #fed7d7; color: #c53030; }
+  .badge-missing { background: #e2e8f0; color: #4a5568; }
+
+  .rating-bar { display: flex; align-items: center; margin: 5px 0; }
+  .rating-bar .label { width: 150px; font-size: 9.5px; font-weight: 600; }
+  .rating-bar .bar-bg { flex: 1; height: 12px; background: #e2e8f0; border-radius: 6px; overflow: hidden; margin: 0 6px; }
+  .rating-bar .bar-fill { height: 100%; border-radius: 6px; }
+  .rating-bar .score { font-size: 9.5px; font-weight: bold; width: 35px; text-align: right; }
+  .green { background: #48bb78; } .yellow { background: #ecc94b; } .orange { background: #ed8936; } .red { background: #fc8181; }
+
+  .highlight { background: #ebf8ff; border: 1px solid #bee3f8; border-radius: 5px; padding: 10px; margin: 10px 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .footer { margin-top: 30px; text-align: center; font-size: 9px; color: #999; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+
+  .checklist li { list-style: none; padding-left: 18px; position: relative; }
+  .checklist li::before { position: absolute; left: 0; font-size: 11px; }
+  .checklist .done::before { content: "Y"; color: #48bb78; font-weight: bold; }
+  .checklist .missing::before { content: "X"; color: #fc8181; font-weight: bold; }
+  .checklist .partial::before { content: "~"; color: #ecc94b; font-weight: bold; }
+
+  .persona { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin: 10px 0; font-style: italic; color: #4a5568; font-size: 10px; }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <h1>User Role Experience Audit</h1>
+  <h2>Trainee, Trainer, Coordinator & Supervisor Perspectives</h2>
+  <p class="meta">Prepared: 2 April 2026 | MDDRC Training Management System</p>
+  <div class="badge">What's Good, What Needs Improving, What's Missing</div>
+</div>
+
+<!-- ======================= SECTION 1: PARTICIPANT/TRAINEE ======================= -->
+<h2 class="h2-participant">1. As a Trainee (Participant)</h2>
+
+<div class="persona">
+  "I'm Aini, a Sapura employee attending a 2-day Defensive Driving Course. I've been given login credentials and told to go to this system. Here's my experience..."
+</div>
+
+<h3>1.1 What I See</h3>
+<p>6 tabs: <strong>Overview</strong> (training info, attendance, vehicle details), <strong>Details</strong> (personal info), <strong>Certificates</strong>, <strong>Tests</strong> (pre-test, post-test), <strong>Checklists</strong> (vehicle inspection), <strong>Settings</strong> (password).</p>
+
+<h3>1.2 What's Good</h3>
+<div class="good">
+  <ul>
+    <li><strong>First-time verification flow:</strong> On first login, the system guides me to verify my name, IC, email, and phone. Then asks me to accept the indemnity form. Smart onboarding.</li>
+    <li><strong>Pre-test and post-test system:</strong> I can take tests directly from my dashboard. Results are shown immediately. Practical for measuring learning outcomes.</li>
+    <li><strong>Vehicle details capture:</strong> I can enter my vehicle model, registration, and road tax expiry. This data feeds into the checklist system.</li>
+    <li><strong>Clock in/out attendance:</strong> Digital attendance replaces paper sign-in. Good audit trail.</li>
+    <li><strong>Certificate download:</strong> Once issued, I can download my certificate directly. No need to chase the admin.</li>
+    <li><strong>Social media prompt:</strong> After completing feedback, the system suggests following MDDRC's social pages. Smart marketing touch.</li>
+  </ul>
+</div>
+
+<h3>1.3 What Needs Improving</h3>
+<div class="warn">
+  <table>
+    <tr><th>Issue</th><th>Impact</th><th>Suggestion</th></tr>
+    <tr><td>No training schedule visible</td><td>I don't know what time theory starts, when practical is, or break times</td><td>Add a simple day-by-day schedule view (8am Theory, 10am Break, 10:30am Practical, etc.)</td></tr>
+    <tr><td>No training progress indicator</td><td>I can't see how far along I am in the course</td><td>Add a progress bar: Verified > Indemnity > Pre-Test > Training > Post-Test > Feedback > Certificate</td></tr>
+    <tr><td>Refresh button does full page reload</td><td>Clunky UX. I lose my current tab position</td><td>Use soft refresh (re-fetch data without page reload)</td></tr>
+    <tr><td>Multiple data loads on page open</td><td>Slow initial load (loadData, loadAvailableTests, loadParticipantAccess, loadVehicleDetails, loadAttendanceToday - all fire separately)</td><td>Batch API calls or use a single dashboard endpoint</td></tr>
+    <tr><td>No explanation of what tests/checklists are for</td><td>First-time users confused about what to do next</td><td>Add brief descriptions: "Complete the Pre-Test before training begins" etc.</td></tr>
+    <tr><td>Tab overflow on mobile (6 tabs)</td><td>Hard to navigate on phone screens</td><td>Consider bottom navigation or collapsible accordion for mobile</td></tr>
+  </table>
+</div>
+
+<h3>1.4 What's Missing</h3>
+<div class="bad">
+  <table>
+    <tr><th>Missing Feature</th><th>Priority</th><th>Why It Matters</th></tr>
+    <tr><td>Training schedule / timetable</td><td><span class="badge badge-bad">HIGH</span></td><td>Participants don't know what happens when. They rely on verbal instructions.</td></tr>
+    <tr><td>Step-by-step progress tracker</td><td><span class="badge badge-bad">HIGH</span></td><td>"What do I need to do next?" is the #1 question every trainee asks.</td></tr>
+    <tr><td>Push notifications / reminders</td><td><span class="badge badge-ok">MEDIUM</span></td><td>"Your post-test is now available" - participants miss this without notifications.</td></tr>
+    <tr><td>Training materials / resources</td><td><span class="badge badge-ok">MEDIUM</span></td><td>No way to access handouts, slides, or reference material digitally.</td></tr>
+    <tr><td>Contact trainer / coordinator</td><td><span class="badge badge-missing">LOW</span></td><td>No in-app way to ask questions or report issues during training.</td></tr>
+    <tr><td>Multi-language support (BM/EN)</td><td><span class="badge badge-missing">LOW</span></td><td>Some participants may be more comfortable in Bahasa Malaysia.</td></tr>
+  </table>
+</div>
+
+<div class="rating-bar"><span class="label"><strong>Overall Trainee UX</strong></span><div class="bar-bg"><div class="bar-fill yellow" style="width:65%"></div></div><span class="score"><strong>6.5/10</strong></span></div>
+
+<!-- ======================= SECTION 2: TRAINER ======================= -->
+<h2 class="page-break h2-trainer">2. As a Trainer</h2>
+
+<div class="persona">
+  "I'm Faizal, a freelance trainer contracted by MDDRC. I conduct 3-4 sessions a month across different companies. Here's how the system works for me..."
+</div>
+
+<h3>2.1 What I See</h3>
+<p>7 tabs: <strong>Sessions</strong> (current assignments), <strong>Session Management</strong> (access control, participant management), <strong>Checklists</strong> (vehicle inspection forms), <strong>Past Training</strong> (history), <strong>My Earnings</strong> (income tracking), <strong>My Payroll</strong> (payslips, EA form), <strong>Feedback</strong> (chief trainer only).</p>
+
+<h3>2.2 What's Good</h3>
+<div class="good">
+  <ul>
+    <li><strong>Session Management tab is powerful:</strong> I can release/disable pre-tests, post-tests, feedback, and checklists for participants. Full control over training flow.</li>
+    <li><strong>Auto-distributed participant assignments:</strong> Participants are automatically split equally between trainers. No manual assignment needed.</li>
+    <li><strong>Checklist system:</strong> I can fill out vehicle safety checklists per participant directly from my dashboard. Very practical for field use.</li>
+    <li><strong>Earnings visibility:</strong> I can see my training income broken down by session. Transparent and builds trust.</li>
+    <li><strong>Payroll integration:</strong> My payslips and EA form are accessible directly. No need for separate HR queries.</li>
+    <li><strong>Chief vs Regular trainer distinction:</strong> Different capabilities based on role (chief trainer can submit feedback, view results summary).</li>
+    <li><strong>Past training history with month/year filter:</strong> I can review any previous session's details and participant data.</li>
+  </ul>
+</div>
+
+<h3>2.3 What Needs Improving</h3>
+<div class="warn">
+  <table>
+    <tr><th>Issue</th><th>Impact</th><th>Suggestion</th></tr>
+    <tr><td>Tab bar overflows horizontally (7 tabs)</td><td>On mobile, tabs are cut off. Scrolling required.</td><td>Use a dropdown menu or bottom nav for mobile. Priority tabs visible, others in "More".</td></tr>
+    <tr><td>No quick view of today's schedule</td><td>I have to scan through all sessions to find today's</td><td>Add "Today's Session" summary card at the top - company name, location, participants count, start time.</td></tr>
+    <tr><td>Checklist form needs scrolling on mobile</td><td>During practical training, filling checklists on a phone is tedious</td><td>Optimize checklist form for one-handed mobile use (larger checkboxes, swipe gestures)</td></tr>
+    <tr><td>No participant photo / face</td><td>With 15+ participants, I can't match names to faces</td><td>Allow participant profile photos (even basic ones from verification step)</td></tr>
+    <tr><td>Earnings only show trainer income</td><td>If I'm also a coordinator, I need to switch context to see that income</td><td>Already handled for dual-role users (coordinator/marketing income tabs) - just ensure the UX is clear</td></tr>
+  </table>
+</div>
+
+<h3>2.4 What's Missing</h3>
+<div class="bad">
+  <table>
+    <tr><th>Missing Feature</th><th>Priority</th><th>Why It Matters</th></tr>
+    <tr><td>"Today's Session" summary card</td><td><span class="badge badge-bad">HIGH</span></td><td>Most trainers open the app in the morning to check: "Where am I going today? Who's coming?"</td></tr>
+    <tr><td>Offline mode for checklists</td><td><span class="badge badge-bad">HIGH</span></td><td>Training often happens at remote sites with poor internet. Checklists must work offline.</td></tr>
+    <tr><td>Session notes / comments</td><td><span class="badge badge-ok">MEDIUM</span></td><td>No way to record observations about participants or incidents during training.</td></tr>
+    <tr><td>Training material uploads</td><td><span class="badge badge-ok">MEDIUM</span></td><td>No way to share slides, videos, or handouts with participants through the system.</td></tr>
+    <tr><td>Participant emergency contact</td><td><span class="badge badge-ok">MEDIUM</span></td><td>For safety - if a participant has a medical emergency during practical training.</td></tr>
+    <tr><td>Notification when session is assigned</td><td><span class="badge badge-ok">MEDIUM</span></td><td>I only know about a new session when I manually check the app.</td></tr>
+    <tr><td>Digital signature for checklists</td><td><span class="badge badge-missing">LOW</span></td><td>Some clients want the trainer's signature on the checklist for compliance.</td></tr>
+  </table>
+</div>
+
+<div class="rating-bar"><span class="label"><strong>Overall Trainer UX</strong></span><div class="bar-bg"><div class="bar-fill green" style="width:74%"></div></div><span class="score"><strong>7.4/10</strong></span></div>
+
+<!-- ======================= SECTION 3: COORDINATOR ======================= -->
+<h2 class="page-break h2-coordinator">3. As a Coordinator</h2>
+
+<div class="persona">
+  "I'm Malek, the training coordinator at MDDRC. I handle the logistics for every session - from setting up participants to submitting training reports. I'm the busiest user in the system..."
+</div>
+
+<h3>3.1 What I See</h3>
+<p>7 tabs: <strong>Sessions</strong> (current sessions with full participant/trainer detail), <strong>Management</strong> (attendance, bulk uploads, photos), <strong>Past Training</strong> (completed sessions), <strong>Report</strong> (training report generation - DOCX/PDF), <strong>Analytics</strong> (charts and statistics), <strong>My Earnings</strong>, <strong>My Payroll</strong>.</p>
+
+<h3>3.2 What's Good</h3>
+<div class="good">
+  <ul>
+    <li><strong>Session detail view is comprehensive:</strong> I can see all participants, their verification status, test completion, attendance, checklists - everything in one place.</li>
+    <li><strong>Bulk participant upload:</strong> Excel/CSV upload for adding 20+ participants at once. Massive time saver vs one-by-one entry.</li>
+    <li><strong>Training report generation:</strong> DOCX and PDF report generation with photo uploads (group photo, theory, practical). Professional output.</li>
+    <li><strong>Photo management:</strong> I can upload training photos directly to each session. Good for documentation and compliance.</li>
+    <li><strong>Analytics tab:</strong> Charts showing session completion rates, participant stats, test score distributions. Useful for management reporting.</li>
+    <li><strong>Attendance management:</strong> Full control over marking attendance, with clock-in/out times visible.</li>
+    <li><strong>Earnings and payroll visible:</strong> Same as trainer - coordinator income is transparent.</li>
+  </ul>
+</div>
+
+<h3>3.3 What Needs Improving</h3>
+<div class="warn">
+  <table>
+    <tr><th>Issue</th><th>Impact</th><th>Suggestion</th></tr>
+    <tr><td>No dashboard summary / "at a glance" view</td><td>I have to click into each session to see status</td><td>Add a dashboard card: "3 sessions this week, 2 reports pending, 45 participants total"</td></tr>
+    <tr><td>7 tabs still requires scrolling on mobile</td><td>My Earnings and My Payroll tabs are hidden off-screen</td><td>Group earnings/payroll into a single "Finance" tab with sub-sections</td></tr>
+    <tr><td>Report generation is multi-step</td><td>Generate DOCX > Download > Edit > Re-upload > Convert to PDF > Submit - too many steps</td><td>Simplify: allow editing directly in browser, or auto-generate PDF from data without DOCX round-trip</td></tr>
+    <tr><td>No quick way to see incomplete tasks</td><td>"Which sessions still need reports? Which participants haven't done post-test?"</td><td>Add a "To-Do" or "Action Required" section showing incomplete items across all sessions</td></tr>
+    <tr><td>Participant names truncated in tables</td><td>Malaysian names are long (e.g., "Muhammad Nor Aiman Bin Ahmad Faizal"). Tables clip them.</td><td>Use tooltips on hover or expandable rows</td></tr>
+  </table>
+</div>
+
+<h3>3.4 What's Missing</h3>
+<div class="bad">
+  <table>
+    <tr><th>Missing Feature</th><th>Priority</th><th>Why It Matters</th></tr>
+    <tr><td>"To-Do" / Action items summary</td><td><span class="badge badge-bad">HIGH</span></td><td>Coordinators juggle 5+ sessions. They need: "Report pending for Session X, 3 participants haven't done post-test in Session Y"</td></tr>
+    <tr><td>Quick session status overview</td><td><span class="badge badge-bad">HIGH</span></td><td>Traffic-light status: Green (complete), Yellow (in progress), Red (action needed) per session.</td></tr>
+    <tr><td>Participant communication</td><td><span class="badge badge-ok">MEDIUM</span></td><td>No way to send mass WhatsApp/email to all session participants (e.g., "venue changed", "bring IC tomorrow").</td></tr>
+    <tr><td>Pre-session checklist for coordinator</td><td><span class="badge badge-ok">MEDIUM</span></td><td>Before training starts: "Participants registered? Indemnity signed? Trainer confirmed? Venue booked?" - a coordinator prep checklist.</td></tr>
+    <tr><td>Calendar view of sessions</td><td><span class="badge badge-ok">MEDIUM</span></td><td>A monthly calendar showing all sessions, helping with scheduling and avoiding conflicts.</td></tr>
+    <tr><td>Document templates library</td><td><span class="badge badge-missing">LOW</span></td><td>Reusable templates for common documents (attendance sheet, feedback form, evaluation report).</td></tr>
+  </table>
+</div>
+
+<div class="rating-bar"><span class="label"><strong>Overall Coordinator UX</strong></span><div class="bar-bg"><div class="bar-fill green" style="width:72%"></div></div><span class="score"><strong>7.2/10</strong></span></div>
+
+<!-- ======================= SECTION 4: SUPERVISOR ======================= -->
+<h2 class="page-break h2-supervisor">4. As a Supervisor (Client Contact Person)</h2>
+
+<div class="persona">
+  "I'm Mr. Razak from Sapura's HSE department. My company hired MDDRC to train our 20 offshore staff. I've been given a Supervisor login to oversee the training. Here's what I see..."
+</div>
+
+<h3>4.1 What I See</h3>
+<p>4 tabs: <strong>My Sessions</strong>, <strong>Attendance</strong>, <strong>Reports</strong>, <strong>Checklists</strong>.</p>
+
+<h3>4.2 What's Good</h3>
+<div class="good">
+  <ul>
+    <li><strong>Attendance visibility:</strong> I can see which of my staff attended, their clock-in/out times, and completion status. Good for my HR reporting.</li>
+    <li><strong>Checklist verification:</strong> I can approve/reject vehicle checklists. Gives me oversight on safety compliance.</li>
+    <li><strong>Training reports access:</strong> I can view and download the training report PDF. Important for DOSH/HRDC documentation.</li>
+    <li><strong>Clean, simple layout:</strong> Not overwhelming. 4 tabs, easy to navigate.</li>
+  </ul>
+</div>
+
+<h3>4.3 What Needs Improving</h3>
+<div class="warn">
+  <table>
+    <tr><th>Issue</th><th>Impact</th><th>Suggestion</th></tr>
+    <tr><td>Checklist shows "Participant ID" instead of name</td><td>I see "Participant ID: abc-123-def" instead of "Nor Akma Binti Ab Razak". Useless.</td><td>Resolve and display participant name (and IC if possible).</td></tr>
+    <tr><td>No overview of my staff's training progress</td><td>I can't see: How many passed? How many failed? What's the overall completion rate?</td><td>Add a summary card: "18/20 completed, 2 pending, 90% pass rate"</td></tr>
+    <tr><td>Sessions show raw date format</td><td>Dates displayed as "2026-04-10" instead of "10 April 2026"</td><td>Format dates human-friendly</td></tr>
+    <tr><td>No way to download attendance list</td><td>I often need to submit an attendance list to my HSE manager. Currently I screenshot the table.</td><td>Add "Export to Excel/PDF" button on attendance tab</td></tr>
+  </table>
+</div>
+
+<h3>4.4 What's Missing</h3>
+<div class="bad">
+  <table>
+    <tr><th>Missing Feature</th><th>Priority</th><th>Why It Matters</th></tr>
+    <tr><td>Staff training progress dashboard</td><td><span class="badge badge-bad">CRITICAL</span></td><td>As the client, my #1 need is: "How are my people doing?" I want a visual: who passed, who failed, who's absent.</td></tr>
+    <tr><td>Certificate download for my staff</td><td><span class="badge badge-bad">CRITICAL</span></td><td>I should be able to download all 20 certificates at once, not ask each staff member to forward theirs.</td></tr>
+    <tr><td>Invoice visibility</td><td><span class="badge badge-bad">HIGH</span></td><td>I can't see the invoice my company received. If my accounts department asks me, I have no visibility.</td></tr>
+    <tr><td>Attendance export (Excel/PDF)</td><td><span class="badge badge-bad">HIGH</span></td><td>Every client supervisor needs an attendance list for internal reporting and HRDC claims.</td></tr>
+    <tr><td>Test results summary for my staff</td><td><span class="badge badge-ok">MEDIUM</span></td><td>"Ahmad scored 85%, passing. Siti scored 45%, failed." I need this for my records.</td></tr>
+    <tr><td>Communication with coordinator</td><td><span class="badge badge-ok">MEDIUM</span></td><td>No in-app way to message MDDRC: "Can we change venue?" or "One staff is on MC, replacing with another."</td></tr>
+    <tr><td>Company training history</td><td><span class="badge badge-ok">MEDIUM</span></td><td>I want to see all past trainings MDDRC has done for Sapura, not just my current session.</td></tr>
+    <tr><td>HRDC claim document package</td><td><span class="badge badge-missing">LOW</span></td><td>Auto-generate the complete HRDC claim package: attendance, test results, certificate copies, invoice.</td></tr>
+  </table>
+</div>
+
+<div class="bad">
+  <strong>Honest verdict:</strong> The Supervisor dashboard is the weakest of all 4 roles. It feels like an afterthought. A client spending RM 50K+ on training deserves more visibility and self-service capability. This is the one area where improvement would most directly impact client satisfaction and repeat business.
+</div>
+
+<div class="rating-bar"><span class="label"><strong>Overall Supervisor UX</strong></span><div class="bar-bg"><div class="bar-fill orange" style="width:42%"></div></div><span class="score"><strong>4.2/10</strong></span></div>
+
+<!-- ======================= SECTION 5: CROSS-ROLE ISSUES ======================= -->
+<h2 class="page-break h2-summary">5. Cross-Role Issues (Affects Everyone)</h2>
+
+<table>
+  <tr><th>Issue</th><th>Roles Affected</th><th>Severity</th><th>Recommendation</th></tr>
+  <tr><td><strong>No notifications system</strong> - users only know things changed if they manually refresh</td><td>All</td><td><span class="badge badge-bad">HIGH</span></td><td>In-app notification bell with unread count + email/push for critical events</td></tr>
+  <tr><td><strong>Mobile tab overflow</strong> - 6-7 tabs on mobile requires horizontal scrolling</td><td>Trainee, Trainer, Coordinator</td><td><span class="badge badge-ok">MEDIUM</span></td><td>Responsive bottom navigation or collapsible tab groups</td></tr>
+  <tr><td><strong>No loading skeletons</strong> - blank screen while data loads</td><td>All</td><td><span class="badge badge-ok">MEDIUM</span></td><td>Add skeleton screens for perceived speed</td></tr>
+  <tr><td><strong>No offline capability</strong> despite being a PWA</td><td>Trainer, Participant</td><td><span class="badge badge-bad">HIGH</span></td><td>Service worker caching for checklists, attendance, test taking</td></tr>
+  <tr><td><strong>No user onboarding / help</strong> - first-time users are left to figure things out</td><td>All</td><td><span class="badge badge-ok">MEDIUM</span></td><td>Simple guided tour or tooltip hints on first login</td></tr>
+  <tr><td><strong>No dark mode</strong></td><td>All</td><td><span class="badge badge-missing">LOW</span></td><td>Nice-to-have for users working late or in low-light conditions</td></tr>
+</table>
+
+<!-- ======================= SECTION 6: PRIORITY MATRIX ======================= -->
+<h2 class="h2-summary">6. Priority Improvement Matrix</h2>
+
+<h3>Tier 1: Fix These First (High Impact, Reasonable Effort)</h3>
+<table>
+  <tr><th>#</th><th>Improvement</th><th>Role</th><th>Effort</th><th>Impact</th></tr>
+  <tr><td>1</td><td>Supervisor: Show participant NAME (not ID) in checklists</td><td>Supervisor</td><td>30 min</td><td>Usability fix</td></tr>
+  <tr><td>2</td><td>Supervisor: Staff progress dashboard (pass/fail/absent)</td><td>Supervisor</td><td>1-2 days</td><td>Client satisfaction</td></tr>
+  <tr><td>3</td><td>Supervisor: Bulk certificate download for their staff</td><td>Supervisor</td><td>1 day</td><td>Client self-service</td></tr>
+  <tr><td>4</td><td>Participant: Step-by-step progress tracker</td><td>Participant</td><td>1 day</td><td>Reduces confusion</td></tr>
+  <tr><td>5</td><td>Trainer: "Today's Session" summary card</td><td>Trainer</td><td>0.5 day</td><td>Daily convenience</td></tr>
+  <tr><td>6</td><td>Supervisor: Attendance export (Excel/PDF)</td><td>Supervisor</td><td>1 day</td><td>HRDC claim support</td></tr>
+  <tr><td>7</td><td>Coordinator: "Action Required" / To-Do summary</td><td>Coordinator</td><td>1-2 days</td><td>Efficiency</td></tr>
+</table>
+
+<h3>Tier 2: Build Next (Medium Impact)</h3>
+<table>
+  <tr><th>#</th><th>Improvement</th><th>Role</th><th>Effort</th></tr>
+  <tr><td>8</td><td>Supervisor: Invoice visibility</td><td>Supervisor</td><td>1 day</td></tr>
+  <tr><td>9</td><td>Supervisor: Test results summary for their staff</td><td>Supervisor</td><td>1 day</td></tr>
+  <tr><td>10</td><td>Participant: Training schedule / timetable view</td><td>Participant</td><td>1-2 days</td></tr>
+  <tr><td>11</td><td>In-app notifications (bell icon, unread count)</td><td>All</td><td>2-3 days</td></tr>
+  <tr><td>12</td><td>Mobile-optimized tab navigation</td><td>All</td><td>1-2 days</td></tr>
+  <tr><td>13</td><td>Coordinator: Session status traffic lights</td><td>Coordinator</td><td>1 day</td></tr>
+  <tr><td>14</td><td>Trainer: Session notes / comments</td><td>Trainer</td><td>1 day</td></tr>
+</table>
+
+<h3>Tier 3: Nice-to-Have (Lower Priority)</h3>
+<table>
+  <tr><th>#</th><th>Improvement</th><th>Role</th><th>Effort</th></tr>
+  <tr><td>15</td><td>Offline mode for checklists and attendance</td><td>Trainer, Participant</td><td>3-5 days</td></tr>
+  <tr><td>16</td><td>Participant profile photos</td><td>Trainer</td><td>1-2 days</td></tr>
+  <tr><td>17</td><td>Training materials upload/download</td><td>Trainer, Participant</td><td>2-3 days</td></tr>
+  <tr><td>18</td><td>Multi-language support (BM/EN)</td><td>Participant</td><td>3-5 days</td></tr>
+  <tr><td>19</td><td>HRDC claim document package auto-generation</td><td>Supervisor</td><td>2-3 days</td></tr>
+  <tr><td>20</td><td>Company training history for supervisor</td><td>Supervisor</td><td>1 day</td></tr>
+</table>
+
+<!-- ======================= SECTION 7: FINAL SCORECARD ======================= -->
+<h2 class="h2-summary">7. Final Scorecard</h2>
+
+<div class="rating-bar"><span class="label">Participant (Trainee)</span><div class="bar-bg"><div class="bar-fill yellow" style="width:65%"></div></div><span class="score">6.5/10</span></div>
+<div class="rating-bar"><span class="label">Trainer</span><div class="bar-bg"><div class="bar-fill green" style="width:74%"></div></div><span class="score">7.4/10</span></div>
+<div class="rating-bar"><span class="label">Coordinator</span><div class="bar-bg"><div class="bar-fill green" style="width:72%"></div></div><span class="score">7.2/10</span></div>
+<div class="rating-bar"><span class="label">Supervisor (Client)</span><div class="bar-bg"><div class="bar-fill orange" style="width:42%"></div></div><span class="score">4.2/10</span></div>
+<div class="rating-bar"><span class="label"><strong>WEIGHTED AVERAGE</strong></span><div class="bar-bg"><div class="bar-fill yellow" style="width:63%"></div></div><span class="score"><strong>6.3/10</strong></span></div>
+
+<div class="highlight">
+  <h4 style="margin-top:0;">The Bottom Line</h4>
+  <p><strong>Trainer and Coordinator</strong> dashboards are solid. They have the tools they need for daily work, with room for quality-of-life improvements.</p>
+  <p><strong>Participant</strong> dashboard works but lacks guidance. A trainee shouldn't have to guess "what do I do next?" A progress tracker and training schedule would transform the experience.</p>
+  <p><strong>Supervisor</strong> dashboard needs urgent attention. It's the client's window into MDDRC's service quality. Right now it shows 4 basic tabs with minimal functionality. The client can't see test results, can't download certificates, can't see invoices, and checklists show IDs instead of names. This is the role with the most room for improvement and the highest business impact (client retention and satisfaction).</p>
+  <p><strong>Recommended first action:</strong> Spend 3-5 days rebuilding the Supervisor dashboard. It will have the single biggest impact on how clients perceive MDDRC's professionalism and service quality.</p>
+</div>
+
+<div class="footer">
+  <p>MDDRC Training Management System - User Role Experience Audit</p>
+  <p>Prepared: 2 April 2026 | Confidential</p>
+</div>
+
+</body>
+</html>
