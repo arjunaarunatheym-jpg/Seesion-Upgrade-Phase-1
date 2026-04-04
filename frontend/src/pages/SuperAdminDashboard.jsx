@@ -11,9 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { LogOut, Search, Edit, Trash2, Eye, CheckCircle, XCircle, Clock, AlertCircle, FileText, ClipboardList, MessageSquare } from "lucide-react";
+import { LogOut, Search, Edit, Trash2, Eye, CheckCircle, XCircle, Clock, AlertCircle, FileText, ClipboardList, MessageSquare, Pen } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import SuperAdminPanel from "../components/SuperAdminPanel";
+import { DigitalSignatureManager } from "../components/shared/DigitalSignatureManager";
 
 const SuperAdminDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -295,9 +296,12 @@ const SuperAdminDashboard = ({ user, onLogout }) => {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="search" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="search" data-testid="search-tab">Search & Manage</TabsTrigger>
             <TabsTrigger value="sessions" data-testid="sessions-tab">Sessions</TabsTrigger>
+            <TabsTrigger value="signature" data-testid="signature-tab">
+              <Pen className="w-4 h-4 mr-2" />Signature
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="search" className="mt-6">
@@ -473,6 +477,10 @@ const SuperAdminDashboard = ({ user, onLogout }) => {
 
           <TabsContent value="sessions" className="mt-6">
             <SuperAdminPanel />
+          </TabsContent>
+
+          <TabsContent value="signature" className="mt-6">
+            <DigitalSignatureManager user={user} />
           </TabsContent>
         </Tabs>
       </main>

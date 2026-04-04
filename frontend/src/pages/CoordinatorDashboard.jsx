@@ -19,6 +19,7 @@ import { ManagementTab } from "../components/coordinator/ManagementTab";
 import { ReportTab } from "../components/coordinator/ReportTab";
 import { AnalyticsTab } from "../components/coordinator/AnalyticsTab";
 import { PastTrainingTab } from "../components/coordinator/PastTrainingTab";
+import { DigitalSignatureManager } from "../components/shared/DigitalSignatureManager";
 
 const CoordinatorDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -1414,7 +1415,10 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
             </TabsContent>
 
             <TabsContent value="my-payroll">
-              <MyPayroll />
+              <div className="space-y-6">
+                <MyPayroll />
+                <DigitalSignatureManager user={user} />
+              </div>
             </TabsContent>
 
           </Tabs>

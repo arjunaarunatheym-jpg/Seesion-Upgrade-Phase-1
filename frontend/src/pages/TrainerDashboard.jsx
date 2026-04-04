@@ -16,6 +16,7 @@ import MyPayroll from "../components/MyPayroll";
 import { ChecklistsTab } from "../components/trainer/ChecklistsTab";
 import { FeedbackTab } from "../components/trainer/FeedbackTab";
 import { PastTrainingTab } from "../components/shared/PastTrainingTab";
+import { DigitalSignatureManager } from "../components/shared/DigitalSignatureManager";
 
 const TrainerDashboard = ({ user, onLogout }) => {
   const navigate = useNavigate();
@@ -1234,7 +1235,10 @@ const TrainerDashboard = ({ user, onLogout }) => {
           </TabsContent>
 
           <TabsContent value="my-payroll">
-            <MyPayroll />
+            <div className="space-y-6">
+              <MyPayroll />
+              <DigitalSignatureManager user={user} />
+            </div>
           </TabsContent>
 
         </Tabs>

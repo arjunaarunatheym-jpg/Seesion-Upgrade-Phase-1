@@ -76,11 +76,6 @@ const DocumentPreview = ({
     const printContent = contentRef.current;
     if (!printContent) return;
 
-        if (!printWindow) {
-      alert('Please allow popups for printing');
-      return;
-    }
-
     const defaultStyles = `
       @page { size: A4; margin: 10mm; }
       @media print { 
@@ -113,9 +108,6 @@ const DocumentPreview = ({
       </html>
     `;
     downloadPdf(_pdfHtml, 'Document');
-    setTimeout(() => {
-      printWindow.close();
-    }, 300);
   };
 
   // Download as PDF (uses print dialog)

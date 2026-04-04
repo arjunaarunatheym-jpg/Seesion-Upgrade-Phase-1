@@ -19,6 +19,8 @@ import { FaFacebook, FaInstagram, FaTiktok, FaYoutube, FaTwitter, FaLinkedin } f
 import HRModule from '../components/HRModule';
 import ProfitLossLedger from '../components/ProfitLossLedger';
 import PettyCash from '../components/PettyCash';
+import { downloadPdf, downloadPdfLandscape } from '../utils/htmlToPdf';
+import { DigitalSignatureManager } from '../components/shared/DigitalSignatureManager';
 import { InvoicesTab } from '../components/finance/InvoicesTab';
 import { PaymentsTab } from '../components/finance/PaymentsTab';
 import { CreditNotesTab } from '../components/finance/CreditNotesTab';
@@ -603,30 +605,22 @@ const FinanceDashboard = ({ user, onLogout }) => {
         }
       }
       
-      const printWindow = window.open('', '_blank');
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Receipt ${receipt_number}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-            .header { text-align: center; margin-bottom: 30px; }
-            .logo-img { max-height: 80px; margin-bottom: 10px; }
-            .logo-text { font-size: 24px; font-weight: bold; color: #1a365d; }
-            .company-info { font-size: 12px; color: #666; margin-top: 5px; }
-            .receipt-title { font-size: 20px; font-weight: bold; margin: 20px 0; text-align: center; background: #f0f0f0; padding: 10px; }
-            .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-            .detail-box { padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
-            .detail-label { font-weight: bold; font-size: 12px; color: #666; margin-bottom: 5px; }
-            .detail-value { font-size: 14px; }
-            .amount-box { text-align: center; padding: 30px; background: #e8f5e9; border-radius: 10px; margin: 20px 0; }
-            .amount { font-size: 32px; font-weight: bold; color: #2e7d32; }
-            .footer { margin-top: 40px; font-size: 12px; color: #666; text-align: center; }
-            @media print { body { padding: 20px; } }
-          </style>
-        </head>
-        <body>
+      const receiptHtml = `<!DOCTYPE html><html><head><title>Receipt ${receipt_number}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .logo-img { max-height: 80px; margin-bottom: 10px; }
+          .logo-text { font-size: 24px; font-weight: bold; color: #1a365d; }
+          .company-info { font-size: 12px; color: #666; margin-top: 5px; }
+          .receipt-title { font-size: 20px; font-weight: bold; margin: 20px 0; text-align: center; background: #f0f0f0; padding: 10px; }
+          .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+          .detail-box { padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+          .detail-label { font-weight: bold; font-size: 12px; color: #666; margin-bottom: 5px; }
+          .detail-value { font-size: 14px; }
+          .amount-box { text-align: center; padding: 30px; background: #e8f5e9; border-radius: 10px; margin: 20px 0; }
+          .amount { font-size: 32px; font-weight: bold; color: #2e7d32; }
+          .footer { margin-top: 40px; font-size: 12px; color: #666; text-align: center; }
+        </style></head><body>
           <div class="header">
             ${logoUrl ? `<img src="${logoUrl.startsWith('/') ? API_URL + logoUrl : logoUrl}" class="logo-img" alt="Logo" />` : ''}
             <div class="logo-text">${settings?.company_name || 'MDDRC SDN BHD'}</div>
@@ -637,9 +631,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
               ${settings?.phone ? `Tel: ${settings.phone}` : ''} ${settings?.email ? `| Email: ${settings.email}` : ''}
             </div>
           </div>
-          
           <div class="receipt-title">OFFICIAL RECEIPT</div>
-          
           <div class="details-grid">
             <div class="detail-box">
               <div class="detail-label">Receipt No:</div>
@@ -654,32 +646,24 @@ const FinanceDashboard = ({ user, onLogout }) => {
               <div class="detail-value">${payment.payment_method?.replace('_', ' ').toUpperCase() || '-'}</div>
             </div>
           </div>
-          
           <div class="detail-box">
             <div class="detail-label">RECEIVED FROM:</div>
             <div class="detail-value" style="font-size: 16px; font-weight: bold;">${invoice?.bill_to_name || invoice?.company_name || '-'}</div>
             <div class="detail-value">${invoice?.programme_name || ''}</div>
           </div>
-          
           <div class="amount-box">
             <div style="font-size: 14px; color: #666; margin-bottom: 10px;">Amount Received</div>
             <div class="amount">RM ${payment.amount?.toLocaleString('en-MY', {minimumFractionDigits: 2})}</div>
             ${payment.reference_number ? `<div style="font-size: 12px; color: #666; margin-top: 10px;">Ref: ${payment.reference_number}</div>` : ''}
           </div>
-          
           ${payment.notes ? `<div class="detail-box"><div class="detail-label">Notes:</div><div class="detail-value">${payment.notes}</div></div>` : ''}
-          
           <div class="footer">
             <p>This is a computer-generated receipt. No signature required.</p>
             <p>${settings?.invoice_footer_note || 'Thank you for your business!'}</p>
             ${(settings?.invoice_custom_fields || []).filter(f => f.position === 'Footer' || f.position === 'footer').map(f => `<p><strong>${f.label}:</strong> ${f.value}</p>`).join('')}
           </div>
-          
-          <script>window.onload = function() { window.print(); }</script>
-        </body>
-        </html>
-      `);
-      printWindow.document.close();
+        </body></html>`;
+      downloadPdf(receiptHtml, `Receipt_${receipt_number}`);
     } catch (error) {
       toast.error('Failed to generate receipt');
     }
@@ -1028,27 +1012,17 @@ const FinanceDashboard = ({ user, onLogout }) => {
     const coordTotal = filteredCoord.reduce((sum, f) => sum + (f.total_fee || 0), 0);
     const marketingTotal = filteredMarketing.reduce((sum, f) => sum + (f.calculated_amount || 0), 0);
     
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Payables Report - ${periodName}</title>
+    const payablesHtml = `<!DOCTYPE html><html><head><title>Payables Report - ${periodName}</title>
         <style>
-          @page { size: A4 landscape; margin: 10mm; }
-          @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body { font-family: Arial, sans-serif; font-size: 10px; padding: 15px; max-width: 297mm; margin: 0 auto; line-height: 1.4; }
-          
           .header { display: flex; align-items: center; gap: 15px; padding-bottom: 15px; border-bottom: 3px solid ${primaryColor}; margin-bottom: 15px; }
           .logo-img { width: 70px; height: auto; }
           .company-name { font-size: 14px; font-weight: bold; color: ${primaryColor}; }
           .company-info { font-size: 9px; color: #444; }
-          
           .report-title { font-size: 16px; font-weight: bold; text-align: center; color: ${primaryColor}; margin: 15px 0; padding: 8px; background: #f8fafc; border-radius: 4px; }
           .report-period { text-align: center; font-size: 12px; color: #333; margin-bottom: 5px; font-weight: bold; }
           .report-date { text-align: center; font-size: 10px; color: #666; margin-bottom: 15px; }
-          
           .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 15px; }
           .summary-card { padding: 10px; border-radius: 4px; text-align: center; }
           .summary-card.blue { background: #dbeafe; }
@@ -1057,21 +1031,16 @@ const FinanceDashboard = ({ user, onLogout }) => {
           .summary-card.yellow { background: #fef9c3; }
           .summary-label { font-size: 9px; color: #555; margin-bottom: 3px; }
           .summary-value { font-size: 12px; font-weight: bold; }
-          
           table { width: 100%; border-collapse: collapse; font-size: 9px; }
           th { background: #1a365d; color: white; padding: 8px 6px; text-align: left; font-weight: 600; }
           th:last-child { text-align: right; }
-          
           .grand-total { background: #1a365d; color: white; font-weight: bold; font-size: 11px; }
           .grand-total td { padding: 10px 8px; }
-          
           .footer { margin-top: 20px; font-size: 8px; color: #666; border-top: 1px solid #ddd; padding-top: 10px; }
           .signature-area { margin-top: 25px; display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
           .signature-box { text-align: center; }
           .signature-line { border-top: 1px solid #333; width: 120px; margin: 25px auto 5px; }
-        </style>
-      </head>
-      <body>
+        </style></head><body>
         <div class="header">
           ${logoUrl ? `<img src="${logoUrl.startsWith('/') ? API_URL + logoUrl : logoUrl}" class="logo-img" alt="Logo" />` : ''}
           <div>
@@ -1079,71 +1048,29 @@ const FinanceDashboard = ({ user, onLogout }) => {
             <div class="company-info">${settings.address_line1 || ''} ${settings.city || ''} ${settings.postcode || ''}</div>
           </div>
         </div>
-        
         <div class="report-title">STAFF PAYABLES REPORT</div>
         <div class="report-period">${periodName}</div>
         <div class="report-date">Generated on ${today}</div>
-        
         <div class="summary-grid">
-          <div class="summary-card blue">
-            <div class="summary-label">Trainer Fees</div>
-            <div class="summary-value">RM ${trainerTotal.toLocaleString('en-MY', {minimumFractionDigits: 2})}</div>
-          </div>
-          <div class="summary-card green">
-            <div class="summary-label">Coordinator Fees</div>
-            <div class="summary-value">RM ${coordTotal.toLocaleString('en-MY', {minimumFractionDigits: 2})}</div>
-          </div>
-          <div class="summary-card purple">
-            <div class="summary-label">Marketing Commission</div>
-            <div class="summary-value">RM ${marketingTotal.toLocaleString('en-MY', {minimumFractionDigits: 2})}</div>
-          </div>
-          <div class="summary-card yellow">
-            <div class="summary-label">TOTAL PAYABLE</div>
-            <div class="summary-value">RM ${grandTotal.toLocaleString('en-MY', {minimumFractionDigits: 2})}</div>
-          </div>
+          <div class="summary-card blue"><div class="summary-label">Trainer Fees</div><div class="summary-value">RM ${trainerTotal.toLocaleString('en-MY', {minimumFractionDigits: 2})}</div></div>
+          <div class="summary-card green"><div class="summary-label">Coordinator Fees</div><div class="summary-value">RM ${coordTotal.toLocaleString('en-MY', {minimumFractionDigits: 2})}</div></div>
+          <div class="summary-card purple"><div class="summary-label">Marketing Commission</div><div class="summary-value">RM ${marketingTotal.toLocaleString('en-MY', {minimumFractionDigits: 2})}</div></div>
+          <div class="summary-card yellow"><div class="summary-label">TOTAL PAYABLE</div><div class="summary-value">RM ${grandTotal.toLocaleString('en-MY', {minimumFractionDigits: 2})}</div></div>
         </div>
-        
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 15%;">NAME</th>
-              <th style="width: 10%;">INVOICE NO</th>
-              <th style="width: 12%;">TRAINING DATE</th>
-              <th style="width: 10%;">POSITION</th>
-              <th style="width: 18%;">COMPANY</th>
-              <th style="width: 20%;">DETAILS</th>
-              <th style="width: 15%;">PRICE</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows}
-            <tr class="grand-total">
-              <td colspan="6" style="text-align: right; font-weight: bold;">GRAND TOTAL</td>
-              <td style="text-align: right; font-weight: bold;">RM ${grandTotal.toLocaleString('en-MY', {minimumFractionDigits: 2})}</td>
-            </tr>
-          </tbody>
-        </table>
-        
+        <table><thead><tr>
+          <th style="width: 15%;">NAME</th><th style="width: 10%;">INVOICE NO</th><th style="width: 12%;">TRAINING DATE</th>
+          <th style="width: 10%;">POSITION</th><th style="width: 18%;">COMPANY</th><th style="width: 20%;">DETAILS</th><th style="width: 15%;">PRICE</th>
+        </tr></thead><tbody>
+          ${tableRows}
+          <tr class="grand-total"><td colspan="6" style="text-align: right; font-weight: bold;">GRAND TOTAL</td><td style="text-align: right; font-weight: bold;">RM ${grandTotal.toLocaleString('en-MY', {minimumFractionDigits: 2})}</td></tr>
+        </tbody></table>
         <div class="signature-area">
-          <div class="signature-box">
-            <div class="signature-line"></div>
-            <div>Prepared By</div>
-          </div>
-          <div class="signature-box">
-            <div class="signature-line"></div>
-            <div>Approved By</div>
-          </div>
+          <div class="signature-box"><div class="signature-line"></div><div>Prepared By</div></div>
+          <div class="signature-box"><div class="signature-line"></div><div>Approved By</div></div>
         </div>
-        
-        <div class="footer">
-          <p>This report is computer generated.</p>
-        </div>
-        
-        <script>window.onload = function() { window.print(); }</script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+        <div class="footer"><p>This report is computer generated.</p></div>
+      </body></html>`;
+    downloadPdfLandscape(payablesHtml, `Payables_Report_${periodName.replace(/\s/g, '_')}`);
   };
 
   // Print Credit Note
@@ -1185,12 +1112,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
       .map(f => `<p><strong>${f.label}:</strong> ${f.value}</p>`)
       .join('');
     
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Credit Note ${cn.cn_number}</title>
+    const cnHtml = `<!DOCTYPE html><html><head><title>Credit Note ${cn.cn_number}</title>
         <style>
           @page { size: A4; margin: 15mm; }
           @media print { 
@@ -1353,12 +1275,8 @@ const FinanceDashboard = ({ user, onLogout }) => {
         </div>
         
         <div class="tagline">"${tagline}"</div>
-        
-        <script>window.onload = function() { window.print(); }</script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+      </body></html>`;
+    downloadPdf(cnHtml, `CreditNote_${cn.cn_number?.replace(/\//g, '_') || 'draft'}`);
   };
 
   // Print invoice
@@ -1393,12 +1311,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
       .map(f => `<p><strong>${f.label}:</strong> ${f.value}</p>`)
       .join('');
     
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Invoice ${invoice.invoice_number}</title>
+    const invoiceHtml = `<!DOCTYPE html><html><head><title>Invoice ${invoice.invoice_number}</title>
         <style>
           @page { size: A4; margin: 15mm; }
           @media print { 
@@ -1621,12 +1534,8 @@ const FinanceDashboard = ({ user, onLogout }) => {
         </div>
         
         <div class="tagline">"${tagline}"</div>
-        
-        <script>window.onload = function() { window.print(); }</script>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
+      </body></html>`;
+    downloadPdf(invoiceHtml, `Invoice_${invoice.invoice_number?.replace(/\//g, '_') || 'draft'}`);
   };
 
   const handleRecordPayment = async () => {
@@ -2003,14 +1912,17 @@ const FinanceDashboard = ({ user, onLogout }) => {
 
           {/* Company Settings Tab */}
           <TabsContent value="settings">
-            <SettingsTab
-              companySettings={companySettings}
-              setCompanySettings={setCompanySettings}
-              billingParties={billingParties}
-              loadBillingParties={loadBillingParties}
-              socialMediaLinks={socialMediaLinks}
-              setSocialMediaLinks={setSocialMediaLinks}
-            />
+            <div className="space-y-6">
+              <SettingsTab
+                companySettings={companySettings}
+                setCompanySettings={setCompanySettings}
+                billingParties={billingParties}
+                loadBillingParties={loadBillingParties}
+                socialMediaLinks={socialMediaLinks}
+                setSocialMediaLinks={setSocialMediaLinks}
+              />
+              <DigitalSignatureManager user={user} />
+            </div>
           </TabsContent>
 
           {/* Accounting Tab */}

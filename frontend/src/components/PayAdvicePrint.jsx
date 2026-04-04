@@ -179,11 +179,6 @@ const PayAdvicePrint = ({ payAdvice, companySettings, onClose }) => {
       </html>
     `;
     downloadPdf(_pdfHtml, 'PayAdvice');
-    
-    // Wait for images to load before printing
-    setTimeout(() => {
-      printWindow.close();
-    }, 500);
   };
 
   const formatCurrency = (val) => `RM ${(val || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`;

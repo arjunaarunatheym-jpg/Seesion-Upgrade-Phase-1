@@ -99,7 +99,6 @@ const PayslipPrint = ({ payslip, companySettings, onClose }) => {
       </html>
     `;
     downloadPdf(_pdfHtml, 'Payslip');
-    setTimeout(() => { printWindow.close(); }, 250);
   };
 
   return (

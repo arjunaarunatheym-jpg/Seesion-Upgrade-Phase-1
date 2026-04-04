@@ -88,9 +88,6 @@ const IndemnityFormPrint = ({ record, sessionInfo, companySettings, onClose }) =
       </html>
     `;
     downloadPdf(_pdfHtml, 'IndemnityForm');
-    setTimeout(() => {
-      printWindow.close();
-    }, 250);
   };
 
   const formatDate = (dateStr) => {

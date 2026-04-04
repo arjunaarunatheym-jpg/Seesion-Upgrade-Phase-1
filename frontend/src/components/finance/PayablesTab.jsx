@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Lock, Unlock, Download, Printer, RefreshCw, Check, ChevronDown, ChevronRight, Calendar } from "lucide-react";
+import { downloadPdfLandscape } from "../../utils/htmlToPdf";
 
 const PayablesTab = ({
   payables,
@@ -216,7 +217,27 @@ const PayablesTab = ({
   };
 
   const handlePrintPayables = () => {
-    window.print();
+    const fmtRM = (v) => (v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 });
+    const monthName = new Date(payablesYear, payablesMonth - 1).toLocaleString('en', { month: 'long', year: 'numeric' });
+    const filteredTrainer = filterByPeriod(payables.trainer_fees);
+    const filteredCoord = filterByPeriod(payables.coordinator_fees);
+    const filteredMkt = filterByPeriod(payables.marketing_commissions);
+    const total = trainerTotal + coordinatorTotal + marketingTotal;
+    const rows = [
+      ...filteredTrainer.map(r => `<tr><td>${r.trainer_name || '-'}</td><td>${r.invoice_number || '-'}</td><td>Trainer</td><td>RM ${fmtRM(r.fee_amount)}</td></tr>`),
+      ...filteredCoord.map(r => `<tr><td>${r.coordinator_name || '-'}</td><td>${r.invoice_number || '-'}</td><td>Coordinator</td><td>RM ${fmtRM(r.total_fee)}</td></tr>`),
+      ...filteredMkt.map(r => `<tr><td>${r.marketer_name || '-'}</td><td>${r.invoice_number || '-'}</td><td>Marketing</td><td>RM ${fmtRM(r.calculated_amount)}</td></tr>`),
+    ].join('');
+    const html = `<!DOCTYPE html><html><head><title>Payables ${monthName}</title><style>
+      body{font-family:Arial,sans-serif;font-size:11px;padding:20px;max-width:297mm;margin:0 auto}
+      h2{color:#1a365d;margin-bottom:8px}table{width:100%;border-collapse:collapse;margin-top:12px}
+      th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#1a365d;color:#fff}
+      .total{font-weight:bold;background:#f3f4f6}</style></head><body>
+      <h2>Staff Payables - ${monthName}</h2>
+      <table><thead><tr><th>Name</th><th>Invoice</th><th>Role</th><th>Amount</th></tr></thead>
+      <tbody>${rows}<tr class="total"><td colspan="3" style="text-align:right">TOTAL</td><td>RM ${fmtRM(total)}</td></tr></tbody></table>
+    </body></html>`;
+    downloadPdfLandscape(html, `Payables_${payablesYear}_${String(payablesMonth).padStart(2,'0')}`);
   };
 
   return (

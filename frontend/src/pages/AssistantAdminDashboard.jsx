@@ -16,6 +16,7 @@ import TestManagement from "./TestManagement";
 import ChecklistManagement from "./ChecklistManagement";
 import FeedbackManagement from "./FeedbackManagement";
 import MyEarnings from "../components/MyEarnings";
+import { DigitalSignatureManager } from "../components/shared/DigitalSignatureManager";
 import { PastTrainingTab } from "../components/shared/PastTrainingTab";
 
 const AssistantAdminDashboard = ({ user, onLogout }) => {
@@ -1104,10 +1105,13 @@ const AssistantAdminDashboard = ({ user, onLogout }) => {
 
           {/* My Earnings Tab - Combined Income & Payroll */}
           <TabsContent value="my-earnings">
-            <MyEarnings 
-              userId={user.id} 
-              userRoles={[user.role, ...(user.additional_roles || [])]}
-            />
+            <div className="space-y-6">
+              <MyEarnings 
+                userId={user.id} 
+                userRoles={[user.role, ...(user.additional_roles || [])]}
+              />
+              <DigitalSignatureManager user={user} />
+            </div>
           </TabsContent>
 
         </Tabs>

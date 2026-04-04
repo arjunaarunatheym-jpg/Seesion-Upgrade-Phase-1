@@ -49,6 +49,8 @@ class User(BaseModel):
     indemnity_trainer_name: Optional[str] = None
     indemnity_locked: Optional[bool] = False
     social_popup_dismissed: Optional[bool] = False
+    profile_photo: Optional[str] = None
+    digital_signature: Optional[str] = None
 
 class UserCreate(BaseModel):
     email: Optional[str] = None

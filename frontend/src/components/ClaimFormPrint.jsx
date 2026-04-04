@@ -192,9 +192,6 @@ const ClaimFormPrint = ({ session, onClose }) => {
       </html>
     `;
     downloadPdf(_pdfHtml, 'ClaimForm');
-    setTimeout(() => {
-      printWindow.close();
-    }, 250);
   };
 
   const formatDate = (dateStr) => {

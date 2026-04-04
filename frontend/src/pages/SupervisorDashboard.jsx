@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { LogOut, ClipboardCheck, Users, CheckCircle, XCircle, FileText, Download, Calendar } from "lucide-react";
+import { LogOut, ClipboardCheck, Users, CheckCircle, XCircle, FileText, Download, Calendar, Pen } from "lucide-react";
+import { DigitalSignatureManager } from "../components/shared/DigitalSignatureManager";
 
 const SupervisorDashboard = ({ user, onLogout }) => {
   const [sessions, setSessions] = useState([]);
@@ -126,7 +127,7 @@ const SupervisorDashboard = ({ user, onLogout }) => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="checklists" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-8">
+          <TabsList className="grid w-full grid-cols-5 mb-8">
             <TabsTrigger value="sessions" data-testid="sessions-tab">
               <Users className="w-4 h-4 mr-2" />
               My Sessions
@@ -142,6 +143,10 @@ const SupervisorDashboard = ({ user, onLogout }) => {
             <TabsTrigger value="checklists" data-testid="checklists-tab">
               <ClipboardCheck className="w-4 h-4 mr-2" />
               Checklists
+            </TabsTrigger>
+            <TabsTrigger value="signature" data-testid="signature-tab">
+              <Pen className="w-4 h-4 mr-2" />
+              Signature
             </TabsTrigger>
           </TabsList>
 
@@ -428,6 +433,10 @@ const SupervisorDashboard = ({ user, onLogout }) => {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="signature">
+            <DigitalSignatureManager user={user} />
           </TabsContent>
 
         </Tabs>
