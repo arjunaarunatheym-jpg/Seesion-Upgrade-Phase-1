@@ -7,10 +7,11 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - **Frontend**: React + Shadcn/UI + Tailwind
 - **Backend**: FastAPI (39 modular route files under /app/backend/routes/)
 - **Database**: MongoDB
-- **PDF**: Client-side HTML-to-print (printInvoice.js)
+- **PDF**: Client-side html2pdf.js (all window.open/print patterns replaced)
+- **DOCX**: html-docx-js-typescript for Word exports
 
 ## What's Been Implemented
-- Full backend modularization (server.py monolith → 39 route files)
+- Full backend modularization (server.py monolith -> 39 route files)
 - Session management with start_date, end_date, cert_show_validity, cert_validity_months
 - Invoice lifecycle with line_items auto-sync on override
 - Marketing dashboard with 10s polling
@@ -21,50 +22,37 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - Data Management tab (SuperAdmin)
 - Programme Certificate Title & Subtitle fields
 - Public Certificate Verification page (/verify)
-- Session creation endpoint restored in sessions_new.py
+- Participant Photo Upload in Verification Dialog
+- Trainer Dashboard UX Improvements (Today's Session, Participant Photos, Session Notes)
+- Coordinator & Supervisor Dashboard creation/UX pass
+- Receipt Number Fix (auto-generated RCP/YYYY/MM/0001)
+- Balance Sheet UI in Finance Dashboard
+- Journal Sync Engine Fix (deferred revenue, CEO/Auditor P&L alignment)
+- Auto-posting for Petty Cash, Manual Income/Expenses
+- 10-Role Audit Report & Finance Explainer PDFs
 
-## Completed This Session (2026-04-02)
-- **P0 FIX**: Invoice PDF line items mismatch — fixed override endpoint + printInvoice auto-heal
-- **Certificate Title/Subtitle**: Added to Programme model and UI (create/edit forms)
-- **Session Validity Settings**: cert_show_validity toggle + cert_validity_months dropdown on session create/edit
-- **Public Verification Page**: /verify route with cert number search + IC number search
-- **Backend verification route**: /api/verify/certificate/{num} and /api/verify/search-ic/{ic}
-- **Session creation endpoint**: Restored POST /sessions in sessions_new.py (was orphaned in old sessions.py)
-- **.gitignore fix**: Removed *.env blocking that prevented deployment
-
-## Completed This Session (2026-04-03)
-- **Participant Photo Upload**: Fixed verification dialog to send profile_photo (Base64) to backend during first-time verification
-- **Trainer Dashboard - Today's Session card**: Amber summary card showing today's active sessions with company, location, participant count, trainer role
-- **Trainer Dashboard - Participant Photos & Emergency Contacts**: Participant list shows profile photos (or placeholder) and emergency contact details
-- **Trainer Dashboard - Session Notes**: New tab + backend API (GET/POST/DELETE /api/sessions/{id}/notes) for trainers to record observations per session
-- **Receipt Number Fix**: Auto-generated and persisted (RCP/YYYY/MM/0001) when payment is recorded. Legacy payments use count-based fallback.
-- **10-Role Audit Report**: Generated comprehensive HTML audit at /mddrc-10-role-audit.html
-- **Balance Sheet Tab**: New tab in Finance dashboard — Assets/Liabilities/Equity with collapsible sections, date filter, print button, summary cards, balance check indicator. Uses existing journal entries and Chart of Accounts.
-- **Journal Sync Engine Fix**: Fixed backfill to force revenue recognition for ALL invoices (not just paid), added deferred revenue reclassification step (2300→4000). After sync: CEO P&L revenue matches Auditor P&L revenue at RM 12,000. Balance Sheet balanced at RM 37,455.90.
-- **Auto-posting added**: Petty cash, manual income, manual expenses now auto-post journal entries on creation
-- **Finance Explainer PDF**: Comprehensive guide at /mddrc-finance-explained.html
-- **Coordinator Dashboard - At-a-Glance Cards**: Summary row (active sessions, total participants, completion count, action items)
-- **Coordinator Dashboard - Action Required**: Amber alert section showing pending pre-tests, post-tests, feedback per session
-- **Coordinator Dashboard - Traffic Lights**: Green/Yellow/Red session status badges on each session card
-- **Coordinator Dashboard - Name Tooltips**: Truncated names with hover tooltips in participant tables
-- **Supervisor Dashboard REBUILD** (was 4.2/10):
-  - Staff Progress Summary (5 stat cards: staff count, attended, pass rate, post-test passed, certs issued)
-  - Staff Progress Table (per-participant: attended, pre-test, post-test, certificate with check/cross icons)
-  - Attendance Tab with CSV Export button
-  - Test Results Tab (pre/post scores + pass/fail badges)
-  - Certificates Tab (download button per participant)
-  - Invoice Tab (invoice number, amount, status, date)
-  - Human-friendly date formatting throughout
-  - New backend endpoint: GET /api/sessions/{id}/supervisor-data (comprehensive bulk query)
-  - Supervisor role added to certificate session access
+## Completed This Session (2026-04-04)
+- **PDF Download Refactor (P0)**: Replaced ALL window.open/document.write/window.print patterns with html2pdf.js across:
+  - FinanceDashboard.jsx (Receipt, Invoice, Credit Note, Payables Report)
+  - PayablesTab.jsx (Payables print button)
+  - ClaimFormPrint.jsx, IndemnityFormPrint.jsx, PayslipPrint.jsx, PayAdvicePrint.jsx, DocumentPreview.jsx (removed orphaned printWindow.close() references)
+- **Digital Signature Manager (P0)**: Per-user signature upload/save feature added to ALL role dashboards:
+  - Admin: Settings area
+  - Marketing: My Payroll tab
+  - Coordinator: My Payroll tab
+  - Trainer: My Payroll tab
+  - Supervisor: Dedicated Signature tab
+  - SuperAdmin: Dedicated Signature tab
+  - AssistantAdmin: My Earnings area
+  - Finance: Settings area
+- **User Model Updated**: Added `profile_photo` and `digital_signature` optional fields to Pydantic User model so they return correctly from `/api/auth/me`
+- **Word DOCX Export**: Quotation DOCX download via `generateWord` in MarketingDashboard (uses html-docx-js-typescript)
 
 ## Prioritized Backlog
 ### P0
 - Certificate auto-generation from PDF template (waiting for user's template upload)
 
 ### P1
-- Coordinator Dashboard Improvements (To-Do summary, session status traffic lights) — DONE
-- Supervisor Dashboard Rebuild — DONE
 - Email integration (Resend) — invoice issued, payment received, cert ready
 - WhatsApp integration (cert ready, payment reminders)
 - Trainer Contract Workflow (freelance staff)
@@ -83,6 +71,9 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 ## Key Technical Notes
 - Session model: `cert_show_validity` (bool), `cert_validity_months` (int, default 24)
 - Programme model: `certificate_title` (str), `certificate_subtitle` (str)
-- IC formatting: `format_ic_number()` in certificate_verify.py (861125385720 → 861125-38-5720)
+- IC formatting: `format_ic_number()` in certificate_verify.py
 - Verify endpoints are PUBLIC (no auth required)
 - printInvoice.js has auto-heal: if line_items don't match total_amount, recalculates before rendering
+- Digital signature stored as base64 in users collection, returned via User model
+- html2pdf.js for all PDF downloads; html-docx-js-typescript for DOCX
+- downloadPdf() and downloadPdfLandscape() in utils/htmlToPdf.js
