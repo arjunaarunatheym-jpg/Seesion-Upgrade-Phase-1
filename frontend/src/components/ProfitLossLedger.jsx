@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { downloadPdf } from '../utils/htmlToPdf';
 import { axiosInstance } from '../App';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
@@ -175,8 +176,7 @@ const ProfitLossLedger = () => {
       ? months.find(m => m.value === selectedMonth)?.label 
       : 'Full Year';
     
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
+        const _pdfHtml = `
       <html>
         <head>
           <title>General Ledger - ${selectedYear} ${monthLabel}</title>
@@ -281,11 +281,11 @@ const ProfitLossLedger = () => {
             </tbody>
           </table>
           
-          <script>window.onload = function() { window.print(); }</script>
+          
         </body>
       </html>
-    `);
-    printWindow.document.close();
+    `;
+    downloadPdf(_pdfHtml, 'GeneralLedger');
   };
 
   // Download GL as CSV

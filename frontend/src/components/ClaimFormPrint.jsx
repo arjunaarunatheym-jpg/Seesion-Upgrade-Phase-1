@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { downloadPdf } from '../utils/htmlToPdf';
 import { axiosInstance } from '../App';
 import { Button } from './ui/button';
 import { Printer, X, Loader2, Download } from 'lucide-react';
@@ -77,11 +78,9 @@ const ClaimFormPrint = ({ session, onClose }) => {
 
   const handlePrint = () => {
     const printContent = printRef.current;
-    const printWindow = window.open('', '_blank');
+        const logoUrl = companySettings?.logo_url || '';
     
-    const logoUrl = companySettings?.logo_url || '';
-    
-    printWindow.document.write(`
+    const _pdfHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -191,12 +190,9 @@ const ClaimFormPrint = ({ session, onClose }) => {
           ${printContent.innerHTML}
         </body>
       </html>
-    `);
-    
-    printWindow.document.close();
-    printWindow.focus();
+    `;
+    downloadPdf(_pdfHtml, 'ClaimForm');
     setTimeout(() => {
-      printWindow.print();
       printWindow.close();
     }, 250);
   };

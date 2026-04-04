@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import MyEarnings from '../components/MyEarnings';
 import MyPayroll from '../components/MyPayroll';
+import { downloadPdf } from '../utils/htmlToPdf';
+import { DigitalSignatureManager } from "../components/shared/DigitalSignatureManager";
 import { DashboardTab } from '../components/marketing/DashboardTab';
 import { ClientsTab } from '../components/marketing/ClientsTab';
 import { QuotationsTab } from '../components/marketing/QuotationsTab';
@@ -479,7 +481,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
   // PDF Generation
   const generatePDF = (quotation) => {
     const client = quotation.client || {};
-    const printWindow = window.open('', '_blank');
+    const sigData = user?.digital_signature || '';
     
     const html = `
 <!DOCTYPE html>
@@ -597,20 +599,68 @@ const MarketingDashboard = ({ user, onLogout }) => {
   
   <div class="footer">
     <div class="signature-box">
+      ${sigData ? `<img src="${sigData}" style="max-height:50px;max-width:150px;margin-bottom:4px;" /><br>` : ''}
       <p>Prepared by: ${quotation.marketer?.full_name || ''}</p>
     </div>
     <div class="signature-box">
       <p>Approved by: ${quotation.approver?.full_name || ''}</p>
     </div>
   </div>
-  
-  <script>window.onload = function() { window.print(); }</script>
 </body>
 </html>
     `;
     
-    printWindow.document.write(html);
-    printWindow.document.close();
+    downloadPdf(html, `Quotation_${quotation.quotation_number?.replace(/\//g, '_') || 'draft'}`);
+  };
+
+  // Word (DOCX) Generation for Quotations
+  const generateWord = async (quotation) => {
+    try {
+      const { asBlob } = await import('html-docx-js-typescript');
+      const client = quotation.client || {};
+      const sigData = user?.digital_signature || '';
+      const fmtCurrency = (v) => (v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 });
+      const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-MY', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+
+      const html = `<html><body style="font-family:Calibri,sans-serif;font-size:11pt">
+        <h2 style="color:#1e40af;text-align:center;border-bottom:2px solid #1e40af;padding-bottom:8px">QUOTATION</h2>
+        <p><strong>Quotation No:</strong> ${quotation.quotation_number || ''}</p>
+        <p><strong>Date:</strong> ${fmtDate(quotation.created_at)}</p>
+        <p><strong>Valid Until:</strong> ${fmtDate(quotation.valid_until)}</p>
+        <br>
+        <p><strong>To:</strong> ${client.company_name || ''}</p>
+        <p>${client.company_address || ''}</p>
+        <p><strong>Attn:</strong> ${client.contact_person || ''}</p>
+        <p><strong>Tel:</strong> ${client.contact_phone || ''} | <strong>Email:</strong> ${client.contact_email || ''}</p>
+        <br>
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%">
+          <tr style="background:#1e40af;color:white"><th>Description</th><th>Qty</th><th>Rate (RM)</th><th>Amount (RM)</th></tr>
+          <tr><td>${quotation.programme_name || ''}</td><td style="text-align:center">${quotation.num_participants}</td><td style="text-align:right">${fmtCurrency(quotation.rate_per_pax)}</td><td style="text-align:right">${fmtCurrency(quotation.subtotal)}</td></tr>
+          <tr><td colspan="3" style="text-align:right"><strong>Subtotal</strong></td><td style="text-align:right">RM ${fmtCurrency(quotation.subtotal)}</td></tr>
+          ${quotation.sst_percent > 0 ? `<tr><td colspan="3" style="text-align:right"><strong>SST (${quotation.sst_percent}%)</strong></td><td style="text-align:right">RM ${fmtCurrency(quotation.sst_amount)}</td></tr>` : ''}
+          <tr style="background:#f0f0f0"><td colspan="3" style="text-align:right"><strong>TOTAL</strong></td><td style="text-align:right"><strong>RM ${fmtCurrency(quotation.total_amount)}</strong></td></tr>
+        </table>
+        <br>
+        ${quotation.terms_conditions ? `<p><strong>Terms & Conditions:</strong></p><ol>${(quotation.terms_conditions || '').split('\\n').filter(t => t.trim()).map(t => '<li>' + t.replace(/^\\d+\\.\\s*/, '') + '</li>').join('')}</ol>` : ''}
+        <br><br>
+        <table style="width:100%"><tr>
+          <td style="width:50%">${sigData ? `<img src="${sigData}" style="max-height:50px" /><br>` : ''}<strong>Prepared by:</strong> ${quotation.marketer?.full_name || ''}</td>
+          <td style="width:50%"><strong>Approved by:</strong> ${quotation.approver?.full_name || ''}</td>
+        </tr></table>
+      </body></html>`;
+
+      const blob = await asBlob(html);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Quotation_${quotation.quotation_number?.replace(/\//g, '_') || 'draft'}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Word document downloaded');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to generate Word document');
+    }
   };
 
   // Filter quotations
@@ -830,7 +880,10 @@ const MarketingDashboard = ({ user, onLogout }) => {
 
           {/* My Payroll Tab */}
           <TabsContent value="my-payroll">
-            <MyPayroll />
+            <div className="space-y-6">
+              <MyPayroll />
+              <DigitalSignatureManager user={user} />
+            </div>
           </TabsContent>
 
           {/* My Sessions Tab */}

@@ -1,6 +1,7 @@
+import { downloadPdf } from './htmlToPdf';
+
 /**
- * Print P&L Statement utility - generates a formal, branded Profit & Loss Statement
- * Uses the same header/color scheme as invoices for consistency
+ * Print P&L Statement utility - generates a formal, branded Profit & Loss PDF download
  */
 
 export const printPnLStatement = async (pnlData, companySettings, logoUrl) => {
@@ -19,8 +20,7 @@ export const printPnLStatement = async (pnlData, companySettings, logoUrl) => {
     .map(f => ` &bull; ${f.label}: ${f.value}`)
     .join('');
 
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
+  const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -291,16 +291,10 @@ export const printPnLStatement = async (pnlData, companySettings, logoUrl) => {
       </div>
       
       <div class="tagline">"${tagline}"</div>
-      
-      <script>
-        window.onload = function() { 
-          setTimeout(function() { window.print(); }, 500);
-        };
-      </script>
     </body>
     </html>
-  `);
-  printWindow.document.close();
+  `;
+  downloadPdf(html, `PnL_Statement_${year}`);
 };
 
 
@@ -345,8 +339,7 @@ export const printYoYComparison = async (currentData, prevData, currentYear, pre
 
   const dividerRow = (label) => `<tr style="background:#f5f5f5;"><td colspan="5" style="padding:4px 12px;font-size:9px;font-weight:bold;color:#666;text-transform:uppercase;letter-spacing:1px;">${label}</td></tr>`;
 
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
+  const html2 = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -468,10 +461,8 @@ export const printYoYComparison = async (currentData, prevData, currentYear, pre
         <p>Generated on: ${new Date().toLocaleString('en-MY')}</p>
       </div>
       <div class="tagline">"${tagline}"</div>
-
-      <script>window.onload = function() { setTimeout(function() { window.print(); }, 500); };</script>
     </body>
     </html>
-  `);
-  printWindow.document.close();
+  `;
+  downloadPdf(html2, `PnL_Comparison_${currentYear}_vs_${prevYear}`);
 };

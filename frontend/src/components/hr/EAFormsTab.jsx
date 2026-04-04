@@ -3,6 +3,7 @@
  * Generates EA Forms (Borang EA) for annual tax filing
  */
 import { useState } from 'react';
+import { downloadPdf } from '../../utils/htmlToPdf';
 import { axiosInstance } from '../../App';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -46,11 +47,10 @@ const EAFormsTab = ({ staff, companySettings }) => {
   const formatCurrency = (val) => `RM ${(val || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`;
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    const logoUrl = companySettings?.logo_url;
+        const logoUrl = companySettings?.logo_url;
     const companyName = companySettings?.company_name || 'MDDRC SDN BHD';
     
-    printWindow.document.write(`
+    const _pdfHtml = `
       <!DOCTYPE html>
       <html>
       <head>
@@ -155,11 +155,11 @@ const EAFormsTab = ({ staff, companySettings }) => {
           <p>Tarikh/Date: ${new Date().toLocaleDateString('en-MY')}</p>
         </div>
         
-        <script>window.onload = function() { window.print(); }</script>
+        
       </body>
       </html>
-    `);
-    printWindow.document.close();
+    `;
+    downloadPdf(_pdfHtml, 'EA_Form');
   };
 
   return (

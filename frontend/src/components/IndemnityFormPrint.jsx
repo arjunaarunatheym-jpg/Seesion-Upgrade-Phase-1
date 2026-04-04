@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { downloadPdf } from '../utils/htmlToPdf';
 import { Button } from './ui/button';
 import { X, Download, CheckCircle, XCircle } from 'lucide-react';
 
@@ -9,12 +10,10 @@ const IndemnityFormPrint = ({ record, sessionInfo, companySettings, onClose }) =
 
   const handlePrint = () => {
     const printContent = printRef.current;
-    const printWindow = window.open('', '_blank');
-    
-    const styling = companySettings?.document_styling || {};
+        const styling = companySettings?.document_styling || {};
     const primaryColor = styling.primary_color || '#1e40af';
     
-    printWindow.document.write(`
+    const _pdfHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -87,12 +86,9 @@ const IndemnityFormPrint = ({ record, sessionInfo, companySettings, onClose }) =
           ${printContent.innerHTML}
         </body>
       </html>
-    `);
-    
-    printWindow.document.close();
-    printWindow.focus();
+    `;
+    downloadPdf(_pdfHtml, 'IndemnityForm');
     setTimeout(() => {
-      printWindow.print();
       printWindow.close();
     }, 250);
   };

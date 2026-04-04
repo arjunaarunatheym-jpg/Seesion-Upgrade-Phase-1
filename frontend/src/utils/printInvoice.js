@@ -1,5 +1,7 @@
+import { downloadPdf } from './htmlToPdf';
+
 /**
- * Print Invoice utility - generates printable invoice PDF
+ * Print Invoice utility - generates PDF invoice download
  * Restored from original implementation with full company branding and details
  */
 
@@ -41,8 +43,7 @@ export const printInvoice = async (invoice, companySettings, logoUrl) => {
     .map(f => `<p><strong>${f.label}:</strong> ${f.value}</p>`)
     .join('');
   
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
+  const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -269,10 +270,8 @@ export const printInvoice = async (invoice, companySettings, logoUrl) => {
       </div>
       
       <div class="tagline">"${tagline}"</div>
-      
-      <script>window.onload = function() { window.print(); }</script>
     </body>
     </html>
-  `);
-  printWindow.document.close();
+  `;
+  downloadPdf(html, `Invoice_${invoice.invoice_number || 'draft'}`);
 };

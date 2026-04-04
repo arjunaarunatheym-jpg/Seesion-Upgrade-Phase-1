@@ -3,6 +3,7 @@
  * Main Accounting section with COA, Journal Entries, Trial Balance, General Ledger, Balance Sheet
  */
 import React, { useState, useEffect } from 'react';
+import { downloadPdf } from '../../utils/htmlToPdf';
 import { axiosInstance } from '../../App';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
@@ -442,8 +443,7 @@ const AccountingTab = ({ companySettings }) => {
       `<tr><td style="padding:6px 8px;color:#666;font-family:monospace;font-size:11px;">${a.account_code}</td><td style="padding:6px 8px;">${a.account_name}</td><td style="padding:6px 8px;text-align:right;font-family:monospace;">${fmt(a.balance)}</td></tr>`
     ).join('');
     
-    const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html><head><title>Balance Sheet - ${balanceSheet.period}</title>
+        const _pdfHtml = `<!DOCTYPE html><html><head><title>Balance Sheet - ${balanceSheet.period}</title>
     <style>
       @page { size: A4 portrait; margin: 15mm; }
       @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
@@ -491,8 +491,8 @@ const AccountingTab = ({ companySettings }) => {
       </div>
     </div>
     <div class="footer">Generated on ${new Date().toLocaleString('en-MY')} | ${settings.company_name || ''}</div>
-    </body></html>`);
-    w.document.close();
+    </body></html>`;
+    downloadPdf(_pdfHtml, 'Accounting');
     setTimeout(() => w.print(), 400);
   };
 
@@ -642,8 +642,7 @@ const AccountingTab = ({ companySettings }) => {
                       .join('');
                     const types = ['Asset', 'Liability', 'Equity', 'Income', 'Expense'];
                     const typeColors = { Asset: '#2563eb', Liability: '#dc2626', Equity: '#7c3aed', Income: '#16a34a', Expense: '#ea580c' };
-                    const w = window.open('', '_blank');
-                    w.document.write(`<!DOCTYPE html><html><head><title>Chart of Accounts — Trial Balance</title>
+                                        const _pdfHtml = `<!DOCTYPE html><html><head><title>Chart of Accounts — Trial Balance</title>
                     <style>
                       @page { size: A4 landscape; margin: 12mm; }
                       @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
@@ -716,9 +715,9 @@ const AccountingTab = ({ companySettings }) => {
                       <p>Chart of Accounts with Trial Balance — ${settings.company_name || 'MDDRC'} Training Management System</p>
                     </div>
                     <div class="tagline">"${tagline}"</div>
-                    <script>window.onload = function() { setTimeout(function() { window.print(); }, 500); };</script>
-                    </body></html>`);
-                    w.document.close();
+                    
+                    </body></html>`;
+    downloadPdf(_pdfHtml, 'Accounting_2');
                   }} data-testid="print-coa-btn">
                     <Printer className="w-4 h-4 mr-1" /> Print COA
                   </Button>

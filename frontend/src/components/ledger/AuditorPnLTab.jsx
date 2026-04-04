@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { downloadPdf } from '../../utils/htmlToPdf';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -123,8 +124,7 @@ const AuditorPnLTab = ({ selectedYear, companySettings }) => {
       `;
     };
     
-    const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html><head><title>P&L Statement (Auditor) - ${pnlData.period}</title>
+        const _pdfHtml = `<!DOCTYPE html><html><head><title>P&L Statement (Auditor) - ${pnlData.period}</title>
     <style>
       @page { size: A4; margin: 15mm; }
       @media print { body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
@@ -167,9 +167,9 @@ const AuditorPnLTab = ({ selectedYear, companySettings }) => {
     </table>
     <div class="footer"><p>Auditor P&L Statement — ${settings.company_name || 'MDDRC'} Training Management System</p><p>Generated: ${new Date().toLocaleString('en-MY')} &bull; Source: Posted Journal Entries</p></div>
     <div class="tagline">"${tagline}"</div>
-    <script>window.onload = function() { setTimeout(function() { window.print(); }, 500); };</script>
-    </body></html>`);
-    w.document.close();
+    
+    </body></html>`;
+    downloadPdf(_pdfHtml, 'AuditorPnL');
   };
 
   const summary = pnlData?.summary || {};

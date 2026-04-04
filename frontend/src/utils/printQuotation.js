@@ -1,9 +1,12 @@
+import { downloadPdf } from './htmlToPdf';
+
 /**
- * Print Quotation utility - generates printable quotation PDF
+ * Print Quotation utility - generates PDF quotation download
+ * Supports digital signature embedding
  * Uses EXACT same header style as invoice for company document uniformity
  */
 
-export const printQuotation = async (quotation, companySettings, logoUrl, templates = {}) => {
+export const printQuotation = async (quotation, companySettings, logoUrl, templates = {}, signatureData = null) => {
   const settings = companySettings || {};
   
   // Styling variables from settings - SAME as invoice
@@ -49,8 +52,11 @@ export const printQuotation = async (quotation, companySettings, logoUrl, templa
       .replace(/\n/g, '<br>');
   };
   
-  const printWindow = window.open('', '_blank');
-  printWindow.document.write(`
+  const signatureHtml = signatureData
+    ? `<img src="${signatureData}" style="max-height:60px; max-width:180px; margin-bottom:4px;" /><br>`
+    : '';
+
+  const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -307,6 +313,7 @@ export const printQuotation = async (quotation, companySettings, logoUrl, templa
       <div class="signature-section">
         <div class="signature-box">
           <div class="signature-line">
+            ${signatureHtml}
             <strong>Prepared By</strong><br>
             ${settings.company_name || 'MDDRC SDN BHD'}
           </div>
@@ -322,14 +329,63 @@ export const printQuotation = async (quotation, companySettings, logoUrl, templa
       <div class="tagline">"${tagline}"</div>
     </body>
     </html>
-  `);
+  `;
   
-  printWindow.document.close();
-  
-  // Wait for content to load then print
-  printWindow.onload = () => {
-    setTimeout(() => {
-      printWindow.print();
-    }, 500);
+  downloadPdf(html, `Quotation_${quotation.quotation_number || 'draft'}`);
+};
+
+/**
+ * Get the raw HTML of the quotation (for Word export or other uses)
+ */
+export const getQuotationHtml = (quotation, companySettings, logoUrl, templates = {}, signatureData = null) => {
+  // Re-use the same logic but return HTML string
+  const settings = companySettings || {};
+  const primaryColor = settings.primary_color || '#1a365d';
+  const tagline = settings.tagline || 'Towards a Nation of Safe Drivers';
+  const pageContent = templates.page_content || '';
+  const termsConditions = templates.terms_conditions || '';
+  const formatCurrency = (amount) => (amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 });
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('en-MY', { day: 'numeric', month: 'long', year: 'numeric' });
   };
+  const processContent = (content) => {
+    if (!content) return '';
+    return content
+      .replace(/\{\{company_name\}\}/g, quotation.company_name || '-')
+      .replace(/\{\{programme_name\}\}/g, quotation.programme_name || '-')
+      .replace(/\{\{contact_person\}\}/g, quotation.contact_person || '-')
+      .replace(/\{\{quotation_number\}\}/g, quotation.quotation_number || '-')
+      .replace(/\{\{date\}\}/g, formatDate(quotation.created_at))
+      .replace(/\{\{total_amount\}\}/g, formatCurrency(quotation.total_amount))
+      .replace(/\{\{num_participants\}\}/g, quotation.num_participants || '-')
+      .replace(/\{\{rate_per_pax\}\}/g, formatCurrency(quotation.rate_per_pax))
+      .replace(/\{\{venue\}\}/g, quotation.venue || '-')
+      .replace(/\n/g, '<br>');
+  };
+  const signatureHtml = signatureData ? `<img src="${signatureData}" style="max-height:60px;max-width:180px;margin-bottom:4px;" /><br>` : '';
+  const processedContent = pageContent ? processContent(pageContent) : '';
+  const processedTerms = termsConditions ? processContent(termsConditions) : '';
+
+  return `<html><body style="font-family:Calibri,sans-serif;font-size:12pt;color:#333">
+    <h2 style="color:${primaryColor}">Quotation ${quotation.quotation_number || 'Draft'}</h2>
+    <p><strong>Date:</strong> ${formatDate(quotation.created_at)}</p>
+    <p><strong>To:</strong> ${quotation.company_name || '-'}</p>
+    <p><strong>Attn:</strong> ${quotation.contact_person || '-'}</p>
+    <p><strong>Programme:</strong> ${quotation.programme_name || '-'}</p>
+    <br>
+    ${processedContent ? `<div>${processedContent}</div><br>` : ''}
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%">
+      <tr style="background:${primaryColor};color:white"><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
+      ${(quotation.line_items || []).map(item => `<tr><td>${item.description || item.item || '-'}</td><td style="text-align:center">${item.quantity || item.qty || 0}</td><td style="text-align:right">RM ${formatCurrency(item.unit_price || item.rate_per_pax)}</td><td style="text-align:right">RM ${formatCurrency(item.amount || item.total)}</td></tr>`).join('')}
+      <tr><td colspan="3" style="text-align:right"><strong>Total</strong></td><td style="text-align:right"><strong>RM ${formatCurrency(quotation.total_amount)}</strong></td></tr>
+    </table>
+    ${processedTerms ? `<br><h3>Terms & Conditions</h3><div>${processedTerms}</div>` : ''}
+    <br><br>
+    <table style="width:100%"><tr>
+      <td style="width:50%">${signatureHtml}<strong>Prepared By</strong><br>${settings.company_name || 'MDDRC SDN BHD'}</td>
+      <td style="width:50%"><br><strong>Accepted By</strong><br>${quotation.company_name || 'Client'}</td>
+    </tr></table>
+    <p style="text-align:center;color:#999;margin-top:30px"><em>"${tagline}"</em></p>
+  </body></html>`;
 };

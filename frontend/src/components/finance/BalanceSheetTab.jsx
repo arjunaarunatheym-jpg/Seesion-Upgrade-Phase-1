@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { downloadPdf } from '../../utils/htmlToPdf';
 import { axiosInstance } from '../../App';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
@@ -97,10 +98,7 @@ export const BalanceSheetTab = () => {
       <p style="margin-top:24px;font-size:11px;color:#999">Generated: ${new Date().toLocaleString()}</p>
     </body></html>`;
 
-    const w = window.open('', '_blank');
-    w.document.write(html);
-    w.document.close();
-    w.setTimeout(() => w.print(), 300);
+    downloadPdf(html, `BalanceSheet_${asAt}`);
   };
 
   const summary = data?.summary || {};

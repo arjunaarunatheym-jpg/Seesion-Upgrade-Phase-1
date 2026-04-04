@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { downloadPdf } from '../utils/htmlToPdf';
 import { Button } from './ui/button';
 import { X, Download } from 'lucide-react';
 
@@ -36,9 +37,7 @@ const PayslipPrint = ({ payslip, companySettings, onClose }) => {
 
   const handlePrint = () => {
     const printContent = printRef.current;
-    const printWindow = window.open('', '_blank');
-    
-    printWindow.document.write(`
+        const _pdfHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -98,11 +97,9 @@ const PayslipPrint = ({ payslip, companySettings, onClose }) => {
           ${printContent.innerHTML}
         </body>
       </html>
-    `);
-    
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => { printWindow.print(); printWindow.close(); }, 250);
+    `;
+    downloadPdf(_pdfHtml, 'Payslip');
+    setTimeout(() => { printWindow.close(); }, 250);
   };
 
   return (

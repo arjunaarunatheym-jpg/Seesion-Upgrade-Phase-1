@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { downloadPdf } from '../utils/htmlToPdf';
 import { Button } from './ui/button';
 import { X, Download } from 'lucide-react';
 
@@ -49,12 +50,10 @@ const PayAdvicePrint = ({ payAdvice, companySettings, onClose }) => {
   };
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    
-    // Build the print HTML with inline logo
+        // Build the print HTML with inline logo
     const logoHtml = fullLogoUrl ? `<img src="${fullLogoUrl}" style="width:70px;height:auto;" crossorigin="anonymous" />` : '';
     
-    printWindow.document.write(`
+    const _pdfHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -178,14 +177,11 @@ const PayAdvicePrint = ({ payAdvice, companySettings, onClose }) => {
           <div class="footer">This document is computer-generated. For enquiries, please contact HR department.</div>
         </body>
       </html>
-    `);
-    
-    printWindow.document.close();
-    printWindow.focus();
+    `;
+    downloadPdf(_pdfHtml, 'PayAdvice');
     
     // Wait for images to load before printing
     setTimeout(() => {
-      printWindow.print();
       printWindow.close();
     }, 500);
   };

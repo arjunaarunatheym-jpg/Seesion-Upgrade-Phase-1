@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { downloadPdf } from '../utils/htmlToPdf';
 import { Button } from './ui/button';
 import { 
   X, Printer, Download, ZoomIn, ZoomOut, Maximize2, Minimize2, 
@@ -75,8 +76,7 @@ const DocumentPreview = ({
     const printContent = contentRef.current;
     if (!printContent) return;
 
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
+        if (!printWindow) {
       alert('Please allow popups for printing');
       return;
     }
@@ -97,7 +97,7 @@ const DocumentPreview = ({
       }
     `;
 
-    printWindow.document.write(`
+    const _pdfHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -111,12 +111,9 @@ const DocumentPreview = ({
           ${printContent.innerHTML}
         </body>
       </html>
-    `);
-
-    printWindow.document.close();
-    printWindow.focus();
+    `;
+    downloadPdf(_pdfHtml, 'Document');
     setTimeout(() => {
-      printWindow.print();
       printWindow.close();
     }, 300);
   };

@@ -1,5 +1,7 @@
+import { downloadPdf } from './htmlToPdf';
+
 /**
- * Print Receipt utility - generates printable payment receipt
+ * Print Receipt utility - generates PDF payment receipt download
  * Follows the same branding pattern as printInvoice.js
  */
 
@@ -45,12 +47,7 @@ export const printReceipt = async (payment, companySettings, axiosInstance) => {
     'credit_card': 'Credit Card',
   }[payment.payment_method] || payment.payment_method || '-';
 
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) {
-    throw new Error('Popup blocked. Please allow popups for this site.');
-  }
-
-  printWindow.document.write(`
+  const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -302,12 +299,7 @@ export const printReceipt = async (payment, companySettings, axiosInstance) => {
       <div class="tagline">"${tagline}"</div>
     </body>
     </html>
-  `);
+  `;
   
-  printWindow.document.close();
-  
-  setTimeout(() => {
-    printWindow.focus();
-    printWindow.print();
-  }, 500);
+  downloadPdf(html, `Receipt_${payment.receipt_number || payment.id?.substring(0,8) || 'payment'}`);
 };

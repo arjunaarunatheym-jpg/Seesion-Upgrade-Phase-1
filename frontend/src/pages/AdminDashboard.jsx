@@ -16,6 +16,7 @@ import TestManagement from "./TestManagement";
 import FeedbackManagement from "./FeedbackManagement";
 import ChecklistManagement from "./ChecklistManagement";
 import Settings from "./Settings";
+import { DigitalSignatureManager } from "../components/shared/DigitalSignatureManager";
 import DataManagement from "../components/DataManagement";
 import { useTheme } from "../context/ThemeContext";
 import { SearchBar } from "../components/SearchBar";
@@ -1841,7 +1842,10 @@ const AdminDashboard = ({ user, onLogout }) => {
           {/* Checklist Templates Tab */}
           {/* Settings Tab */}
           <TabsContent value="settings">
-            <Settings />
+            <div className="space-y-6">
+              <Settings />
+              <DigitalSignatureManager user={user} />
+            </div>
           </TabsContent>
 
           {/* Data Management Tab - Super Admin */}

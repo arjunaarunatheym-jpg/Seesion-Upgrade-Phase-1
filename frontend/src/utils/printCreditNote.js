@@ -1,5 +1,7 @@
+import { downloadPdf } from './htmlToPdf';
+
 /**
- * Print Credit Note utility - generates printable credit note PDF
+ * Print Credit Note utility - generates PDF credit note download
  */
 
 export const printCreditNote = (creditNote, companySettings) => {
@@ -22,9 +24,7 @@ export const printCreditNote = (creditNote, companySettings) => {
   const companyEmail = companySettings?.email || '';
   const companyReg = companySettings?.registration_no || '';
 
-  const printWindow = window.open('', '_blank');
-  
-  printWindow.document.write(`
+  const html = `
     <!DOCTYPE html>
     <html>
     <head>
@@ -118,12 +118,9 @@ export const printCreditNote = (creditNote, companySettings) => {
           <p style="margin-top: 10px;">Generated on ${new Date().toLocaleDateString('en-MY')}</p>
         </div>
       </div>
-      <script>
-        window.onload = function() { window.print(); }
-      </script>
     </body>
     </html>
-  `);
+  `;
   
-  printWindow.document.close();
+  downloadPdf(html, `CreditNote_${creditNote.cn_number || 'draft'}`);
 };
