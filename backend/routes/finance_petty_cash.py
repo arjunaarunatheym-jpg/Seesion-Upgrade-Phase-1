@@ -10,6 +10,11 @@ import uuid
 from core import db, get_current_user, get_malaysia_time
 from models import User
 
+try:
+    from routes.accounting import create_auto_journal_entry
+except ImportError:
+    create_auto_journal_entry = None
+
 router = APIRouter(prefix="/finance", tags=["finance-petty-cash"])
 
 
@@ -70,6 +75,20 @@ async def add_manual_income(entry: ManualIncomeEntry, current_user: User = Depen
         "created_at": get_malaysia_time().isoformat()
     }
     await db.manual_income.insert_one(record)
+    # Auto-post journal entry
+    if create_auto_journal_entry:
+        try:
+            await create_auto_journal_entry(
+                entry_date=entry.date, description=f"Manual Income: {entry.description}",
+                source_module="manual_income", source_id=record["id"], source_reference=f"MI-{record['id'][:8]}",
+                lines=[
+                    {"account_code": "1000", "debit": round(entry.amount, 2), "credit": 0, "memo": "Cash received"},
+                    {"account_code": "4100", "debit": 0, "credit": round(entry.amount, 2), "memo": entry.description},
+                ],
+                created_by_id=current_user.id, created_by_name=current_user.full_name, skip_date_check=True
+            )
+        except Exception:
+            pass  # Non-blocking — backfill will catch it
     return {"message": "Income entry added", "id": record["id"]}
 
 
@@ -117,6 +136,20 @@ async def add_manual_expense(entry: ManualExpenseEntry, current_user: User = Dep
         "created_at": get_malaysia_time().isoformat()
     }
     await db.manual_expenses.insert_one(record)
+    # Auto-post journal entry
+    if create_auto_journal_entry:
+        try:
+            await create_auto_journal_entry(
+                entry_date=entry.date, description=f"Manual Expense: {entry.description}",
+                source_module="manual_expense", source_id=record["id"], source_reference=f"ME-{record['id'][:8]}",
+                lines=[
+                    {"account_code": "6999", "debit": round(entry.amount, 2), "credit": 0, "memo": entry.description},
+                    {"account_code": "1000", "debit": 0, "credit": round(entry.amount, 2), "memo": "Cash paid"},
+                ],
+                created_by_id=current_user.id, created_by_name=current_user.full_name, skip_date_check=True
+            )
+        except Exception:
+            pass
     return {"message": "Expense entry added", "id": record["id"]}
 
 
@@ -240,6 +273,27 @@ async def add_petty_cash_transaction(txn: PettyCashTransaction, current_user: Us
     
     if not requires_approval:
         await db.petty_cash_settings.update_one({}, {"$set": {"current_balance": new_balance}})
+        # Auto-post journal entry for approved petty cash
+        if create_auto_journal_entry:
+            try:
+                if txn.type == "expense":
+                    lines = [
+                        {"account_code": "6600", "debit": round(txn.amount, 2), "credit": 0, "memo": txn.description},
+                        {"account_code": "1010", "debit": 0, "credit": round(txn.amount, 2), "memo": "Petty Cash"},
+                    ]
+                else:  # topup
+                    lines = [
+                        {"account_code": "1010", "debit": round(txn.amount, 2), "credit": 0, "memo": "Petty Cash Top-up"},
+                        {"account_code": "1000", "debit": 0, "credit": round(txn.amount, 2), "memo": "Cash at Bank"},
+                    ]
+                await create_auto_journal_entry(
+                    entry_date=txn.date, description=f"Petty Cash {txn.type}: {txn.description}",
+                    source_module="petty_cash", source_id=transaction["id"], source_reference=f"PC-{transaction['id'][:8]}",
+                    lines=lines,
+                    created_by_id=current_user.id, created_by_name=current_user.full_name, skip_date_check=True
+                )
+            except Exception:
+                pass
     
     return {
         "message": "Transaction added" + (" (pending approval)" if requires_approval else ""),

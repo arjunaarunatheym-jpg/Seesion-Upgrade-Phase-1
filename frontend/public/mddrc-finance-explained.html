@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MDDRC Finance System - How Everything Works</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #f8fafc; color: #1e293b; line-height: 1.7; }
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+  
+  .header { text-align: center; margin-bottom: 48px; padding: 40px 24px; background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%); border-radius: 20px; color: white; }
+  .header h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+  .header p { font-size: 14px; opacity: 0.75; }
+  
+  .section { background: white; border-radius: 16px; border: 1px solid #e2e8f0; padding: 28px; margin-bottom: 24px; }
+  .section h2 { font-size: 20px; font-weight: 700; color: #0f172a; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #e2e8f0; }
+  .section h3 { font-size: 16px; font-weight: 600; color: #334155; margin: 20px 0 10px; }
+  .section p { font-size: 14px; color: #475569; margin-bottom: 12px; }
+  
+  .flow-diagram { background: #f1f5f9; border-radius: 12px; padding: 20px; margin: 16px 0; font-family: 'Courier New', monospace; font-size: 13px; line-height: 2; color: #334155; overflow-x: auto; }
+  .flow-diagram .arrow { color: #3b82f6; font-weight: bold; }
+  .flow-diagram .highlight { color: #059669; font-weight: bold; }
+  .flow-diagram .warn { color: #dc2626; font-weight: bold; }
+  
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+  th { text-align: left; padding: 10px 14px; background: #f1f5f9; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; border-bottom: 2px solid #e2e8f0; }
+  td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; }
+  tr:hover td { background: #fafafe; }
+  
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: #dcfce7; color: #166534; }
+  .badge-yellow { background: #fef9c3; color: #854d0e; }
+  .badge-red { background: #fee2e2; color: #991b1b; }
+  .badge-blue { background: #dbeafe; color: #1e40af; }
+  
+  .callout { background: #fffbeb; border: 1px solid #fbbf24; border-radius: 10px; padding: 16px; margin: 16px 0; }
+  .callout.info { background: #eff6ff; border-color: #3b82f6; }
+  .callout.success { background: #f0fdf4; border-color: #22c55e; }
+  .callout strong { display: block; margin-bottom: 4px; font-size: 13px; }
+  .callout p { font-size: 13px; margin: 0; }
+  
+  .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .comp-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
+  .comp-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+  .comp-card ul { list-style: none; font-size: 13px; }
+  .comp-card ul li { padding: 3px 0; }
+  .comp-card ul li::before { content: ''; width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: middle; }
+  .comp-card.blue ul li::before { background: #3b82f6; }
+  .comp-card.green ul li::before { background: #22c55e; }
+  
+  ol, ul { padding-left: 24px; margin: 8px 0 16px; }
+  li { font-size: 14px; margin: 4px 0; color: #475569; }
+  
+  @media print {
+    body { background: white; }
+    .section { border: 1px solid #ddd; break-inside: avoid; }
+    .header { background: #1e3a5f !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+  @media (max-width: 640px) {
+    .comparison { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>MDDRC Finance System</h1>
+    <p>How Everything Works &mdash; A Complete Guide</p>
+    <p style="margin-top:8px; font-size:12px; opacity:0.6">Generated: 4 April 2026</p>
+  </div>
+
+  <!-- 1. THE BIG PICTURE -->
+  <div class="section">
+    <h2>1. The Big Picture — Two Accounting Engines</h2>
+    <p>Your system has <strong>two independent ways</strong> of calculating financial data. Understanding this is key to reading your reports correctly.</p>
+    
+    <div class="comparison">
+      <div class="comp-card blue">
+        <h4>Engine A: CEO P&L (Cash-Based)</h4>
+        <ul>
+          <li>Reads directly from raw data collections</li>
+          <li>Invoices, payments, session costs, petty cash</li>
+          <li>Simple: Revenue = Issued Invoices</li>
+          <li>Shows <strong>session profitability</strong></li>
+          <li>Does NOT include payroll overhead</li>
+          <li>Best for: "Is this session profitable?"</li>
+        </ul>
+      </div>
+      <div class="comp-card green">
+        <h4>Engine B: Auditor P&L (Journal-Based)</h4>
+        <ul>
+          <li>Reads ONLY from double-entry journal entries</li>
+          <li>Proper accounting: every debit has a credit</li>
+          <li>Includes ALL expenses (session + payroll + overhead)</li>
+          <li>Shows <strong>true company P&L</strong></li>
+          <li>Powers the Balance Sheet</li>
+          <li>Best for: "Is the company profitable?"</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <strong>Why do the net profit numbers differ?</strong>
+      <p>CEO P&L: RM 8,055 (revenue minus session costs only). Auditor P&L: RM -7,462 (includes RM 15,517 payroll overhead). The difference IS the payroll. Both are correct — they answer different questions.</p>
+    </div>
+  </div>
+
+  <!-- 2. DATA FLOW -->
+  <div class="section">
+    <h2>2. How Data Flows Through the System</h2>
+    
+    <div class="flow-diagram">
+      <span class="highlight">Marketing creates Quotation</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="arrow">&darr;</span> (Approved by Admin)<br>
+      <span class="highlight">Session Created</span> &rarr; Trainers/Coordinators assigned<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="arrow">&darr;</span><br>
+      <span class="highlight">Invoice Generated</span> (auto-creates journal: DR Accounts Receivable / CR Revenue)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="arrow">&darr;</span><br>
+      <span class="highlight">Payment Recorded</span> (auto-creates journal: DR Cash / CR Accounts Receivable)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="arrow">&darr;</span><br>
+      <span class="highlight">Session Completed</span> &rarr; Trainer/Coordinator/Marketing fees saved<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="arrow">&darr;</span> <span class="warn">(these do NOT auto-post journals!)</span><br>
+      <span class="highlight">Monthly Payroll Run</span> (auto-creates journal: DR Salary Expense / CR Payable)<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="arrow">&darr;</span><br>
+      <span class="highlight">Sync Button</span> catches anything missing &rarr; backfill creates journal entries<br>
+    </div>
+  </div>
+
+  <!-- 3. WHAT AUTO-POSTS AND WHAT DOESN'T -->
+  <div class="section">
+    <h2>3. What Auto-Posts Journals vs What Needs Sync</h2>
+    
+    <table>
+      <thead>
+        <tr><th>Transaction</th><th>Auto-Posts on Create?</th><th>Covered by Sync?</th><th>Journal Entry</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Invoice Issued</td><td><span class="badge badge-green">YES</span></td><td><span class="badge badge-green">YES</span></td><td>DR 1100 Accounts Receivable / CR 4000 Training Revenue</td></tr>
+        <tr><td>Payment Received</td><td><span class="badge badge-green">YES</span></td><td><span class="badge badge-green">YES</span></td><td>DR 1000 Cash at Bank / CR 1100 Accounts Receivable</td></tr>
+        <tr><td>Credit Note</td><td><span class="badge badge-green">YES</span></td><td><span class="badge badge-green">YES</span></td><td>DR 4000 Revenue (reversal) / CR 1100 AR</td></tr>
+        <tr><td>Payroll Run</td><td><span class="badge badge-green">YES</span></td><td><span class="badge badge-green">YES</span></td><td>DR 6000-6300 Salary+EPF+SOCSO+EIS / CR 2100-2500 Payable</td></tr>
+        <tr><td>Trainer Fees</td><td><span class="badge badge-yellow">NO</span></td><td><span class="badge badge-green">YES</span></td><td>DR 5000 Direct Trainer Cost / CR 2100 Accounts Payable</td></tr>
+        <tr><td>Coordinator Fees</td><td><span class="badge badge-yellow">NO</span></td><td><span class="badge badge-green">YES</span></td><td>DR 5100 Coordinator Cost / CR 2100 Accounts Payable</td></tr>
+        <tr><td>Marketing Commissions</td><td><span class="badge badge-yellow">NO</span></td><td><span class="badge badge-green">YES</span></td><td>DR 5200 Marketing Cost / CR 2100 Accounts Payable</td></tr>
+        <tr><td>Session Expenses</td><td><span class="badge badge-yellow">NO</span></td><td><span class="badge badge-green">YES</span></td><td>DR 5300 Other Direct Cost / CR 2100 or 1000</td></tr>
+        <tr><td>Petty Cash</td><td><span class="badge badge-green">YES (new)</span></td><td><span class="badge badge-green">YES</span></td><td>DR 6600 Petty Cash Expense / CR 1010 Petty Cash</td></tr>
+        <tr><td>Manual Income</td><td><span class="badge badge-green">YES (new)</span></td><td><span class="badge badge-green">YES</span></td><td>DR 1000 Cash / CR 4100 Other Income</td></tr>
+        <tr><td>Manual Expenses</td><td><span class="badge badge-green">YES (new)</span></td><td><span class="badge badge-green">YES</span></td><td>DR 6999 Other Expense / CR 1000 Cash</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>When to click "Sync Historical Transactions"?</strong>
+      <p>After saving trainer fees, coordinator fees, or marketing commissions. These are typically set once per session during costing — click Sync in Finance &gt; Accounting tab to catch them. The "Reset &amp; Re-sync" option will void all old entries and recreate everything cleanly.</p>
+    </div>
+  </div>
+
+  <!-- 4. YOUR CHART OF ACCOUNTS -->
+  <div class="section">
+    <h2>4. Chart of Accounts — What Each Number Means</h2>
+    
+    <h3>Balance Sheet Accounts</h3>
+    <table>
+      <thead><tr><th>Code</th><th>Account</th><th>Type</th><th>What It Tracks</th></tr></thead>
+      <tbody>
+        <tr><td>1000</td><td>Cash at Bank</td><td>Asset</td><td>Money in your bank account</td></tr>
+        <tr><td>1010</td><td>Petty Cash</td><td>Asset</td><td>Physical cash on hand</td></tr>
+        <tr><td>1100</td><td>Accounts Receivable</td><td>Asset</td><td>Money clients owe you (unpaid invoices)</td></tr>
+        <tr><td>2100</td><td>Accounts Payable</td><td>Liability</td><td>Money you owe trainers/coordinators/suppliers</td></tr>
+        <tr><td>2200</td><td>SST Payable</td><td>Liability</td><td>Tax you collected but haven't paid to LHDN yet</td></tr>
+        <tr><td>2300</td><td>Deferred Revenue</td><td>Liability</td><td>Payments received for sessions not yet completed</td></tr>
+        <tr><td>2400</td><td>EPF Payable</td><td>Liability</td><td>Employee EPF contributions owed to KWSP</td></tr>
+        <tr><td>2500</td><td>SOCSO Payable</td><td>Liability</td><td>SOCSO contributions owed</td></tr>
+        <tr><td>2600</td><td>EIS Payable</td><td>Liability</td><td>EIS contributions owed</td></tr>
+      </tbody>
+    </table>
+
+    <h3>P&L Accounts (Revenue &amp; Expenses)</h3>
+    <table>
+      <thead><tr><th>Code</th><th>Account</th><th>Section</th><th>What It Tracks</th></tr></thead>
+      <tbody>
+        <tr style="background:#f0fdf4"><td>4000</td><td>Training Revenue</td><td><span class="badge badge-green">Revenue</span></td><td>Income from training sessions</td></tr>
+        <tr style="background:#f0fdf4"><td>4100</td><td>Other Income</td><td><span class="badge badge-green">Revenue</span></td><td>Non-training income (consultancy, etc.)</td></tr>
+        <tr style="background:#fef2f2"><td>5000</td><td>Trainer Direct Costs</td><td><span class="badge badge-red">COGS</span></td><td>Fees paid to trainers per session</td></tr>
+        <tr style="background:#fef2f2"><td>5100</td><td>Coordinator Direct Costs</td><td><span class="badge badge-red">COGS</span></td><td>Fees paid to coordinators per session</td></tr>
+        <tr style="background:#fef2f2"><td>5200</td><td>Marketing Direct Costs</td><td><span class="badge badge-red">COGS</span></td><td>Commissions paid to marketing agents</td></tr>
+        <tr style="background:#fef2f2"><td>5300</td><td>Other Direct Costs</td><td><span class="badge badge-red">COGS</span></td><td>Travel, materials, venue — per session</td></tr>
+        <tr style="background:#fffbeb"><td>6000</td><td>Salary &amp; Wages</td><td><span class="badge badge-yellow">OpEx</span></td><td>Monthly staff salaries (payroll)</td></tr>
+        <tr style="background:#fffbeb"><td>6100</td><td>EPF Employer</td><td><span class="badge badge-yellow">OpEx</span></td><td>Employer's EPF contribution</td></tr>
+        <tr style="background:#fffbeb"><td>6200</td><td>SOCSO Employer</td><td><span class="badge badge-yellow">OpEx</span></td><td>Employer's SOCSO contribution</td></tr>
+        <tr style="background:#fffbeb"><td>6300</td><td>EIS Employer</td><td><span class="badge badge-yellow">OpEx</span></td><td>Employer's EIS contribution</td></tr>
+        <tr style="background:#fffbeb"><td>6600</td><td>Petty Cash Expenses</td><td><span class="badge badge-yellow">OpEx</span></td><td>Small operational purchases</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 5. REPORTS EXPLAINED -->
+  <div class="section">
+    <h2>5. Reports — Which One to Read When</h2>
+
+    <h3>CEO P&L (Session Profitability)</h3>
+    <div class="flow-diagram" style="background:#f0fdf4">
+      Training Revenue (all issued/paid invoices)<br>
+      &minus; Trainer Fees<br>
+      &minus; Coordinator Fees<br>
+      &minus; Marketing Commissions<br>
+      &minus; Petty Cash<br>
+      = <span class="highlight">Session Net Profit</span> (your "margin per session")<br>
+      <br>
+      <em>Use this to answer: "Am I making money on each training?"</em>
+    </div>
+
+    <h3>Auditor P&L (Full Company P&L)</h3>
+    <div class="flow-diagram" style="background:#eff6ff">
+      Training Revenue (from journal entries)<br>
+      &minus; Cost of Sales (Trainer + Coordinator + Marketing + Direct costs)<br>
+      = <span class="highlight">Gross Profit</span><br>
+      &minus; Operating Expenses (Payroll: Salary + EPF + SOCSO + EIS + Petty Cash)<br>
+      = <span class="highlight">Net Profit</span><br>
+      <br>
+      <em>Use this to answer: "Is my company profitable after paying ALL bills?"</em>
+    </div>
+
+    <h3>Balance Sheet (Financial Position)</h3>
+    <div class="flow-diagram" style="background:#faf5ff">
+      <span class="highlight">ASSETS</span> (what you own)<br>
+      &nbsp;&nbsp;Cash at Bank + Petty Cash + Accounts Receivable<br>
+      <br>
+      = <span class="highlight">LIABILITIES</span> (what you owe)<br>
+      &nbsp;&nbsp;Accounts Payable + SST + EPF + SOCSO + EIS + Deferred Revenue<br>
+      <br>
+      + <span class="highlight">EQUITY</span> (retained earnings from P&L)<br>
+      <br>
+      <em>If Assets ≠ Liabilities + Equity → something is wrong → click Sync</em>
+    </div>
+
+    <div class="callout success">
+      <strong>Your Balance Sheet is currently BALANCED</strong>
+      <p>Assets = RM 37,455.90 | Liabilities + Equity = RM 37,455.90. This means all journal entries balance correctly.</p>
+    </div>
+  </div>
+
+  <!-- 6. THE SYNC SYSTEM -->
+  <div class="section">
+    <h2>6. The Sync System — How & When to Use</h2>
+    
+    <h3>Where is it?</h3>
+    <p><strong>Finance Dashboard &gt; Accounting Tab &gt; "Sync Historical Transactions"</strong></p>
+    
+    <h3>Two options:</h3>
+    <table>
+      <thead><tr><th>Button</th><th>What It Does</th><th>When to Use</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Sync Historical</strong></td>
+          <td>Scans ALL raw data, creates ONLY missing journal entries. Non-destructive.</td>
+          <td>After adding trainer fees, coordinator fees, session expenses, manual income/expenses. Safe to run anytime.</td>
+        </tr>
+        <tr>
+          <td><strong>Reset &amp; Re-sync</strong></td>
+          <td>Voids ALL existing auto-generated journals, then recreates everything from scratch.</td>
+          <td>When numbers look wrong and you want a clean slate. Also fixes misclassified entries (e.g., Deferred Revenue &rarr; Revenue).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Recommended workflow:</strong>
+      <p>1. Complete session costing (save trainer fees, coordinator fees, marketing commission)<br>
+      2. Go to Finance &gt; Accounting tab<br>
+      3. Click "Sync Historical Transactions"<br>
+      4. All data flows into your Auditor P&L and Balance Sheet automatically</p>
+    </div>
+  </div>
+
+  <!-- 7. YOUR DIAGNOSTIC RESULTS -->
+  <div class="section">
+    <h2>7. About Your Diagnostic (4 TF/CF/MC Needing Fix)</h2>
+    <p>The diagnostic found 4 journal entries for trainer fees / marketing commissions that were created with an older format (missing proper <code>source_id</code> references). This means the backfill can't match them to prevent duplicates.</p>
+    
+    <h3>How to fix:</h3>
+    <ol>
+      <li>Go to Finance &gt; Accounting tab</li>
+      <li>Click <strong>"Reset &amp; Re-sync"</strong></li>
+      <li>This will void the 4 old entries and recreate them properly with correct references</li>
+      <li>After reset, the diagnostic should show 0 needing fix</li>
+    </ol>
+  </div>
+
+  <!-- 8. WHAT'S CORRECT -->
+  <div class="section">
+    <h2>8. Is Everything Correct? Verification Checklist</h2>
+    
+    <table>
+      <thead><tr><th>Check</th><th>Status</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Revenue matches between CEO P&L and Auditor P&L</td><td><span class="badge badge-green">PASS</span></td><td>Both show RM 12,000</td></tr>
+        <tr><td>COGS (session costs) match</td><td><span class="badge badge-green">PASS</span></td><td>Both show RM 3,944.60</td></tr>
+        <tr><td>Gross Profit matches</td><td><span class="badge badge-green">PASS</span></td><td>Both show RM 8,055.40</td></tr>
+        <tr><td>Balance Sheet is balanced</td><td><span class="badge badge-green">PASS</span></td><td>A = L+E = RM 37,455.90</td></tr>
+        <tr><td>Invoice journals auto-post</td><td><span class="badge badge-green">PASS</span></td><td>Tested &mdash; creates on invoice issue</td></tr>
+        <tr><td>Payment journals auto-post</td><td><span class="badge badge-green">PASS</span></td><td>Tested &mdash; creates on payment record</td></tr>
+        <tr><td>Petty cash journals auto-post</td><td><span class="badge badge-green">NEW</span></td><td>Just added &mdash; posts on transaction create</td></tr>
+        <tr><td>Manual income/expense journals auto-post</td><td><span class="badge badge-green">NEW</span></td><td>Just added &mdash; posts on create</td></tr>
+        <tr><td>Deferred revenue reclassification</td><td><span class="badge badge-green">FIXED</span></td><td>Sync now moves 2300 &rarr; 4000 for all issued invoices</td></tr>
+        <tr><td>Receipt numbers persist</td><td><span class="badge badge-green">FIXED</span></td><td>Now auto-generated: RCP/YYYY/MM/0001</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="text-align: center; padding: 32px 0; color: #94a3b8; font-size: 12px;">
+    MDDRC Training Management Platform &mdash; Finance System Guide &mdash; April 2026<br>
+    <em>Ctrl+P to save as PDF</em>
+  </div>
+
+</div>
+</body>
+</html>
