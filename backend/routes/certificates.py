@@ -1,26 +1,272 @@
 """
 Certificates routes - Certificate management and generation
-Endpoints: 10
+Endpoints: 12
 """
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
 from fastapi.responses import FileResponse
 from typing import List, Optional
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 from pathlib import Path
 import uuid
 import shutil
+import subprocess
+import tempfile
+import copy
+import logging
 
-from core import db, get_current_user, get_malaysia_time
+from docx import Document
+from docx.shared import Pt
+
+from core import db, get_current_user, get_malaysia_time, TEMPLATE_DIR, CERTIFICATE_PDF_DIR
 from models import User
 
 from pydantic import BaseModel, Field, ConfigDict
+
+logger = logging.getLogger(__name__)
 
 # Paths
 STATIC_DIR = Path(__file__).parent.parent / "static"
 CERTIFICATE_DIR = STATIC_DIR / "certificates"
 CERTIFICATE_DIR.mkdir(parents=True, exist_ok=True)
-CERTIFICATE_PDF_DIR = STATIC_DIR / "certificates_pdf"
-CERTIFICATE_PDF_DIR.mkdir(parents=True, exist_ok=True)
+
+# ==================== FONT SETTINGS SYSTEM ====================
+
+DEFAULT_FONT_SETTINGS = {
+    "participant_name": {"font_size": 16, "max_lines": 1, "auto_fit": True, "bold": True},
+    "ic_number": {"font_size": 16, "max_lines": 1, "auto_fit": False, "bold": False},
+    "company_name": {"font_size": 12, "max_lines": 1, "auto_fit": True, "bold": False},
+    "certificate_title": {"font_size": 16, "max_lines": 2, "auto_fit": True, "bold": True},
+    "certificate_subtitle": {"font_size": 12, "max_lines": 1, "auto_fit": True, "bold": False},
+    "dates": {"font_size": 10, "max_lines": 1, "auto_fit": True, "bold": False},
+    "venue": {"font_size": 8, "max_lines": 2, "auto_fit": True, "bold": False},
+    "certificate_number": {"font_size": 10, "max_lines": 1, "auto_fit": False, "bold": False},
+    "top_margin": 80,
+    "paragraph_spacing": 65,
+}
+
+PLACEHOLDER_SETTINGS_MAP = {
+    "{{PARTICIPANT_NAME}}": "participant_name",
+    "{{IC_NUMBER}}": "ic_number",
+    "{{COMPANY_NAME}}": "company_name",
+    "{{CERTIFICATE_TITLE}}": "certificate_title",
+    "{{CERTIFICATE_SUBTITLE}}": "certificate_subtitle",
+    "{{VENUE}}": "venue",
+    "{{CERTIFICATE_NUMBER}}": "certificate_number",
+}
+
+AREA_WIDTHS = {
+    "participant_name": 150,
+    "ic_number": 150,
+    "company_name": 150,
+    "certificate_title": 350,
+    "certificate_subtitle": 350,
+    "dates": 150,
+    "venue": 150,
+    "certificate_number": 350,
+}
+
+
+def _estimate_text_width(text: str, font_pt: float, bold: bool = False) -> float:
+    avg_char_width = font_pt * 0.6
+    if bold:
+        avg_char_width *= 1.15
+    return len(text) * avg_char_width
+
+
+def _auto_fit_font(text: str, area_width: float, font_size: float, max_lines: int, bold: bool, min_pt: float = 6.0) -> float:
+    size = font_size
+    while size > min_pt:
+        est_width = _estimate_text_width(text, size, bold)
+        lines_needed = est_width / area_width if area_width > 0 else 1
+        if lines_needed <= max_lines:
+            return size
+        size -= 0.5
+    return min_pt
+
+
+async def _get_font_settings() -> dict:
+    saved = await db.settings.find_one({"id": "certificate_font_settings"}, {"_id": 0})
+    if saved:
+        merged = {**DEFAULT_FONT_SETTINGS}
+        for k, v in saved.items():
+            if k not in ("id", "_id"):
+                merged[k] = v
+        return merged
+    return dict(DEFAULT_FONT_SETTINGS)
+
+
+def _replace_placeholders_in_doc(doc: Document, replacements: dict, font_settings: dict):
+    same_date = replacements.pop("_same_date", False)
+
+    for paragraph in doc.paragraphs:
+        para_text = paragraph.text
+
+        if "{{CERTIFICATE_SUBTITLE}}" in para_text and not replacements.get("{{CERTIFICATE_SUBTITLE}}"):
+            for run in paragraph.runs:
+                run.text = ""
+            continue
+
+        if "{{VALIDITY_START}}" in para_text and not replacements.get("{{VALIDITY_END}}"):
+            for run in paragraph.runs:
+                run.text = ""
+            continue
+
+        is_date_line = "{{TRAINING_DATE}}" in para_text or "{{END_DATE}}" in para_text
+
+        for run in paragraph.runs:
+            if same_date and is_date_line and run.text.strip() == "-":
+                run.text = ""
+                continue
+
+            for placeholder, value in replacements.items():
+                if placeholder not in run.text:
+                    continue
+                run.text = run.text.replace(placeholder, value)
+
+                settings_key = PLACEHOLDER_SETTINGS_MAP.get(placeholder)
+                if settings_key and settings_key in font_settings:
+                    fs = font_settings[settings_key]
+                    if isinstance(fs, dict):
+                        target_size = fs.get("font_size", 12)
+                        if fs.get("auto_fit"):
+                            target_size = _auto_fit_font(
+                                value, AREA_WIDTHS.get(settings_key, 150),
+                                target_size, fs.get("max_lines", 1), fs.get("bold", False),
+                            )
+                        run.font.size = Pt(target_size)
+
+        if is_date_line:
+            date_fs = font_settings.get("dates", {})
+            date_size = date_fs.get("font_size", 10) if isinstance(date_fs, dict) else 10
+            if isinstance(date_fs, dict) and date_fs.get("auto_fit"):
+                full_text = "".join(r.text for r in paragraph.runs).strip()
+                if full_text:
+                    date_size = _auto_fit_font(
+                        full_text, AREA_WIDTHS.get("dates", 150),
+                        date_size, date_fs.get("max_lines", 1), False,
+                    )
+            for run in paragraph.runs:
+                if run.text.strip():
+                    run.font.size = Pt(date_size)
+
+
+def _format_date_display(date_str: str) -> str:
+    """Convert date string to display format (e.g., '25 January 2026')."""
+    try:
+        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%d/%m/%Y", "%d-%m-%Y"):
+            try:
+                dt = datetime.strptime(date_str.split("T")[0] if "T" in date_str else date_str, fmt)
+                return dt.strftime("%d %B %Y")
+            except ValueError:
+                continue
+        return date_str
+    except Exception:
+        return date_str
+
+
+async def _generate_cert_number() -> str:
+    """Generate certificate number in format MDDRC/COA/YYYY/MM/00001."""
+    now = get_malaysia_time()
+    year = now.strftime("%Y")
+    month = now.strftime("%m")
+    prefix = f"MDDRC/COA/{year}/{month}/"
+    count = await db.certificates.count_documents({"certificate_number": {"$regex": f"^MDDRC/COA/{year}/{month}/"}})
+    return f"{prefix}{str(count + 1).zfill(5)}"
+
+
+async def _build_replacements(session: dict, participant: dict, certificate_number: str) -> dict:
+    """Build the placeholder→value mapping from session & participant data."""
+    # Get program info
+    program = None
+    if session.get("program_id"):
+        program = await db.programs.find_one({"id": session["program_id"]}, {"_id": 0})
+
+    # Get company info
+    company_name = session.get("company_name", "")
+    if not company_name and session.get("company_id"):
+        company = await db.companies.find_one({"id": session["company_id"]}, {"_id": 0})
+        company_name = company.get("name", "") if company else ""
+
+    # Certificate title/subtitle from program
+    cert_title = ""
+    cert_subtitle = ""
+    if program:
+        cert_title = program.get("certificate_title") or program.get("name", "")
+        cert_subtitle = program.get("certificate_subtitle", "") or ""
+
+    # Dates
+    start_date = _format_date_display(session.get("start_date", ""))
+    end_date = _format_date_display(session.get("end_date", ""))
+
+    # If same date, use single date for display
+    # The template has: "On {{TRAINING_DATE}}-{{END_DATE}}"
+    # If dates are same, we set END_DATE to empty and TRAINING_DATE to the full date
+    # and we'll handle the dash in the replacement
+    same_date = (start_date == end_date)
+
+    # Validity
+    validity_start = end_date
+    validity_end = ""
+    if session.get("cert_show_validity", False):
+        try:
+            months = session.get("cert_validity_months", 24)
+            end_dt_str = session.get("end_date", "")
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                try:
+                    end_dt = datetime.strptime(end_dt_str.split("T")[0], fmt)
+                    validity_end_dt = end_dt + relativedelta(months=months)
+                    validity_end = validity_end_dt.strftime("%d %B %Y")
+                    break
+                except ValueError:
+                    continue
+        except Exception:
+            validity_end = ""
+
+    return {
+        "{{PARTICIPANT_NAME}}": participant.get("full_name", ""),
+        "{{IC_NUMBER}}": participant.get("id_number", ""),
+        "{{COMPANY_NAME}}": company_name,
+        "{{CERTIFICATE_TITLE}}": cert_title,
+        "{{CERTIFICATE_SUBTITLE}}": cert_subtitle,
+        "{{TRAINING_DATE}}": start_date,
+        "{{END_DATE}}": "" if same_date else end_date,
+        "{{VENUE}}": session.get("location", ""),
+        "{{VALIDITY_START}}": validity_start,
+        "{{VALIDITY_END}}": validity_end,
+        "{{CERTIFICATE_NUMBER}}": certificate_number,
+        "_same_date": same_date,  # internal flag
+    }
+
+
+def _docx_to_pdf(docx_path: Path, output_dir: Path) -> Path:
+    """Convert .docx to single-page .pdf using LibreOffice headless.
+    Trims to page 1 if overflow occurs (common with complex templates)."""
+    result = subprocess.run(
+        ["libreoffice", "--headless", "--convert-to", "pdf", "--outdir", str(output_dir), str(docx_path)],
+        capture_output=True, text=True, timeout=60
+    )
+    if result.returncode != 0:
+        logger.error(f"LibreOffice conversion failed: {result.stderr}")
+        raise RuntimeError(f"PDF conversion failed: {result.stderr}")
+    pdf_path = output_dir / (docx_path.stem + ".pdf")
+    if not pdf_path.exists():
+        raise RuntimeError("PDF file was not created by LibreOffice")
+
+    # Trim to single page if overflow occurred
+    from pypdf import PdfReader, PdfWriter
+    reader = PdfReader(str(pdf_path))
+    if len(reader.pages) > 1:
+        writer = PdfWriter()
+        writer.add_page(reader.pages[0])
+        trimmed_path = output_dir / (docx_path.stem + "_trimmed.pdf")
+        with open(trimmed_path, "wb") as f:
+            writer.write(f)
+        pdf_path.unlink()
+        trimmed_path.rename(pdf_path)
+        logger.info(f"Trimmed {len(reader.pages)}-page PDF to single page")
+
+    return pdf_path
 
 # Models
 class Certificate(BaseModel):
@@ -318,3 +564,315 @@ async def preview_certificate(certificate_id: str, current_user: User = Depends(
         certificate['issue_date'] = datetime.fromisoformat(certificate['issue_date'])
     
     return certificate
+
+
+@router.get("/preview-image/{session_id}/{participant_id}")
+async def preview_certificate_image(session_id: str, participant_id: str, current_user: User = Depends(get_current_user)):
+    """Return the generated certificate as an inline PNG image for preview."""
+    if current_user.role not in ["admin", "super_admin", "coordinator", "assistant_admin", "supervisor"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    access = await db.participant_access.find_one(
+        {"participant_id": participant_id, "session_id": session_id}, {"_id": 0}
+    )
+    if not access or not access.get("certificate_url"):
+        raise HTTPException(status_code=404, detail="No certificate found for this participant")
+
+    filename = access["certificate_url"].split("/")[-1]
+    pdf_path = CERTIFICATE_PDF_DIR / filename
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="Certificate PDF file not found")
+
+    # Convert first page to PNG
+    from pdf2image import convert_from_path
+    images = convert_from_path(str(pdf_path), dpi=150, first_page=1, last_page=1)
+    import io
+    buf = io.BytesIO()
+    images[0].save(buf, format="PNG")
+    buf.seek(0)
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buf, media_type="image/png", headers={"Content-Disposition": "inline"})
+
+
+# ==================== CERTIFICATE PDF GENERATION ====================
+
+async def _check_eligibility(session_id: str, participant_id: str) -> dict:
+    """Check if a participant meets certificate eligibility requirements."""
+    attendance = await db.attendance.find_one(
+        {"participant_id": participant_id, "session_id": session_id, "clock_out": {"$ne": None}},
+        {"_id": 0}
+    )
+    post_test = await db.test_results.find_one(
+        {"participant_id": participant_id, "session_id": session_id, "test_type": {"$in": ["post", "post_test"]}},
+        {"_id": 0}
+    )
+    feedback = await db.course_feedback.find_one(
+        {"participant_id": participant_id, "session_id": session_id},
+        {"_id": 0}
+    )
+    return {
+        "eligible": all([attendance, post_test and post_test.get("passed"), feedback]),
+        "clocked_out": bool(attendance),
+        "post_test_passed": bool(post_test and post_test.get("passed")),
+        "feedback_submitted": bool(feedback),
+    }
+
+
+async def _generate_single_certificate_pdf(session: dict, participant: dict, current_user_id: str, font_settings: dict = None) -> dict:
+    """Core logic: generate one certificate PDF from the .docx template."""
+    template_path = TEMPLATE_DIR / "certificate_template.docx"
+    if not template_path.exists():
+        raise HTTPException(status_code=400, detail="Certificate template not uploaded. Go to Settings to upload.")
+
+    if not font_settings:
+        font_settings = await _get_font_settings()
+
+    cert_number = await _generate_cert_number()
+    replacements = await _build_replacements(session, participant, cert_number)
+
+    doc = Document(str(template_path))
+    _replace_placeholders_in_doc(doc, replacements, font_settings)
+
+    # Apply margin and spacing from settings
+    from docx.shared import Emu
+    top_margin_pct = font_settings.get("top_margin", 80)
+    spacing_pct = font_settings.get("paragraph_spacing", 65)
+    original_top = 1231900  # original EMU value from template
+
+    for section in doc.sections:
+        section.top_margin = int(original_top * top_margin_pct / 100)
+
+    for paragraph in doc.paragraphs:
+        pf = paragraph.paragraph_format
+        if pf.space_before and pf.space_before > Emu(50000):
+            pf.space_before = int(pf.space_before * spacing_pct / 100)
+
+    # Save temp docx, convert to PDF
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_docx = Path(tmp_dir) / f"cert_{participant['id']}.docx"
+        doc.save(str(tmp_docx))
+
+        pdf_path = _docx_to_pdf(tmp_docx, Path(tmp_dir))
+
+        # Move PDF to permanent location
+        final_filename = f"cert_{session['id']}_{participant['id']}_{uuid.uuid4().hex[:8]}.pdf"
+        final_path = CERTIFICATE_PDF_DIR / final_filename
+        shutil.move(str(pdf_path), str(final_path))
+
+    certificate_url = f"/api/static/certificates_pdf/{final_filename}"
+
+    # Save certificate record
+    cert_record = {
+        "id": str(uuid.uuid4()),
+        "session_id": session["id"],
+        "participant_id": participant["id"],
+        "certificate_number": cert_number,
+        "participant_name": participant.get("full_name"),
+        "session_name": session.get("name"),
+        "program_id": session.get("program_id"),
+        "file_path": certificate_url,
+        "issue_date": get_malaysia_time().isoformat(),
+        "generated_by": current_user_id,
+        "generation_method": "auto_template",
+    }
+    await db.certificates.insert_one(cert_record)
+    cert_record.pop("_id", None)
+
+    # Update participant_access with certificate URL
+    await db.participant_access.update_one(
+        {"participant_id": participant["id"], "session_id": session["id"]},
+        {"$set": {
+            "certificate_url": certificate_url,
+            "certificate_uploaded_at": get_malaysia_time().isoformat(),
+            "certificate_uploaded_by": current_user_id,
+        }},
+        upsert=True
+    )
+
+    return cert_record
+
+
+@router.post("/generate-pdf/{session_id}/{participant_id}")
+async def generate_certificate_pdf(
+    session_id: str,
+    participant_id: str,
+    force: bool = Query(False, description="Skip eligibility checks"),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a certificate PDF for a single participant from the .docx template."""
+    if current_user.role not in ["admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Only admins and coordinators can generate certificates")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    participant = await db.users.find_one({"id": participant_id}, {"_id": 0})
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    if not force:
+        eligibility = await _check_eligibility(session_id, participant_id)
+        if not eligibility["eligible"]:
+            reasons = []
+            if not eligibility["clocked_out"]:
+                reasons.append("attendance not completed")
+            if not eligibility["post_test_passed"]:
+                reasons.append("post-test not passed")
+            if not eligibility["feedback_submitted"]:
+                reasons.append("feedback not submitted")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Participant not eligible: {', '.join(reasons)}. Use force=true to override."
+            )
+
+    cert = await _generate_single_certificate_pdf(session, participant, current_user.id)
+    return {"message": "Certificate generated successfully", "certificate": cert}
+
+
+@router.post("/generate-bulk-pdf/{session_id}")
+async def generate_bulk_certificate_pdf(
+    session_id: str,
+    force: bool = Query(False, description="Skip eligibility checks"),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate certificate PDFs for all (eligible) participants in a session."""
+    if current_user.role not in ["admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Only admins and coordinators can generate certificates")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    participant_ids = session.get("participant_ids", [])
+    if not participant_ids:
+        raise HTTPException(status_code=400, detail="No participants in this session")
+
+    results = {"generated": [], "skipped": [], "errors": []}
+
+    for pid in participant_ids:
+        participant = await db.users.find_one({"id": pid}, {"_id": 0})
+        if not participant:
+            results["errors"].append({"participant_id": pid, "reason": "Participant not found"})
+            continue
+
+        if not force:
+            eligibility = await _check_eligibility(session_id, pid)
+            if not eligibility["eligible"]:
+                results["skipped"].append({
+                    "participant_id": pid,
+                    "name": participant.get("full_name", "Unknown"),
+                    "reason": eligibility,
+                })
+                continue
+
+        try:
+            cert = await _generate_single_certificate_pdf(session, participant, current_user.id)
+            results["generated"].append({
+                "participant_id": pid,
+                "name": participant.get("full_name"),
+                "certificate_number": cert["certificate_number"],
+            })
+        except Exception as e:
+            logger.error(f"Failed to generate cert for {pid}: {e}")
+            results["errors"].append({
+                "participant_id": pid,
+                "name": participant.get("full_name", "Unknown"),
+                "reason": str(e),
+            })
+
+    return {
+        "message": f"Generated {len(results['generated'])} certificates, skipped {len(results['skipped'])}, errors {len(results['errors'])}",
+        "results": results,
+    }
+
+
+# ==================== FONT SETTINGS & PREVIEW ====================
+
+@router.get("/font-settings")
+async def get_font_settings(current_user: User = Depends(get_current_user)):
+    """Get current certificate font settings."""
+    if current_user.role not in ["admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    settings = await _get_font_settings()
+    return settings
+
+
+@router.put("/font-settings")
+async def save_font_settings(settings: dict, current_user: User = Depends(get_current_user)):
+    """Save certificate font settings."""
+    if current_user.role not in ["admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    settings["id"] = "certificate_font_settings"
+    await db.settings.update_one(
+        {"id": "certificate_font_settings"},
+        {"$set": settings},
+        upsert=True,
+    )
+    return {"message": "Font settings saved"}
+
+
+@router.post("/preview-pdf/{session_id}/{participant_id}")
+async def preview_certificate_pdf(
+    session_id: str,
+    participant_id: str,
+    font_settings: dict = None,
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a certificate preview as PNG using provided font settings (no DB record)."""
+    if current_user.role not in ["admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    participant = await db.users.find_one({"id": participant_id}, {"_id": 0})
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    template_path = TEMPLATE_DIR / "certificate_template.docx"
+    if not template_path.exists():
+        raise HTTPException(status_code=400, detail="Certificate template not uploaded")
+
+    # Use provided settings or load saved ones
+    if not font_settings:
+        font_settings = await _get_font_settings()
+
+    # Build replacements with a preview cert number
+    replacements = await _build_replacements(session, participant, "MDDRC/COA/PREVIEW/00000")
+
+    doc = Document(str(template_path))
+    _replace_placeholders_in_doc(doc, replacements, font_settings)
+
+    # Apply margin and spacing
+    from docx.shared import Emu
+    top_margin_pct = font_settings.get("top_margin", 80)
+    spacing_pct = font_settings.get("paragraph_spacing", 65)
+    original_top = 1231900
+
+    for section in doc.sections:
+        section.top_margin = int(original_top * top_margin_pct / 100)
+
+    for paragraph in doc.paragraphs:
+        pf = paragraph.paragraph_format
+        if pf.space_before and pf.space_before > Emu(50000):
+            pf.space_before = int(pf.space_before * spacing_pct / 100)
+
+    # Save temp docx, convert to PDF, then to PNG
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_docx = Path(tmp_dir) / "preview.docx"
+        doc.save(str(tmp_docx))
+        pdf_path = _docx_to_pdf(tmp_docx, Path(tmp_dir))
+
+        from pdf2image import convert_from_path
+        images = convert_from_path(str(pdf_path), dpi=150, first_page=1, last_page=1)
+
+        import io
+        buf = io.BytesIO()
+        images[0].save(buf, format="PNG")
+        buf.seek(0)
+
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(buf, media_type="image/png", headers={"Content-Disposition": "inline"})

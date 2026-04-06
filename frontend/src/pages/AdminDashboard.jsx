@@ -32,6 +32,7 @@ import { ReportsTab } from "../components/admin/ReportsTab";
 import { PastTrainingTab } from "../components/admin/PastTrainingTab";
 import { UsersTab } from "../components/admin/UsersTab";
 import { CertificatesTab } from "../components/admin/CertificatesTab";
+import { CertificateAdjuster } from "../components/admin/CertificateAdjuster";
 import { QuotationsTab } from "../components/admin/QuotationsTab";
 import RichTextToolbar from "../components/RichTextToolbar";
 import { AdminMarketingOverview } from "../components/marketing/AdminMarketingOverview";
@@ -1744,6 +1745,10 @@ const AdminDashboard = ({ user, onLogout }) => {
               <Target className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Leads</span>
             </TabsTrigger>
+            <TabsTrigger value="cert-generator" data-testid="cert-generator-tab" className="flex-shrink-0 text-xs sm:text-sm bg-gradient-to-r from-indigo-500 to-violet-500 text-white">
+              <Award className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Cert Generator</span>
+            </TabsTrigger>
             <TabsTrigger value="my-payroll" data-testid="my-payroll-tab" className="flex-shrink-0 text-xs sm:text-sm bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
               <DollarSign className="w-4 h-4 sm:mr-2" />
               <span className="hidden sm:inline">Payroll</span>
@@ -1859,6 +1864,13 @@ const AdminDashboard = ({ user, onLogout }) => {
               sessions={sessions}
               programs={programs}
               isActive={activeTab === "certificates"}
+            />
+          </TabsContent>
+
+          {/* Certificate Generator Tab */}
+          <TabsContent value="cert-generator">
+            <CertificateAdjuster
+              sessions={sessions}
             />
           </TabsContent>
 

@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { LogOut, Calendar, Users, FileText, BarChart3, Camera, Upload, Sparkles, Save, Send, Edit, Trash2, Clock, MessageSquare, Download, CheckCircle, Search, Eye, Building2, BookOpen, Plus, DollarSign, Wallet, AlertCircle } from "lucide-react";
+import { LogOut, Calendar, Users, FileText, BarChart3, Camera, Upload, Sparkles, Save, Send, Edit, Trash2, Clock, MessageSquare, Download, CheckCircle, Search, Eye, Building2, BookOpen, Plus, DollarSign, Wallet, AlertCircle, Award } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import MyEarnings from "../components/MyEarnings";
 import MyPayroll from "../components/MyPayroll";
@@ -19,6 +19,7 @@ import { ManagementTab } from "../components/coordinator/ManagementTab";
 import { ReportTab } from "../components/coordinator/ReportTab";
 import { AnalyticsTab } from "../components/coordinator/AnalyticsTab";
 import { PastTrainingTab } from "../components/coordinator/PastTrainingTab";
+import { CertificateAdjuster } from "../components/admin/CertificateAdjuster";
 import { DigitalSignatureManager } from "../components/shared/DigitalSignatureManager";
 
 const CoordinatorDashboard = ({ user, onLogout }) => {
@@ -1187,6 +1188,10 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                 <DollarSign className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">My Payroll</span>
               </TabsTrigger>
+              <TabsTrigger value="cert-generator" data-testid="cert-generator-tab" className="flex-shrink-0 bg-gradient-to-r from-indigo-500 to-violet-500 text-white">
+                <Award className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Cert Generator</span>
+              </TabsTrigger>
             </TabsList>
 
             {/* Tab 1: My Sessions */}
@@ -1419,6 +1424,10 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                 <MyPayroll />
                 <DigitalSignatureManager user={user} />
               </div>
+            </TabsContent>
+
+            <TabsContent value="cert-generator">
+              <CertificateAdjuster sessions={sessions} />
             </TabsContent>
 
           </Tabs>
