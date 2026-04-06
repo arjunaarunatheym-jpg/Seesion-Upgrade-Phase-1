@@ -242,8 +242,9 @@ async def _build_replacements(session: dict, participant: dict, certificate_numb
 def _docx_to_pdf(docx_path: Path, output_dir: Path) -> Path:
     """Convert .docx to single-page .pdf using LibreOffice headless.
     Trims to page 1 if overflow occurs (common with complex templates)."""
+    lo_path = "/usr/bin/libreoffice"
     result = subprocess.run(
-        ["libreoffice", "--headless", "--convert-to", "pdf", "--outdir", str(output_dir), str(docx_path)],
+        [lo_path, "--headless", "--convert-to", "pdf", "--outdir", str(output_dir), str(docx_path)],
         capture_output=True, text=True, timeout=60
     )
     if result.returncode != 0:
