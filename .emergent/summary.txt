@@ -1,24 +1,126 @@
-<analysis>server.pyserver.py/app/backend/routes/fmtRMtotal_amountPUT /admin/invoices/{invoice_id}/edit-paid/app/backend/routes/finance_invoices.pyline_itemssubtotal/app/frontend/src/components/DataManagement.jsxhandleEditPaidInvoice/app/backend/routes/finance_invoices.pyedit_paid_invoicetotal_amountline_items/app/frontend/src/utils/printInvoice.jsline_items/app/frontend/src/components/admin/SessionsTab.jsxendDatestartDateSessionend_dateserver.py/app/backend/routes/.toLocaleString()fmtRM()SessionCosting.jsx
-/app/
-├── backend/
-│   ├── routes/                   # ALL 490+ endpoints now live here!
-│   │   ├── finance_invoices.py   # TARGET: Fix edit-paid invoice logic
-│   │   ├── static_files.py       # Added
-│   │   ├── templates.py          # Added
-│   │   └── ... (35 others)
-│   ├── tests/
-│   │   └── test_critical_flows.py# 23 tests ensuring system integrity
-│   ├── core/                     # DB connection, security helpers
-│   ├── models/                   # Pydantic schemas
-│   └── server.py                 # Now only 530 lines (Imports, middleware, setup)
-└── frontend/
-    └── src/
-        ├── components/
-        │   ├── DataManagement.jsx# TARGET: check invoice edit payload
-        │   ├── SessionCosting.jsx
-        │   └── admin/SessionsTab.jsx # TARGET: Add Session End Date
-        ├── utils/
-        │   └── printInvoice.js   # PDF generator script
-        └── pages/
-            └── MarketingDashboard.jsx # Contains new polling logic
-server.pyprintInvoice.jssessionsinvoices/app/backend/routes/finance_invoices.pyedit_paid_invoice/app/frontend/src/components/DataManagement.jsx/app/frontend/src/utils/printInvoice.js/app/backend/models/session.pyend_date/app/frontend/src/components/admin/SessionsTab.jsxendDatetotal_amountline_itemsPUT /api/admin/invoices/{invoice_id}/edit-paidPOST /api/sessionsserver.pyDataManagement.jsxtotal_amountline_itemsunit_priceamountline_itemsprintInvoice.jspytest /app/backend/tests/test_critical_flows.pyserver.pytest_critical_flows.pyDataManagement.jsxline_itemstotal_amounttotal_amount/app/frontend/src/components/DataManagement.jsx/app/frontend/src/utils/printInvoice.js/app/backend/routes/finance_invoices.pyedit_paid_invoiceline_items[0].unit_pricenew_totalline_items[0].amountnew_total</analysis>
+<analysis>**original_problem_statement**: 
+The user is developing a comprehensive training management platform. The current focus is on automating document generation (Quotations, Invoices, Certificates) and finalizing the financial calculations for custom add-ons (like Vehicle Rentals). 
+
+PRODUCT REQUIREMENTS: Maintain strict financial data integrity, ensure proper role-based UX flows, enforce correct PDF/DOCX generation without relying on browser print dialogs, support digital signature uploads, and implement automated e-certificate generation.
+
+**User's preferred language**: English (INSTRUCT next agent to respond in English only)
+
+**what currently exists?** 
+A mature, modularized full-stack training management platform. The backend is split into 38+ FastAPI routers. Document generation has been successfully migrated from browser-based  blobs to clean downloads using  (PDF) and  (Word). Quotations now support distinct pricing for add-on items (like training vehicles) separate from the core training fee. Digital signatures are supported across all roles.
+
+**Last working item**: 
+    - Last item agent was working: Providing the user with the list of supported placeholders (e.g., , ) so the user can format their custom  certificate template. The system is ready to handle the file upload for the Certificate Auto-generation feature.
+    - Status: BLOCKED (Waiting on user to upload the  template).
+    - Agent Testing Done: NA (Information retrieval only).
+    - Which testing method agent to use?: Both (Once the template is uploaded, test the  endpoint and the certificate generation flow).
+    - User Testing Done: N
+
+**All Pending/In progress Issue list**:
+  None. All identified calculation bugs and print utility refactors were resolved and verified in this session.
+
+**In progress Task List**:
+  Task 1: (P1) Certificate Auto-generation PDF Engine
+     - Where to resume: Await the user's confirmation that they have uploaded the  template via Admin Dashboard → Settings → Certificate Template, or assist them if they have issues uploading it.
+     - What will be achieved with this?: End-to-end e-certificate automation for participants using a custom Word template with string replacement.
+     - Status: BLOCKED (Pending user template upload)
+     - Should Test frontend/backend/both after fix?: Both
+     - Blocked on something: User providing and uploading the  template.
+
+**Upcoming and Future Tasks**
+    Upcoming Tasks:
+    - (P1) Email integration (Resend) and WhatsApp link integration (for invoice/payment/certificate notifications).
+    - (P1) Trainer Contract Workflow (contract generation specifically for freelance staff).
+    
+    Future Tasks:
+    - Post-Training Evaluation System (automated 3/6 month feedback).
+    - Multi-tenancy architecture & SaaS Monetization (Stripe).
+    - Supervisor Portal / Client Self-Service Portal.
+    - Native Mobile App conversion (Capacitor).
+
+**Completed work in this session**
+- Replaced all  patterns with  PDF downloads across FinanceDashboard, PayablesTab, and other components (DONE)
+- Added  to Trainer, Coordinator, Supervisor, SuperAdmin, and AssistantAdmin dashboards (DONE)
+- Fixed Pydantic  model configuration () dropping  and  (DONE)
+- Added unit pricing capabilities (, ) to quotation  (DONE)
+- Fixed Quotation PDF/DOCX calculation bug where add-on items were subtracted from the subtotal instead of added (DONE)
+
+**Earlier issues found/mentioned but not fixed**
+None.
+
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork: None.
+  - Recurrence count: 0
+  - Status: RESOLVED
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+- **Document Export Strategy**: The app uses  (Frontend) for HTML-to-PDF conversion,  for Word generation, and  (Backend) for some server-side PDFs. 
+- **Template Replacement**: Certificates will use a  template filled with placeholders like , managed by the backend  route.
+
+**key DB schema**
+  - : {..., : bool, : float}
+  - : {..., : [{item_id, quantity, unit_price}]}
+  - : {..., , }
+
+**changes in tech stack**
+  - Added , , .
+
+**All files of reference**
+1.  (Core logic for quotations and PDF formatting)
+2.  (Form state, live calculations, HTML table rendering)
+3.  (Certificate generation logic)
+4.  (Template upload endpoint)
+5.  (Unified print utility)
+
+**Areas that need refactoring**: 
+-  is massive (~1700 lines). The HTML-string generators (, ) could be extracted into the  folder to clean up the component.
+
+**key api endpoints**
+- : Admin endpoint to upload the raw  template.
+- : Replaces placeholders in the template and returns the certificate.
+- : Updates quotations with priced line items.
+
+**Critical Info for New Agent**
+- **Quotations Pricing:** The math logic for quotations separates the *training fee* (derived from  or ) from *add-on items* (like vehicle rentals). The  sent to the DB is the sum of both. If further tweaks are needed, ensure you update *both*  (backend PDF generator) and  (frontend PDF/DOCX generator).
+- **Certificate Templates:** The user is currently building a  file using provided placeholders. When they return, they will likely need to test the upload and generation flow.
+
+**documents and test reports created in this job**
+  - 
+  -  (Signature & Print utilities test)
+  -  (Quotation pricing test)
+
+**Last 10 User Messages and any pending HUMAN messages** 
+ - 10. User approved digital signature plan. (Completed)
+ - 9. User asked for vehicle rental add-on pricing in quotations. (Completed)
+ - 8. User asked where to configure the item pricing in the UI. (Completed - Guided via screenshots)
+ - 7. User reported a bug where vehicle rental was subtracted from the total instead of added. (Completed - Fixed calculation logic)
+ - 6. User asked for the list of placeholders for the certificate template. (Completed - List provided)
+ - 5. **[LATEST] PENDING**: User is currently reviewing the certificate placeholders and will likely upload the  template next, or request the next feature integration.
+
+**Project Health Check:**
+Broken: None.
+Mocked: None.
+
+**3rd Party Integrations**
+- None currently active. Resend (Email) is designated as the next major integration.
+
+**Testing status**
+  - Testing agent used after significant changes: YES (Iterations 34 & 35 both passed 100%).
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: None new (Utilized existing backend test suite, 23/23 passing).
+  - Known regressions: None.
+
+**Credentials to test flow:**
+- Admin: arjuna@mddrc.com.my / Dana102229
+- Coordinator: malek@mddrc.com.my / mddrc1
+
+**What agent forgot to execute**
+- Nothing was overlooked. All user requests up to this point have been successfully fulfilled and tested.
+
+**Debugging checklist for current issue**
+    Issue: Certificate Auto-generation (Blocked)
+    Frontend files to check:  (where template upload happens)
+    Backend files to check: , 
+    Action: Wait for the user to upload the template. Once uploaded, test generating a certificate from a finalized session to ensure the  placeholders are successfully replaced and the file is returned correctly.</analysis>
