@@ -706,6 +706,16 @@ async def create_quotation(quotation_data: dict, current_user: User = Depends(ge
     else:
         subtotal = group_price
     
+    # Add priced addon items (vehicle rental, equipment, etc.) to subtotal
+    selected_items = quotation_data.get("selected_items", [])
+    addon_total = 0
+    for si in selected_items:
+        up = float(si.get("unit_price", 0) or 0)
+        qty = int(si.get("quantity", 1) or 1)
+        if up > 0:
+            addon_total += up * qty
+    subtotal += addon_total
+    
     # Calculate discount
     discount_amount = subtotal * (discount_percentage / 100) if discount_percentage > 0 else 0
     after_discount = subtotal - discount_amount
@@ -2612,14 +2622,15 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     # Draw main programme row
     programme_name = sanitize_text_for_pdf(programme_name)
     
-    # Calculate training-only subtotal (without priced items)
-    training_subtotal = quotation.get("subtotal", 0)
+    # Calculate training fee from the raw pricing fields (NOT by subtracting from subtotal)
     priced_items_total = sum(p.get("amount", 0) for p in priced_items)
-    # The stored subtotal might already include priced items, so use it as-is for display
-    # But training-only is subtotal minus priced items
-    training_only = training_subtotal - priced_items_total
-    if training_only < 0:
-        training_only = training_subtotal  # fallback if data inconsistency
+    if pricing_type == 'per_group':
+        training_fee = quotation.get("group_price", 0) or 0
+    else:
+        training_fee = (quotation.get("rate_per_pax", 0) or 0) * (num_pax or 0)
+    
+    # Correct subtotal = training fee + priced addon items
+    correct_subtotal = training_fee + priced_items_total
     
     # Use multi_cell for description to enable text wrapping
     x_start = pdf.get_x()
@@ -2634,7 +2645,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.set_xy(x_start + col_desc, y_start)
     pdf.cell_safe(col_qty, actual_height, qty_display, border=1, align='C')
     pdf.cell_safe(col_rate, actual_height, rate_display, border=1, align='R')
-    pdf.cell_safe(col_amount, actual_height, f"{training_only:,.2f}", border=1, align='R')
+    pdf.cell_safe(col_amount, actual_height, f"{training_fee:,.2f}", border=1, align='R')
     pdf.set_y(y_after_desc)
     
     # Draw priced items as separate line items (e.g. Vehicle Rental)
@@ -2692,7 +2703,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     
     # Subtotal row
     pdf.cell_safe(col_desc + col_qty + col_rate, 7, "Subtotal", border=1, align='R')
-    pdf.cell_safe(col_amount, 7, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R', ln=True)
+    pdf.cell_safe(col_amount, 7, f"{correct_subtotal:,.2f}", border=1, align='R', ln=True)
     
     # Discount row if applicable
     if quotation.get("discount_amount", 0) > 0:
@@ -2705,15 +2716,17 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     
     # SST row if applicable
     sst_pct = quotation.get("sst_percentage", 0) or quotation.get("sst_percent", 0)
+    correct_sst = correct_subtotal * sst_pct / 100 if sst_pct > 0 else 0
+    correct_total = correct_subtotal + correct_sst - (quotation.get("discount_amount", 0) or 0)
     if sst_pct > 0:
         pdf.cell_safe(col_desc + col_qty + col_rate, 7, f"SST ({sst_pct}%)", border=1, align='R')
-        pdf.cell_safe(col_amount, 7, f"{quotation.get('sst_amount', 0):,.2f}", border=1, align='R', ln=True)
+        pdf.cell_safe(col_amount, 7, f"{correct_sst:,.2f}", border=1, align='R', ln=True)
     
     # Total row
     pdf.set_font_safe('B', 10)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell_safe(col_desc + col_qty + col_rate, 9, "TOTAL (RM)", border=1, align='R', fill=True)
-    pdf.cell_safe(col_amount, 9, f"{quotation.get('total_amount', 0):,.2f}", border=1, align='R', fill=True, ln=True)
+    pdf.cell_safe(col_amount, 9, f"{correct_total:,.2f}", border=1, align='R', fill=True, ln=True)
     
     # Validity note
     pdf.ln(5)

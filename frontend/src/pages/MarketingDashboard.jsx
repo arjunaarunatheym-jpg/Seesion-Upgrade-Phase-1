@@ -576,9 +576,11 @@ const MarketingDashboard = ({ user, onLogout }) => {
         <td style="text-align: center;">${quotation.pricing_type === 'per_group' ? '1 group' : quotation.num_participants}</td>
         <td style="text-align: right;">${quotation.pricing_type === 'per_group' ? (quotation.group_price || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 }) : quotation.rate_per_pax?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
         <td style="text-align: right;">${(() => {
-          const pricedTotal = (quotation.selected_items || []).reduce((s, si) => s + ((si.unit_price || 0) * (si.quantity || 1)), 0);
-          const trainingOnly = (quotation.subtotal || 0) - pricedTotal;
-          return (trainingOnly > 0 ? trainingOnly : quotation.subtotal || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 });
+          // Show the raw training fee, NOT subtotal minus addons
+          const fee = quotation.pricing_type === 'per_group' 
+            ? (quotation.group_price || 0) 
+            : (quotation.rate_per_pax || 0) * (quotation.num_participants || 0);
+          return fee.toLocaleString('en-MY', { minimumFractionDigits: 2 });
         })()}</td>
       </tr>
       ${(quotation.selected_items || []).filter(si => si.unit_price > 0).map(si => {
@@ -591,20 +593,35 @@ const MarketingDashboard = ({ user, onLogout }) => {
         </tr>`;
       }).join('')}
       ${quotation.remarks ? `<tr><td colspan="4" style="font-size: 12px; color: #666;"><em>Remarks: ${quotation.remarks}</em></td></tr>` : ''}
+      ${(() => {
+        const trainingFee = quotation.pricing_type === 'per_group'
+          ? (quotation.group_price || 0)
+          : (quotation.rate_per_pax || 0) * (quotation.num_participants || 0);
+        const addonTotal = (quotation.selected_items || []).filter(si => si.unit_price > 0).reduce((s, si) => s + ((si.unit_price || 0) * (si.quantity || 1)), 0);
+        const sub = trainingFee + addonTotal;
+        const sst = sub * (quotation.sst_percent || 0) / 100;
+        const discount = quotation.discount_amount || 0;
+        const total = sub + sst - discount;
+        return `
       <tr class="amount-row">
         <td colspan="3" style="text-align: right;">Subtotal</td>
-        <td style="text-align: right;">RM ${quotation.subtotal?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+        <td style="text-align: right;">RM ${sub.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
       </tr>
       ${quotation.sst_percent > 0 ? `
       <tr class="amount-row">
         <td colspan="3" style="text-align: right;">SST (${quotation.sst_percent}%)</td>
-        <td style="text-align: right;">RM ${quotation.sst_amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-      </tr>
-      ` : ''}
+        <td style="text-align: right;">RM ${sst.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+      </tr>` : ''}
+      ${discount > 0 ? `
+      <tr class="amount-row">
+        <td colspan="3" style="text-align: right;">Discount</td>
+        <td style="text-align: right; color: #e65100;">-RM ${discount.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+      </tr>` : ''}
       <tr class="amount-row total-row">
         <td colspan="3" style="text-align: right;">TOTAL</td>
-        <td style="text-align: right;">RM ${quotation.total_amount?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-      </tr>
+        <td style="text-align: right;">RM ${total.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+      </tr>`;
+      })()}
     </tbody>
   </table>
   
@@ -658,17 +675,28 @@ const MarketingDashboard = ({ user, onLogout }) => {
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%">
           <tr style="background:#1e40af;color:white"><th>Description</th><th>Qty</th><th>Rate (RM)</th><th>Amount (RM)</th></tr>
           <tr><td>${quotation.programme_name || ''}</td><td style="text-align:center">${quotation.pricing_type === 'per_group' ? '1 group' : quotation.num_participants}</td><td style="text-align:right">${quotation.pricing_type === 'per_group' ? fmtCurrency(quotation.group_price) : fmtCurrency(quotation.rate_per_pax)}</td><td style="text-align:right">${(() => {
-            const pt = (quotation.selected_items || []).reduce((s, si) => s + ((si.unit_price||0)*(si.quantity||1)), 0);
-            const to = (quotation.subtotal||0) - pt;
-            return fmtCurrency(to > 0 ? to : quotation.subtotal);
+            const fee = quotation.pricing_type === 'per_group'
+              ? (quotation.group_price || 0)
+              : (quotation.rate_per_pax || 0) * (quotation.num_participants || 0);
+            return fmtCurrency(fee);
           })()}</td></tr>
           ${(quotation.selected_items || []).filter(si => si.unit_price > 0).map(si => {
             const item = descriptionItems.find(d => d.id === si.item_id);
             return `<tr><td>${item?.name || 'Add-on'}</td><td style="text-align:center">${si.quantity||1}</td><td style="text-align:right">${fmtCurrency(si.unit_price)}</td><td style="text-align:right">${fmtCurrency((si.unit_price||0)*(si.quantity||1))}</td></tr>`;
           }).join('')}
-          <tr><td colspan="3" style="text-align:right"><strong>Subtotal</strong></td><td style="text-align:right">RM ${fmtCurrency(quotation.subtotal)}</td></tr>
-          ${quotation.sst_percent > 0 ? `<tr><td colspan="3" style="text-align:right"><strong>SST (${quotation.sst_percent}%)</strong></td><td style="text-align:right">RM ${fmtCurrency(quotation.sst_amount)}</td></tr>` : ''}
-          <tr style="background:#f0f0f0"><td colspan="3" style="text-align:right"><strong>TOTAL</strong></td><td style="text-align:right"><strong>RM ${fmtCurrency(quotation.total_amount)}</strong></td></tr>
+          ${(() => {
+            const fee = quotation.pricing_type === 'per_group'
+              ? (quotation.group_price || 0)
+              : (quotation.rate_per_pax || 0) * (quotation.num_participants || 0);
+            const addon = (quotation.selected_items || []).filter(si => si.unit_price > 0).reduce((s, si) => s + ((si.unit_price||0)*(si.quantity||1)), 0);
+            const sub = fee + addon;
+            const sst = sub * (quotation.sst_percent || 0) / 100;
+            const total = sub + sst - (quotation.discount_amount || 0);
+            return `
+          <tr><td colspan="3" style="text-align:right"><strong>Subtotal</strong></td><td style="text-align:right">RM ${fmtCurrency(sub)}</td></tr>
+          ${quotation.sst_percent > 0 ? `<tr><td colspan="3" style="text-align:right"><strong>SST (${quotation.sst_percent}%)</strong></td><td style="text-align:right">RM ${fmtCurrency(sst)}</td></tr>` : ''}
+          <tr style="background:#f0f0f0"><td colspan="3" style="text-align:right"><strong>TOTAL</strong></td><td style="text-align:right"><strong>RM ${fmtCurrency(total)}</strong></td></tr>`;
+          })()}
         </table>
         <br>
         ${quotation.terms_conditions ? `<p><strong>Terms & Conditions:</strong></p><ol>${(quotation.terms_conditions || '').split('\\n').filter(t => t.trim()).map(t => '<li>' + t.replace(/^\\d+\\.\\s*/, '') + '</li>').join('')}</ol>` : ''}
