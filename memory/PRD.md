@@ -7,8 +7,8 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - **Frontend**: React + Shadcn/UI + Tailwind
 - **Backend**: FastAPI (39 modular route files under /app/backend/routes/)
 - **Database**: MongoDB
-- **PDF**: Client-side html2pdf.js + Backend FPDF for quotation PDFs
-- **DOCX**: html-docx-js-typescript for Word exports
+- **PDF**: Client-side html2pdf.js + Backend FPDF + LibreOffice headless (.docx→PDF)
+- **DOCX**: html-docx-js-typescript for Word exports, python-docx for certificate template processing
 
 ## What's Been Implemented (Full List)
 - Full backend modularization (server.py monolith -> 39 route files)
@@ -25,41 +25,50 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - PDF Download Refactor (all window.print → html2pdf.js)
 - Digital Signature Manager (all 8 role dashboards)
 - Vehicle Rental / Add-on Item Pricing in Quotations
+- **Certificate Auto-generation Engine** (2026-04-06)
+- **Certificate Adjuster Tool** (2026-04-06)
 
 ## Completed This Session (2026-04-06)
 
-### Vehicle Rental Pricing Bug Fix (P0) - DONE
-**Problem**: When adding priced items (vehicle rental) to quotation, the PDF showed the training fee REDUCED by the vehicle amount instead of ADDING it on top.
-- Example: Training RM 6,000 + Vehicles 5×RM 150 = RM 750 → System showed training as RM 5,250 and total RM 6,000 (wrong). Should show training RM 6,000 + vehicles RM 750 = total RM 6,750.
+### Certificate Auto-generation Engine (P0) - DONE
+- User uploads custom `.docx` certificate template with `{{PLACEHOLDER}}` markers
+- System replaces 11 placeholders (name, IC, company, title, dates, venue, cert number, etc.)
+- Intelligent font size auto-fitting: configurable per-field font size, max lines, auto-shrink toggle
+- LibreOffice headless converts .docx → PDF, trims to single page
+- Certificate number format: `MDDRC/COA/YYYY/MM/XXXXX`
+- Eligibility checks: attendance, post-test, feedback (with force override)
+- Bulk generation for all eligible participants in a session
 
-**Root causes fixed**:
-1. **Backend create quotation** (`marketing.py` line ~707): `subtotal = group_price` didn't include addon items. Fixed to `subtotal = group_price + addon_total`.
-2. **Backend PDF generation** (`marketing.py` line ~2615): Training row amount was `subtotal - priced_items` (subtracting). Fixed to use raw `group_price` or `rate_per_pax × participants` directly.
-3. **Frontend PDF/DOCX generators** (`MarketingDashboard.jsx`): Same subtraction logic. Fixed to compute training fee from raw fields and add vehicle on top.
+### Certificate Adjuster Tool (P0) - DONE
+- Live preview panel for Admin & Coordinator dashboards
+- Per-field controls: font size slider, max lines slider, auto-fit toggle
+- Global controls: top margin %, paragraph spacing %
+- Session & participant selection with live certificate preview
+- Save settings as defaults for future certificates
+- Generate single or bulk certificates with one click
+- Force override for eligibility-bypass generation
 
-**Verified**: PDF now correctly shows:
-- Bus Defensive Training: RM 6,000.00
-- Training Vehicles (5 units): RM 750.00
-- Subtotal: RM 6,750.00 ✓
+### Key Endpoints Added
+- `GET /api/certificates/font-settings` - Load saved font settings
+- `PUT /api/certificates/font-settings` - Save font settings
+- `POST /api/certificates/preview-pdf/{session_id}/{participant_id}` - Generate PNG preview
+- `POST /api/certificates/generate-pdf/{session_id}/{participant_id}` - Generate real cert PDF
+- `POST /api/certificates/generate-bulk-pdf/{session_id}` - Bulk generate for session
 
 ## Prioritized Backlog
-### P0
-- Certificate auto-generation from PDF template (blocked on user's template upload)
-
 ### P1
 - Email integration (Resend) — invoice/payment/cert notifications
-- Trainer Contract Workflow (freelance staff)
-- Post-Training Evaluation System (3/6 month feedback)
+- WhatsApp link integration — document sharing
+- Trainer Contract Workflow — freelance staff contracts
 
 ### P2
-- SST Summary report, Client self-service portal
+- Post-Training Evaluation System (automated 3/6 month feedback)
+- Multi-tenancy architecture & SaaS Monetization (Stripe)
 
-### Future
-- Multi-tenancy, SaaS Monetization (Stripe), Native Mobile App (Capacitor)
+### P3
+- Supervisor Portal / Client Self-Service Portal
+- Native Mobile App conversion (Capacitor)
 
-## Key Technical Notes
-- `description_items`: `{id, name, category, has_quantity, has_pricing, default_unit_price}`
-- `selected_items` in quotations: `[{item_id, quantity, unit_price}]`
-- Backend recalculates subtotal on create: `training_fee + sum(addon_items)`
-- PDF generation uses raw pricing fields (`group_price`, `rate_per_pax × num_participants`) for the training row, never subtracts addons from subtotal
-- `addon_line_items` on sessions: `[{description, quantity, unit_price, amount}]` — flows to invoice line_items
+## Refactoring Notes
+- `MarketingDashboard.jsx` (~1700 lines) — extract HTML generators to `/utils`
+- Certificate PDF cleanup: old test certs generated during development should be purged

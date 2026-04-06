@@ -1,11 +1,9 @@
 # Test Credentials
 
-## Admin Account
+## Admin
 - Email: arjuna@mddrc.com.my
 - Password: Dana102229
-- Role: admin
 
-## Coordinator Account
+## Coordinator
 - Email: malek@mddrc.com.my
 - Password: mddrc1
-- Role: coordinator
