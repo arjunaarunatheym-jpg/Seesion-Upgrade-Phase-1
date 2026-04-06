@@ -2840,6 +2840,11 @@ const AdminDashboard = ({ user, onLogout }) => {
                                 <span className="text-green-600">✓</span>
                                 {item?.name || 'Unknown'}
                                 {item?.has_quantity && s.quantity > 1 && <span className="text-gray-500">x {s.quantity}</span>}
+                                {s.unit_price > 0 && (
+                                  <span className="text-blue-700 font-medium ml-1">
+                                    RM {(s.unit_price * (s.quantity || 1)).toLocaleString('en-MY', {minimumFractionDigits: 2})}
+                                  </span>
+                                )}
                               </li>
                             );
                           })}

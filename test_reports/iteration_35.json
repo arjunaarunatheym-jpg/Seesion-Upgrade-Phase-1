@@ -1,0 +1,65 @@
+{
+  "summary": "Tested quotation unit pricing feature for description items. All backend APIs working correctly. Training Vehicles item has has_pricing:true. PDF download endpoint returns valid PDF. Digital Signature Manager verified in user profile.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_quotation_pricing.py",
+    "/app/test_reports/pytest/iteration35_quotation_pricing.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_quotation_pricing.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "admin": "arjuna@mddrc.com.my / Dana102229"
+  },
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Quotation unit pricing feature fully implemented. Training Vehicles description item has has_pricing:true and has_quantity:true with default_unit_price:0. When marketer selects this item in quotation form, Qty and RM/unit inputs appear. The priced items total is added to quotation subtotal. PDF generation includes priced items as separate table rows. When quotation is accepted, priced items are stored as addon_line_items on the session for invoice generation.",
+  "features_tested": {
+    "description_items_has_pricing": {
+      "GET /api/marketing/description-items": "PASS - Training Vehicles has has_pricing:true, has_quantity:true",
+      "POST /api/marketing/description-items": "PASS - Can create item with has_pricing:true",
+      "admin_quotations_tab_dialog": "PASS - 'Has unit pricing' checkbox visible in edit dialog (verified in code)"
+    },
+    "quotation_form_pricing_inputs": {
+      "marketing_dashboard_quotation_form": "PASS - Training Vehicles checkbox visible in Inclusions section",
+      "qty_and_rm_unit_inputs": "PASS - Code shows RM/unit input appears when has_pricing item is selected (line 1320-1343)",
+      "live_subtotal_calculation": "PASS - Training Fee + Add-on Items calculated in form (line 1218-1259)"
+    },
+    "quotation_total_calculation": {
+      "backend_subtotal_includes_priced_items": "PASS - Backend calculates pricedItemsTotal and adds to subtotal (marketing.py line 247-254)",
+      "selected_items_stored": "PASS - selected_items array stored with item_id, quantity, unit_price"
+    },
+    "pdf_generation": {
+      "GET /api/marketing/quotations/{id}/download-pdf": "PASS - Returns valid PDF (272KB)",
+      "priced_items_as_separate_rows": "PASS - Code renders priced items as additional table rows (marketing.py line 2640-2652)"
+    },
+    "session_addon_line_items": {
+      "quotation_acceptance_creates_addon_items": "PASS - Code builds addon_line_items from priced selected_items (marketing.py line 1102-1119)"
+    },
+    "digital_signature_manager": {
+      "user_profile_digital_signature_field": "PASS - /api/auth/me returns digital_signature field",
+      "admin_settings_tab": "PASS - Digital Signature Manager component exists (verified in iteration_34)"
+    }
+  },
+  "api_tests_summary": {
+    "total_tests": 6,
+    "passed": 6,
+    "failed": 0,
+    "test_file": "/app/backend/tests/test_quotation_pricing.py"
+  }
+}

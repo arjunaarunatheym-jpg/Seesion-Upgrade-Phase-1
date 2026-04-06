@@ -44,7 +44,9 @@ const QuotationsTab = ({
   const [itemForm, setItemForm] = useState({
     name: "",
     category: "inclusion",
-    has_quantity: false
+    has_quantity: false,
+    has_pricing: false,
+    default_unit_price: 0
   });
 
   // Get available years from quotations
@@ -167,7 +169,9 @@ const QuotationsTab = ({
     setItemForm({
       name: "",
       category: category,
-      has_quantity: false
+      has_quantity: false,
+      has_pricing: false,
+      default_unit_price: 0
     });
     setItemDialogOpen(true);
   };
@@ -177,7 +181,9 @@ const QuotationsTab = ({
     setItemForm({
       name: item.name,
       category: item.category || "inclusion",
-      has_quantity: item.has_quantity || false
+      has_quantity: item.has_quantity || false,
+      has_pricing: item.has_pricing || false,
+      default_unit_price: item.default_unit_price || 0
     });
     setItemDialogOpen(true);
   };
@@ -463,10 +469,15 @@ const QuotationsTab = ({
                 <div className="space-y-2">
                   {inclusions.map(item => (
                     <div key={item.id} className="flex items-center justify-between p-2 bg-white rounded border">
-                      <div>
+                      <div className="flex flex-wrap items-center gap-1">
                         <span className="font-medium text-sm">{item.name}</span>
                         {item.has_quantity && (
-                          <Badge variant="secondary" className="ml-2 text-xs">Qty</Badge>
+                          <Badge variant="secondary" className="text-xs">Qty</Badge>
+                        )}
+                        {item.has_pricing && (
+                          <Badge className="text-xs bg-blue-100 text-blue-800 hover:bg-blue-100">
+                            RM {item.default_unit_price?.toFixed(2) || '0.00'}/unit
+                          </Badge>
                         )}
                       </div>
                       <div className="flex gap-1">
@@ -515,10 +526,15 @@ const QuotationsTab = ({
                 <div className="space-y-2">
                   {exclusions.map(item => (
                     <div key={item.id} className="flex items-center justify-between p-2 bg-white rounded border">
-                      <div>
+                      <div className="flex flex-wrap items-center gap-1">
                         <span className="font-medium text-sm">{item.name}</span>
                         {item.has_quantity && (
-                          <Badge variant="secondary" className="ml-2 text-xs">Qty</Badge>
+                          <Badge variant="secondary" className="text-xs">Qty</Badge>
+                        )}
+                        {item.has_pricing && (
+                          <Badge className="text-xs bg-blue-100 text-blue-800 hover:bg-blue-100">
+                            RM {item.default_unit_price?.toFixed(2) || '0.00'}/unit
+                          </Badge>
                         )}
                       </div>
                       <div className="flex gap-1">
@@ -591,6 +607,33 @@ const QuotationsTab = ({
                 Allow quantity input (marketer can specify how many)
               </Label>
             </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="has-pricing"
+                checked={itemForm.has_pricing}
+                onCheckedChange={(checked) => setItemForm({...itemForm, has_pricing: checked, has_quantity: checked ? true : itemForm.has_quantity})}
+              />
+              <Label htmlFor="has-pricing" className="text-sm">
+                Has unit pricing (e.g. vehicle rental, equipment hire - adds to quotation total)
+              </Label>
+            </div>
+            {itemForm.has_pricing && (
+              <div>
+                <Label htmlFor="default-price" className="text-sm">Default Unit Price (RM)</Label>
+                <Input
+                  id="default-price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={itemForm.default_unit_price}
+                  onFocus={e => e.target.select()}
+                  onChange={(e) => setItemForm({...itemForm, default_unit_price: parseFloat(e.target.value) || 0})}
+                  placeholder="0.00"
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">Marketers can override this price per quotation</p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setItemDialogOpen(false)}>Cancel</Button>

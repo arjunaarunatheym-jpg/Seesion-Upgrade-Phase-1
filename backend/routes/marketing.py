@@ -1098,6 +1098,26 @@ async def record_client_response(quotation_id: str, response_data: dict, current
         end_date = response_data.get("end_date") or training_date
         venue = response_data.get("venue") or quotation.get("venue") or ""
         
+        # Build addon line items from priced quotation items (e.g. vehicle rental)
+        addon_line_items = []
+        q_selected = quotation.get("selected_items") or []
+        if q_selected:
+            q_item_ids = [s.get("item_id") for s in q_selected if s.get("item_id")]
+            if q_item_ids:
+                desc_items = await db.description_items.find({"id": {"$in": q_item_ids}}, {"_id": 0}).to_list(100)
+                desc_map = {d["id"]: d for d in desc_items}
+                for sel in q_selected:
+                    d_item = desc_map.get(sel.get("item_id"))
+                    up = sel.get("unit_price", 0)
+                    if d_item and (d_item.get("has_pricing") or up > 0) and up > 0:
+                        qty = sel.get("quantity", 1)
+                        addon_line_items.append({
+                            "description": d_item.get("name", "Add-on Item"),
+                            "quantity": qty,
+                            "unit_price": up,
+                            "amount": up * qty
+                        })
+        
         # Create draft session
         session_id = str(uuid.uuid4())
         session_data = {
@@ -1116,6 +1136,7 @@ async def record_client_response(quotation_id: str, response_data: dict, current
             "trainer_assignments": [],
             "quotation_id": quotation_id,
             "marketing_user_id": quotation.get("created_by"),
+            "addon_line_items": addon_line_items,
             "created_at": now.isoformat()
         }
         
@@ -1330,6 +1351,8 @@ async def create_description_item(item_data: dict, current_user: User = Depends(
         "description": item_data.get("description", ""),
         "category": item_data.get("category", "inclusion"),  # "inclusion" or "exclusion"
         "has_quantity": item_data.get("has_quantity", False),  # Whether to show quantity input
+        "has_pricing": item_data.get("has_pricing", False),  # Whether to show unit price input (e.g. vehicle rental)
+        "default_unit_price": item_data.get("default_unit_price", 0),  # Default price per unit
         "is_active": True,
         "sort_order": item_data.get("sort_order", 0),
         "created_by": current_user.id,
@@ -2299,6 +2322,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     # Get selected items with their details (new system)
     inclusion_items = []
     exclusion_items = []
+    priced_items = []  # Items with pricing (vehicle rental, equipment, etc.)
     selected_items = quotation.get("selected_items") or []
     if selected_items:
         item_ids = [s.get("item_id") for s in selected_items if s.get("item_id")]
@@ -2313,10 +2337,21 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
                 item = items_map.get(sel.get("item_id"))
                 if item:
                     qty = sel.get("quantity", 1)
-                    item_data = {"name": item.get("name", ""), "quantity": qty, "has_quantity": item.get("has_quantity", False)}
+                    unit_price = sel.get("unit_price", 0)
+                    has_pricing = item.get("has_pricing", False) or unit_price > 0
+                    item_data = {
+                        "name": item.get("name", ""),
+                        "quantity": qty,
+                        "has_quantity": item.get("has_quantity", False),
+                        "has_pricing": has_pricing,
+                        "unit_price": unit_price,
+                        "amount": unit_price * qty if has_pricing else 0
+                    }
                     category = item.get("category", "")
                     if category in ["inclusion", "inclusions"]:
                         inclusion_items.append(item_data)
+                        if has_pricing and unit_price > 0:
+                            priced_items.append(item_data)
                     elif category in ["exclusion", "exclusions"]:
                         exclusion_items.append(item_data)
     
@@ -2577,6 +2612,15 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     # Draw main programme row
     programme_name = sanitize_text_for_pdf(programme_name)
     
+    # Calculate training-only subtotal (without priced items)
+    training_subtotal = quotation.get("subtotal", 0)
+    priced_items_total = sum(p.get("amount", 0) for p in priced_items)
+    # The stored subtotal might already include priced items, so use it as-is for display
+    # But training-only is subtotal minus priced items
+    training_only = training_subtotal - priced_items_total
+    if training_only < 0:
+        training_only = training_subtotal  # fallback if data inconsistency
+    
     # Use multi_cell for description to enable text wrapping
     x_start = pdf.get_x()
     y_start = pdf.get_y()
@@ -2590,16 +2634,31 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.set_xy(x_start + col_desc, y_start)
     pdf.cell_safe(col_qty, actual_height, qty_display, border=1, align='C')
     pdf.cell_safe(col_rate, actual_height, rate_display, border=1, align='R')
-    pdf.cell_safe(col_amount, actual_height, f"{quotation.get('subtotal', 0):,.2f}", border=1, align='R')
+    pdf.cell_safe(col_amount, actual_height, f"{training_only:,.2f}", border=1, align='R')
     pdf.set_y(y_after_desc)
     
-    # Inclusions section - new format with quantities
-    if inclusion_items:
+    # Draw priced items as separate line items (e.g. Vehicle Rental)
+    for p_item in priced_items:
+        x_start = pdf.get_x()
+        y_start = pdf.get_y()
+        item_name = sanitize_text_for_pdf(p_item["name"])
+        pdf.multi_cell(col_desc, 5, item_name, border=1)
+        y_after = pdf.get_y()
+        row_h = y_after - y_start
+        pdf.set_xy(x_start + col_desc, y_start)
+        pdf.cell_safe(col_qty, row_h, str(p_item.get("quantity", 1)), border=1, align='C')
+        pdf.cell_safe(col_rate, row_h, f"{p_item.get('unit_price', 0):,.2f}", border=1, align='R')
+        pdf.cell_safe(col_amount, row_h, f"{p_item.get('amount', 0):,.2f}", border=1, align='R')
+        pdf.set_y(y_after)
+    
+    # Inclusions section - new format with quantities (non-priced items only)
+    non_priced_inclusions = [i for i in inclusion_items if not (i.get("has_pricing") and i.get("unit_price", 0) > 0)]
+    if non_priced_inclusions:
         pdf.set_font_safe('B', 9)
         pdf.set_fill_color(232, 245, 233)  # Light green
         pdf.cell_safe(col_desc + col_qty + col_rate + col_amount, 6, "INCLUSIONS", border='LRB', fill=True, align='L', ln=True)
         pdf.set_font_safe('', 8)
-        for item in inclusion_items:
+        for item in non_priced_inclusions:
             item_text = item["name"]
             if item.get("has_quantity") and item.get("quantity", 1) > 1:
                 item_text = f"{item['name']} x {item['quantity']}"

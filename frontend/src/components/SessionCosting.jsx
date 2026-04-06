@@ -330,12 +330,28 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
       const taxRate = parseFloat(invoiceData.tax_rate) || 0;
       const taxAmount = invoiceAmount * taxRate / 100;
       
+      // Build line items - include addon items (vehicle rental etc.) from session
+      const addonItems = session.addon_line_items || [];
+      const addonTotal = addonItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+      const trainingFeeAmount = invoiceAmount - addonTotal;
+      
+      let lineItems;
+      if (addonItems.length > 0 && trainingFeeAmount > 0) {
+        // Split into training fee + addon items
+        lineItems = invoiceData.pricing_type === 'lumpsum'
+          ? [{ description: 'Training Course Fee', quantity: 1, unit_price: trainingFeeAmount, amount: trainingFeeAmount }]
+          : [{ description: 'Training Fee per Participant', quantity: costing?.pax || 0, unit_price: parseFloat(invoiceData.per_pax_rate) || 0, amount: trainingFeeAmount }];
+        lineItems = [...lineItems, ...addonItems];
+      } else {
+        lineItems = invoiceData.pricing_type === 'lumpsum' 
+          ? [{ description: 'Training Course Fee', quantity: 1, unit_price: invoiceAmount, amount: invoiceAmount }]
+          : [{ description: 'Training Fee per Participant', quantity: costing?.pax || 0, unit_price: parseFloat(invoiceData.per_pax_rate) || 0, amount: invoiceAmount }];
+      }
+      
       // Save primary invoice (creates or updates)
       const invoicePayload = {
         pricing_type: invoiceData.pricing_type,
-        line_items: invoiceData.pricing_type === 'lumpsum' 
-          ? [{ description: 'Training Course Fee', quantity: 1, unit_price: invoiceAmount, amount: invoiceAmount }]
-          : [{ description: 'Training Fee per Participant', quantity: costing?.pax || 0, unit_price: parseFloat(invoiceData.per_pax_rate) || 0, amount: invoiceAmount }],
+        line_items: lineItems,
         subtotal: invoiceAmount,
         tax_rate: taxRate,
         tax_amount: taxAmount,
@@ -582,6 +598,26 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
                   placeholder="e.g. 6"
                 />
               </div>
+              
+              {/* Addon line items from quotation (vehicle rental, etc.) */}
+              {session.addon_line_items && session.addon_line_items.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <Label className="text-sm font-semibold text-blue-800 mb-2 block">Add-on Items (from Quotation)</Label>
+                  <div className="space-y-1">
+                    {session.addon_line_items.map((item, idx) => (
+                      <div key={idx} className="flex justify-between text-sm">
+                        <span>{item.description} x {item.quantity}</span>
+                        <span className="font-medium">RM {fmtRM(item.amount)}</span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between text-sm font-bold border-t border-blue-300 pt-1 mt-1">
+                      <span>Add-on Total</span>
+                      <span>RM {fmtRM(session.addon_line_items.reduce((s, i) => s + (i.amount || 0), 0))}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-1">These items will be added as separate line items on the invoice</p>
+                </div>
+              )}
               
               {/* Additional Invoices Section */}
               {additionalInvoices.length > 0 && (

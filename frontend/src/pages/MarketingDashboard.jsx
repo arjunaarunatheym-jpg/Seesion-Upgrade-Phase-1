@@ -67,7 +67,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
     sst_percent: 0,
     validity_days: 30,
     description_items: [],
-    selected_items: [], // New: [{item_id: string, quantity: number}]
+    selected_items: [], // [{item_id: string, quantity: number, unit_price: number}]
     custom_description: '',
     remarks: '',
     terms_conditions: ''
@@ -240,9 +240,18 @@ const MarketingDashboard = ({ user, onLogout }) => {
       }
       
       // Calculate financial values before sending
-      const subtotal = quotationForm.pricing_type === 'per_group' 
+      const trainingSubtotal = quotationForm.pricing_type === 'per_group' 
         ? Number(quotationForm.group_price) || 0
         : (Number(quotationForm.num_participants) || 0) * (Number(quotationForm.rate_per_pax) || 0);
+      // Add priced items (vehicle rental, etc.)
+      const pricedItemsTotal = (quotationForm.selected_items || []).reduce((sum, si) => {
+        const item = descriptionItems.find(d => d.id === si.item_id);
+        if (item?.has_pricing && si.unit_price > 0) {
+          return sum + (si.unit_price * (si.quantity || 1));
+        }
+        return sum;
+      }, 0);
+      const subtotal = trainingSubtotal + pricedItemsTotal;
       const sst_amount = subtotal * (Number(quotationForm.sst_percent) || 0) / 100;
       const total_amount = subtotal + sst_amount;
       
@@ -564,10 +573,23 @@ const MarketingDashboard = ({ user, onLogout }) => {
     <tbody>
       <tr>
         <td>${quotation.programme_name || ''}</td>
-        <td style="text-align: center;">${quotation.num_participants}</td>
-        <td style="text-align: right;">${quotation.rate_per_pax?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-        <td style="text-align: right;">${quotation.subtotal?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+        <td style="text-align: center;">${quotation.pricing_type === 'per_group' ? '1 group' : quotation.num_participants}</td>
+        <td style="text-align: right;">${quotation.pricing_type === 'per_group' ? (quotation.group_price || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 }) : quotation.rate_per_pax?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+        <td style="text-align: right;">${(() => {
+          const pricedTotal = (quotation.selected_items || []).reduce((s, si) => s + ((si.unit_price || 0) * (si.quantity || 1)), 0);
+          const trainingOnly = (quotation.subtotal || 0) - pricedTotal;
+          return (trainingOnly > 0 ? trainingOnly : quotation.subtotal || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 });
+        })()}</td>
       </tr>
+      ${(quotation.selected_items || []).filter(si => si.unit_price > 0).map(si => {
+        const item = descriptionItems.find(d => d.id === si.item_id);
+        return `<tr>
+          <td>${item?.name || 'Add-on Item'}</td>
+          <td style="text-align: center;">${si.quantity || 1}</td>
+          <td style="text-align: right;">${(si.unit_price || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+          <td style="text-align: right;">${((si.unit_price || 0) * (si.quantity || 1)).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+        </tr>`;
+      }).join('')}
       ${quotation.remarks ? `<tr><td colspan="4" style="font-size: 12px; color: #666;"><em>Remarks: ${quotation.remarks}</em></td></tr>` : ''}
       <tr class="amount-row">
         <td colspan="3" style="text-align: right;">Subtotal</td>
@@ -635,7 +657,15 @@ const MarketingDashboard = ({ user, onLogout }) => {
         <br>
         <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%">
           <tr style="background:#1e40af;color:white"><th>Description</th><th>Qty</th><th>Rate (RM)</th><th>Amount (RM)</th></tr>
-          <tr><td>${quotation.programme_name || ''}</td><td style="text-align:center">${quotation.num_participants}</td><td style="text-align:right">${fmtCurrency(quotation.rate_per_pax)}</td><td style="text-align:right">${fmtCurrency(quotation.subtotal)}</td></tr>
+          <tr><td>${quotation.programme_name || ''}</td><td style="text-align:center">${quotation.pricing_type === 'per_group' ? '1 group' : quotation.num_participants}</td><td style="text-align:right">${quotation.pricing_type === 'per_group' ? fmtCurrency(quotation.group_price) : fmtCurrency(quotation.rate_per_pax)}</td><td style="text-align:right">${(() => {
+            const pt = (quotation.selected_items || []).reduce((s, si) => s + ((si.unit_price||0)*(si.quantity||1)), 0);
+            const to = (quotation.subtotal||0) - pt;
+            return fmtCurrency(to > 0 ? to : quotation.subtotal);
+          })()}</td></tr>
+          ${(quotation.selected_items || []).filter(si => si.unit_price > 0).map(si => {
+            const item = descriptionItems.find(d => d.id === si.item_id);
+            return `<tr><td>${item?.name || 'Add-on'}</td><td style="text-align:center">${si.quantity||1}</td><td style="text-align:right">${fmtCurrency(si.unit_price)}</td><td style="text-align:right">${fmtCurrency((si.unit_price||0)*(si.quantity||1))}</td></tr>`;
+          }).join('')}
           <tr><td colspan="3" style="text-align:right"><strong>Subtotal</strong></td><td style="text-align:right">RM ${fmtCurrency(quotation.subtotal)}</td></tr>
           ${quotation.sst_percent > 0 ? `<tr><td colspan="3" style="text-align:right"><strong>SST (${quotation.sst_percent}%)</strong></td><td style="text-align:right">RM ${fmtCurrency(quotation.sst_amount)}</td></tr>` : ''}
           <tr style="background:#f0f0f0"><td colspan="3" style="text-align:right"><strong>TOTAL</strong></td><td style="text-align:right"><strong>RM ${fmtCurrency(quotation.total_amount)}</strong></td></tr>
@@ -1185,14 +1215,32 @@ const MarketingDashboard = ({ user, onLogout }) => {
             {/* Calculated amounts */}
             <div className="bg-gray-50 p-3 rounded-lg">
               {(() => {
-                const subtotal = quotationForm.pricing_type === 'per_group' 
+                const trainingSubtotal = quotationForm.pricing_type === 'per_group' 
                   ? quotationForm.group_price 
                   : quotationForm.num_participants * quotationForm.rate_per_pax;
+                const pricedItemsTotal = (quotationForm.selected_items || []).reduce((sum, si) => {
+                  const item = descriptionItems.find(d => d.id === si.item_id);
+                  if (item?.has_pricing && si.unit_price > 0) {
+                    return sum + (si.unit_price * (si.quantity || 1));
+                  }
+                  return sum;
+                }, 0);
+                const subtotal = trainingSubtotal + pricedItemsTotal;
                 const sst = subtotal * quotationForm.sst_percent / 100;
                 const total = subtotal + sst;
                 return (
                   <>
                     <div className="flex justify-between text-sm">
+                      <span>Training Fee:</span>
+                      <span>{formatCurrency(trainingSubtotal)}</span>
+                    </div>
+                    {pricedItemsTotal > 0 && (
+                      <div className="flex justify-between text-sm text-blue-700">
+                        <span>Add-on Items:</span>
+                        <span>{formatCurrency(pricedItemsTotal)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm font-medium border-t mt-1 pt-1">
                       <span>Subtotal:</span>
                       <span>{formatCurrency(subtotal)}</span>
                     </div>
@@ -1220,12 +1268,12 @@ const MarketingDashboard = ({ user, onLogout }) => {
                 {descriptionItems.filter(i => i.category === 'inclusion' || i.category === 'inclusions').length > 0 && (
                   <div>
                     <p className="text-sm font-medium text-green-700 mb-2">✓ Inclusions</p>
-                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
                       {descriptionItems.filter(i => i.category === 'inclusion' || i.category === 'inclusions').map(item => {
                         const selectedItem = quotationForm.selected_items.find(s => s.item_id === item.id);
                         const isSelected = !!selectedItem;
                         return (
-                          <div key={item.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded">
+                          <div key={item.id} className="flex flex-wrap items-center gap-2 p-2 hover:bg-gray-50 rounded">
                             <input
                               type="checkbox"
                               checked={isSelected}
@@ -1233,7 +1281,11 @@ const MarketingDashboard = ({ user, onLogout }) => {
                                 if (e.target.checked) {
                                   setQuotationForm({
                                     ...quotationForm, 
-                                    selected_items: [...quotationForm.selected_items, { item_id: item.id, quantity: 1 }]
+                                    selected_items: [...quotationForm.selected_items, { 
+                                      item_id: item.id, 
+                                      quantity: 1, 
+                                      unit_price: item.default_unit_price || 0 
+                                    }]
                                   });
                                 } else {
                                   setQuotationForm({
@@ -1246,21 +1298,52 @@ const MarketingDashboard = ({ user, onLogout }) => {
                             />
                             <span className="flex-1 text-sm">{item.name}</span>
                             {item.has_quantity && isSelected && (
-                              <input
-                                type="number"
-                                min="1"
-                                value={selectedItem?.quantity || 1}
-                                onChange={(e) => {
-                                  const qty = parseInt(e.target.value) || 1;
-                                  setQuotationForm({
-                                    ...quotationForm,
-                                    selected_items: quotationForm.selected_items.map(s => 
-                                      s.item_id === item.id ? { ...s, quantity: qty } : s
-                                    )
-                                  });
-                                }}
-                                className="w-16 text-sm border rounded px-2 py-1"
-                              />
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-gray-500">Qty:</span>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={selectedItem?.quantity || 1}
+                                  onChange={(e) => {
+                                    const qty = parseInt(e.target.value) || 1;
+                                    setQuotationForm({
+                                      ...quotationForm,
+                                      selected_items: quotationForm.selected_items.map(s => 
+                                        s.item_id === item.id ? { ...s, quantity: qty } : s
+                                      )
+                                    });
+                                  }}
+                                  className="w-16 text-sm border rounded px-2 py-1"
+                                />
+                              </div>
+                            )}
+                            {item.has_pricing && isSelected && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-gray-500">RM/unit:</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={selectedItem?.unit_price || 0}
+                                  onFocus={e => e.target.select()}
+                                  onChange={(e) => {
+                                    const price = parseFloat(e.target.value) || 0;
+                                    setQuotationForm({
+                                      ...quotationForm,
+                                      selected_items: quotationForm.selected_items.map(s => 
+                                        s.item_id === item.id ? { ...s, unit_price: price } : s
+                                      )
+                                    });
+                                  }}
+                                  className="w-24 text-sm border rounded px-2 py-1"
+                                  data-testid={`item-price-${item.id}`}
+                                />
+                                {selectedItem?.unit_price > 0 && selectedItem?.quantity > 0 && (
+                                  <span className="text-xs font-medium text-blue-700 ml-1">
+                                    = RM {((selectedItem.unit_price || 0) * (selectedItem.quantity || 1)).toLocaleString('en-MY', {minimumFractionDigits: 2})}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
                         );
@@ -1388,6 +1471,19 @@ const MarketingDashboard = ({ user, onLogout }) => {
                     }
                   </p>
                   <p className="text-sm font-bold mt-2">Total: {formatCurrency(viewQuotation.total_amount)}</p>
+                  {/* Show priced addon items */}
+                  {(viewQuotation.selected_items || []).some(s => s.unit_price > 0) && (
+                    <div className="mt-2 pt-2 border-t border-green-200 space-y-1">
+                      {viewQuotation.selected_items.filter(s => s.unit_price > 0).map((s, idx) => {
+                        const item = descriptionItems.find(d => d.id === s.item_id);
+                        return (
+                          <p key={idx} className="text-xs text-green-800">
+                            + {item?.name || 'Add-on'}: {s.quantity} x {formatCurrency(s.unit_price)} = {formatCurrency(s.unit_price * s.quantity)}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
               
