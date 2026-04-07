@@ -32,7 +32,7 @@ import { ReportsTab } from "../components/admin/ReportsTab";
 import { PastTrainingTab } from "../components/admin/PastTrainingTab";
 import { UsersTab } from "../components/admin/UsersTab";
 import { CertificatesTab } from "../components/admin/CertificatesTab";
-import { CertificateAdjuster } from "../components/admin/CertificateAdjuster";
+import { CertificateDesigner } from "../components/admin/CertificateDesigner";
 import { QuotationsTab } from "../components/admin/QuotationsTab";
 import RichTextToolbar from "../components/RichTextToolbar";
 import { AdminMarketingOverview } from "../components/marketing/AdminMarketingOverview";
@@ -1869,7 +1869,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
           {/* Certificate Generator Tab */}
           <TabsContent value="cert-generator">
-            <CertificateAdjuster
+            <CertificateDesigner
               sessions={sessions}
             />
           </TabsContent>

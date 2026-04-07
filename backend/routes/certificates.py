@@ -877,3 +877,285 @@ async def preview_certificate_pdf(
 
     from fastapi.responses import StreamingResponse
     return StreamingResponse(buf, media_type="image/png", headers={"Content-Disposition": "inline"})
+
+
+# ==================== VISUAL DESIGNER ENDPOINTS ====================
+
+@router.get("/designer-layout")
+async def get_designer_layout(current_user: User = Depends(get_current_user)):
+    """Get saved certificate designer layout."""
+    if current_user.role not in ["admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    saved = await db.settings.find_one({"id": "certificate_designer_layout"}, {"_id": 0})
+    if saved:
+        saved.pop("id", None)
+        return saved
+    return {}
+
+
+@router.put("/designer-layout")
+async def save_designer_layout(layout: dict, current_user: User = Depends(get_current_user)):
+    """Save certificate designer layout."""
+    if current_user.role not in ["admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    layout["id"] = "certificate_designer_layout"
+    await db.settings.update_one(
+        {"id": "certificate_designer_layout"},
+        {"$set": layout},
+        upsert=True,
+    )
+    return {"message": "Layout saved"}
+
+
+@router.post("/preview-data")
+async def get_preview_data(body: dict, current_user: User = Depends(get_current_user)):
+    """Get live participant data formatted for the designer preview."""
+    if current_user.role not in ["admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    session_id = body.get("session_id")
+    participant_id = body.get("participant_id")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    participant = await db.users.find_one({"id": participant_id}, {"_id": 0})
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    replacements = await _build_replacements(session, participant, "MDDRC/COA/PREVIEW/00000")
+    same_date = replacements.pop("_same_date", False)
+
+    start = replacements.get("{{TRAINING_DATE}}", "")
+    end = replacements.get("{{END_DATE}}", "")
+    dates = start if same_date or not end else f"{start} - {end}"
+
+    validity_start = replacements.get("{{VALIDITY_START}}", "")
+    validity_end = replacements.get("{{VALIDITY_END}}", "")
+    validity = f"Valid: {validity_start} - {validity_end}" if validity_end else ""
+
+    return {
+        "participant_name": replacements.get("{{PARTICIPANT_NAME}}", ""),
+        "ic_number": f"I.C. No: {replacements.get('{{IC_NUMBER}}', '')}",
+        "company_name": replacements.get("{{COMPANY_NAME}}", ""),
+        "certificate_title": replacements.get("{{CERTIFICATE_TITLE}}", ""),
+        "certificate_subtitle": replacements.get("{{CERTIFICATE_SUBTITLE}}", ""),
+        "training_dates": dates,
+        "venue": replacements.get("{{VENUE}}", ""),
+        "validity": validity,
+        "certificate_number": f"Certificate Serial No: {replacements.get('{{CERTIFICATE_NUMBER}}', '')}",
+    }
+
+
+async def _get_designer_layout() -> dict:
+    """Load designer layout from DB."""
+    saved = await db.settings.find_one({"id": "certificate_designer_layout"}, {"_id": 0})
+    if saved:
+        saved.pop("id", None)
+        return saved
+    return {}
+
+
+def _build_certificate_html(layout: dict, data: dict, bg_path: str) -> str:
+    """Build HTML string for certificate PDF generation."""
+    # A4 dimensions at 96 DPI: 794 x 1123 px
+    W, H = 794, 1123
+
+    elements = ""
+    for key, field in layout.items():
+        if not isinstance(field, dict) or "x" not in field:
+            continue
+        text = data.get(key, "")
+        if not text:
+            continue
+        left = field.get("x", 0) * W / 100
+        top = field.get("y", 0) * H / 100
+        width = field.get("width", 50) * W / 100
+        font_size = field.get("fontSize", 12)
+        font_weight = field.get("fontWeight", "normal")
+        text_align = field.get("textAlign", "center")
+        color = field.get("color", "#000000")
+
+        elements += f"""<div style="
+            position:absolute; left:{left:.1f}px; top:{top:.1f}px; width:{width:.1f}px;
+            font-size:{font_size}pt; font-weight:{font_weight}; text-align:{text_align};
+            color:{color}; font-family:Calibri,Arial,sans-serif; line-height:1.2;
+            white-space:nowrap; overflow:visible;
+        ">{text}</div>\n"""
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+    @page {{ size: A4 portrait; margin: 0; }}
+    * {{ margin:0; padding:0; box-sizing:border-box; }}
+    body {{ width:794px; height:1123px; position:relative; overflow:hidden; }}
+</style></head>
+<body>
+    <img src="{bg_path}" style="width:794px;height:1123px;position:absolute;top:0;left:0;" />
+    {elements}
+</body></html>"""
+
+
+@router.post("/generate-designed/{session_id}/{participant_id}")
+async def generate_designed_certificate(
+    session_id: str,
+    participant_id: str,
+    force: bool = Query(False),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate certificate PDF using the visual designer layout (single participant)."""
+    if current_user.role not in ["admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    participant = await db.users.find_one({"id": participant_id}, {"_id": 0})
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    if not force:
+        eligibility = await _check_eligibility(session_id, participant_id)
+        if not eligibility["eligible"]:
+            reasons = []
+            if not eligibility["clocked_out"]:
+                reasons.append("attendance not completed")
+            if not eligibility["post_test_passed"]:
+                reasons.append("post-test not passed")
+            if not eligibility["feedback_submitted"]:
+                reasons.append("feedback not submitted")
+            raise HTTPException(status_code=400, detail=f"Not eligible: {', '.join(reasons)}. Use force=true to override.")
+
+    layout = await _get_designer_layout()
+    cert_number = await _generate_cert_number()
+    replacements = await _build_replacements(session, participant, cert_number)
+    same_date = replacements.pop("_same_date", False)
+
+    start = replacements.get("{{TRAINING_DATE}}", "")
+    end = replacements.get("{{END_DATE}}", "")
+    data = {
+        "participant_name": replacements.get("{{PARTICIPANT_NAME}}", ""),
+        "ic_number": f"I.C. No: {replacements.get('{{IC_NUMBER}}', '')}",
+        "company_name": replacements.get("{{COMPANY_NAME}}", ""),
+        "certificate_title": replacements.get("{{CERTIFICATE_TITLE}}", ""),
+        "certificate_subtitle": replacements.get("{{CERTIFICATE_SUBTITLE}}", ""),
+        "training_dates": start if same_date or not end else f"{start} - {end}",
+        "venue": replacements.get("{{VENUE}}", ""),
+        "validity": f"Valid: {replacements.get('{{VALIDITY_START}}', '')} - {replacements.get('{{VALIDITY_END}}', '')}" if replacements.get("{{VALIDITY_END}}") else "",
+        "certificate_number": f"Certificate Serial No: {cert_number}",
+    }
+
+    # Build HTML and save
+    bg_abs_path = str(TEMPLATE_DIR / "cert_background.png")
+    html_content = _build_certificate_html(layout, data, f"file://{bg_abs_path}")
+
+    # Save HTML for client-side PDF generation (return HTML for frontend to convert)
+    # OR generate server-side with wkhtmltopdf if available
+    # For now, return the data for frontend PDF generation
+    certificate_url = ""
+
+    cert_record = {
+        "id": str(uuid.uuid4()),
+        "session_id": session["id"],
+        "participant_id": participant["id"],
+        "certificate_number": cert_number,
+        "participant_name": participant.get("full_name"),
+        "session_name": session.get("name"),
+        "program_id": session.get("program_id"),
+        "file_path": certificate_url,
+        "issue_date": get_malaysia_time().isoformat(),
+        "generated_by": current_user.id,
+        "generation_method": "designer",
+    }
+    await db.certificates.insert_one(cert_record)
+    cert_record.pop("_id", None)
+
+    await db.participant_access.update_one(
+        {"participant_id": participant["id"], "session_id": session["id"]},
+        {"$set": {
+            "certificate_uploaded_at": get_malaysia_time().isoformat(),
+            "certificate_uploaded_by": current_user.id,
+        }},
+        upsert=True
+    )
+
+    return {
+        "message": "Certificate generated successfully",
+        "certificate": cert_record,
+        "layout": layout,
+        "data": data,
+        "bg_url": "/api/static/templates/cert_background.png",
+    }
+
+
+@router.post("/generate-designed/{session_id}")
+async def generate_designed_bulk(
+    session_id: str,
+    force: bool = Query(False),
+    current_user: User = Depends(get_current_user),
+):
+    """Bulk generate certificates using the designer layout."""
+    if current_user.role not in ["admin", "coordinator"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    pids = session.get("participant_ids", [])
+    if not pids:
+        raise HTTPException(status_code=400, detail="No participants")
+
+    layout = await _get_designer_layout()
+    results = {"generated": [], "skipped": [], "errors": []}
+
+    for pid in pids:
+        participant = await db.users.find_one({"id": pid}, {"_id": 0})
+        if not participant:
+            results["errors"].append({"participant_id": pid, "reason": "Not found"})
+            continue
+
+        if not force:
+            elig = await _check_eligibility(session_id, pid)
+            if not elig["eligible"]:
+                results["skipped"].append({"participant_id": pid, "name": participant.get("full_name"), "reason": elig})
+                continue
+
+        try:
+            cert_number = await _generate_cert_number()
+            replacements = await _build_replacements(session, participant, cert_number)
+            same_date = replacements.pop("_same_date", False)
+            start = replacements.get("{{TRAINING_DATE}}", "")
+            end = replacements.get("{{END_DATE}}", "")
+
+            cert_record = {
+                "id": str(uuid.uuid4()),
+                "session_id": session["id"],
+                "participant_id": pid,
+                "certificate_number": cert_number,
+                "participant_name": participant.get("full_name"),
+                "session_name": session.get("name"),
+                "program_id": session.get("program_id"),
+                "file_path": "",
+                "issue_date": get_malaysia_time().isoformat(),
+                "generated_by": current_user.id,
+                "generation_method": "designer",
+            }
+            await db.certificates.insert_one(cert_record)
+            cert_record.pop("_id", None)
+
+            results["generated"].append({
+                "participant_id": pid,
+                "name": participant.get("full_name"),
+                "certificate_number": cert_number,
+            })
+        except Exception as e:
+            logger.error(f"Cert gen failed for {pid}: {e}")
+            results["errors"].append({"participant_id": pid, "name": participant.get("full_name", "?"), "reason": str(e)})
+
+    return {
+        "message": f"Generated {len(results['generated'])}, skipped {len(results['skipped'])}, errors {len(results['errors'])}",
+        "results": results,
+    }

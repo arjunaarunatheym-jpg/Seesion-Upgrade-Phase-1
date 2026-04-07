@@ -19,7 +19,7 @@ import { ManagementTab } from "../components/coordinator/ManagementTab";
 import { ReportTab } from "../components/coordinator/ReportTab";
 import { AnalyticsTab } from "../components/coordinator/AnalyticsTab";
 import { PastTrainingTab } from "../components/coordinator/PastTrainingTab";
-import { CertificateAdjuster } from "../components/admin/CertificateAdjuster";
+import { CertificateDesigner } from "../components/admin/CertificateDesigner";
 import { DigitalSignatureManager } from "../components/shared/DigitalSignatureManager";
 
 const CoordinatorDashboard = ({ user, onLogout }) => {
@@ -1427,7 +1427,7 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
             </TabsContent>
 
             <TabsContent value="cert-generator">
-              <CertificateAdjuster sessions={sessions} />
+              <CertificateDesigner sessions={sessions} />
             </TabsContent>
 
           </Tabs>
