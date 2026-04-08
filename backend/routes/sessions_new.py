@@ -100,8 +100,24 @@ async def get_sessions(
                 }
             ]
         }
+    elif current_user.role == "participant":
+        # Participant sees ONLY sessions they are tagged in
+        query = {
+            "$and": [
+                {"is_archived": {"$ne": True}},
+                {"status": "active"},
+                {"participant_ids": current_user.id},
+                {
+                    "$or": [
+                        {"completion_status": {"$exists": False}},
+                        {"completion_status": "ongoing"},
+                        {"completion_status": {"$nin": ["completed", "archived"]}}
+                    ]
+                }
+            ]
+        }
     else:
-        # Default: show all non-completed, non-archived sessions
+        # Default (finance, assistant_admin, super_admin etc): show all non-completed, non-archived sessions
         query = {
             "$and": [
                 {"is_archived": {"$ne": True}},
