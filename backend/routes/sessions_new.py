@@ -599,32 +599,61 @@ async def get_completion_checklist(session_id: str, current_user: User = Depends
 
 @router.get("/{session_id}/results-summary")
 async def get_results_summary(session_id: str, current_user: User = Depends(get_current_user)):
-    """Get summary of test results for a session"""
+    """Get summary of test results for a session — per-participant breakdown"""
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
     participant_ids = session.get("participant_ids", [])
     
-    # Get all test results
+    # Get all test results for this session
     results = await db.test_results.find({"session_id": session_id}, {"_id": 0}).to_list(2000)
     
-    # Calculate stats
-    pre_scores = [r['score'] for r in results if r.get('test_type') in ['pre', 'pre_test']]
-    post_scores = [r['score'] for r in results if r.get('test_type') in ['post', 'post_test']]
+    # Get all feedback for this session
+    feedback_list = await db.feedback.find({"session_id": session_id}, {"_id": 0}).to_list(2000)
+    feedback_map = {f["participant_id"]: f for f in feedback_list}
+    
+    # Build per-participant data
+    participants_data = []
+    for pid in participant_ids:
+        user_doc = await db.users.find_one({"id": pid}, {"_id": 0, "password": 0})
+        if not user_doc:
+            continue
+        
+        pre_result = next((r for r in results if r.get("participant_id") == pid and r.get("test_type") in ["pre", "pre_test"]), None)
+        post_result = next((r for r in results if r.get("participant_id") == pid and r.get("test_type") in ["post", "post_test"]), None)
+        fb = feedback_map.get(pid)
+        
+        participants_data.append({
+            "participant": {
+                "id": user_doc.get("id"),
+                "name": user_doc.get("full_name", ""),
+                "email": user_doc.get("email", ""),
+                "id_number": user_doc.get("id_number", ""),
+            },
+            "pre_test": {
+                "completed": pre_result is not None,
+                "score": pre_result.get("score", 0) if pre_result else 0,
+                "correct": pre_result.get("correct_answers", 0) if pre_result else 0,
+                "total": pre_result.get("total_questions", 0) if pre_result else 0,
+                "passed": pre_result.get("passed", False) if pre_result else False,
+                "result_id": pre_result.get("id") if pre_result else None,
+            },
+            "post_test": {
+                "completed": post_result is not None,
+                "score": post_result.get("score", 0) if post_result else 0,
+                "correct": post_result.get("correct_answers", 0) if post_result else 0,
+                "total": post_result.get("total_questions", 0) if post_result else 0,
+                "passed": post_result.get("passed", False) if post_result else False,
+                "result_id": post_result.get("id") if post_result else None,
+            },
+            "feedback_submitted": fb is not None,
+        })
     
     return {
+        "session_name": session.get("name", ""),
         "total_participants": len(participant_ids),
-        "pre_test": {
-            "completed": len(pre_scores),
-            "average_score": sum(pre_scores) / len(pre_scores) if pre_scores else 0,
-            "passed": sum(1 for r in results if r.get('test_type') in ['pre', 'pre_test'] and r.get('passed', False))
-        },
-        "post_test": {
-            "completed": len(post_scores),
-            "average_score": sum(post_scores) / len(post_scores) if post_scores else 0,
-            "passed": sum(1 for r in results if r.get('test_type') in ['post', 'post_test'] and r.get('passed', False))
-        }
+        "participants": participants_data,
     }
 
 
