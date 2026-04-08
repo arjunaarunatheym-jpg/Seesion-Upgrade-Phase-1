@@ -1,74 +1,75 @@
-# MDDRC Training Management System - PRD
+# MDDRC Training Management System — PRD
 
 ## Original Problem Statement
-Comprehensive training management platform for Malaysian Defensive Driving and Riding Centre (MDDRC). Manages training sessions, participants, invoicing, HR/payroll, marketing, and compliance.
+Comprehensive training management platform for Malaysian Defensive Driving and Riding Centre (MDDRC). Features include session management, participant tracking, financial management (invoices, quotations, receipts), HR (payroll, payslips, claims), marketing (leads, quotations), certificate generation, and role-based dashboards.
 
-## Architecture
+## Core Requirements
+- Strict financial data integrity
+- Role-based UX (Admin, Coordinator, Trainer, Finance, Participant, SuperAdmin, AssistantAdmin)
+- PDF/DOCX document generation (html2pdf.js + html-docx-js-typescript)
+- Digital signature uploads across all roles
+- Automated e-certificate generation via drag-and-drop visual designer
+- Bulk and single participant management
+
+## Tech Stack
+- **Backend**: FastAPI + MongoDB (38+ routers)
 - **Frontend**: React + Shadcn/UI + Tailwind
-- **Backend**: FastAPI (39 modular route files under /app/backend/routes/)
-- **Database**: MongoDB
-- **PDF**: Client-side html2pdf.js + Backend FPDF + LibreOffice headless (.docx→PDF)
-- **DOCX**: html-docx-js-typescript for Word exports, python-docx for certificate template processing
+- **Document Generation**: html2pdf.js (PDF), html-docx-js-typescript (Word), FPDF (server-side)
+- **Certificate Designer**: Visual drag-and-drop over PNG template (CertificateDesigner.jsx)
 
-## What's Been Implemented (Full List)
-- Full backend modularization (server.py monolith -> 39 route files)
-- Session management with start/end dates, cert validity
-- Invoice lifecycle with line_items auto-sync on override
-- Marketing dashboard with 10s polling
-- 2-decimal currency formatting (fmtRM)
-- HR module, payroll, EA forms
-- P&L / General Ledger / Balance Sheet reports
-- Certificate management + public verification
-- Data Management tab (SuperAdmin)
-- Trainer/Coordinator/Supervisor Dashboards
-- Journal Sync Engine + Auto-posting
-- PDF Download Refactor (all window.print → html2pdf.js)
-- Digital Signature Manager (all 8 role dashboards)
-- Vehicle Rental / Add-on Item Pricing in Quotations
-- **Certificate Auto-generation Engine** (2026-04-06)
-- **Certificate Adjuster Tool** (2026-04-06)
+## What's Been Implemented
 
-## Completed This Session (2026-04-06)
+### Session Management
+- Full CRUD for training sessions
+- Participant assignment (bulk upload Excel + single add)
+- Trainer assignment with chief/regular roles
+- Coordinator and assistant coordinator assignment
+- Session status management (active/draft/completed/archived)
+- Protected field stripping on session updates (prevents accidental status changes)
+- Coordinator query includes both active + draft sessions
 
-### Certificate Auto-generation Engine (P0) - DONE
-- User uploads custom `.docx` certificate template with `{{PLACEHOLDER}}` markers
-- System replaces 11 placeholders (name, IC, company, title, dates, venue, cert number, etc.)
-- Intelligent font size auto-fitting: configurable per-field font size, max lines, auto-shrink toggle
-- LibreOffice headless converts .docx → PDF, trims to single page
-- Certificate number format: `MDDRC/COA/YYYY/MM/XXXXX`
-- Eligibility checks: attendance, post-test, feedback (with force override)
-- Bulk generation for all eligible participants in a session
+### Participant Management (April 2026)
+- **Admin SessionsTab**: Bulk Upload + Add Participant (single) buttons per session card
+- **Coordinator Dashboard**: Bulk Participants + Add Participant buttons per session card
+- **Coordinator "My Sessions"**: Sessions grouped by month/year with section headers
 
-### Certificate Adjuster Tool (P0) - DONE
-- Live preview panel for Admin & Coordinator dashboards
-- Per-field controls: font size slider, max lines slider, auto-fit toggle
-- Global controls: top margin %, paragraph spacing %
-- Session & participant selection with live certificate preview
-- Save settings as defaults for future certificates
-- Generate single or bulk certificates with one click
-- Force override for eligibility-bypass generation
+### Document Generation
+- Quotation PDF/Word with digital signatures (marketer + approver)
+- Invoice generation
+- Receipt generation
+- Credit note generation
+- Payslip and Pay Advice printing
+- Claim form printing
+- Indemnity form printing
 
-### Key Endpoints Added
-- `GET /api/certificates/font-settings` - Load saved font settings
-- `PUT /api/certificates/font-settings` - Save font settings
-- `POST /api/certificates/preview-pdf/{session_id}/{participant_id}` - Generate PNG preview
-- `POST /api/certificates/generate-pdf/{session_id}/{participant_id}` - Generate real cert PDF
-- `POST /api/certificates/generate-bulk-pdf/{session_id}` - Bulk generate for session
+### Certificate Designer
+- Drag-and-drop visual editor (CertificateDesigner.jsx)
+- Backend generates PNG from uploaded .docx template
+- Admin and Coordinator access via "Cert Generator" tab
 
-## Prioritized Backlog
-### P1
-- Email integration (Resend) — invoice/payment/cert notifications
-- WhatsApp link integration — document sharing
-- Trainer Contract Workflow — freelance staff contracts
+### Digital Signatures
+- DigitalSignatureManager across all role dashboards
+- Signature embedding in Quotation PDF/Word (marketer + approver)
+- User model supports profile_photo + digital_signature (base64)
 
-### P2
-- Post-Training Evaluation System (automated 3/6 month feedback)
-- Multi-tenancy architecture & SaaS Monetization (Stripe)
+### Financial Management
+- Quotation pricing with add-on items (has_pricing, default_unit_price)
+- Description items with unit pricing
+- Costing management per session
 
-### P3
+## P0 — In Progress / Pending
+- System-wide digital signature audit & implementation (Invoices, Receipts, Payslips, Pay Advice, EA Forms, Claim Forms, Credit Notes)
+
+## P1 — Upcoming
+- Email integration (Resend) + WhatsApp link integration
+- Trainer Contract Workflow
+
+## P2 — Future/Backlog
+- Post-Training Evaluation System (3/6 month feedback)
+- Multi-tenancy & SaaS (Stripe)
 - Supervisor Portal / Client Self-Service Portal
-- Native Mobile App conversion (Capacitor)
+- Native Mobile App (Capacitor)
 
-## Refactoring Notes
-- `MarketingDashboard.jsx` (~1700 lines) — extract HTML generators to `/utils`
-- Certificate PDF cleanup: old test certs generated during development should be purged
+## Refactoring Backlog
+- Delete CertificateAdjuster.jsx (dead code)
+- Extract HTML generators from MarketingDashboard.jsx (~1700 lines) to utils
