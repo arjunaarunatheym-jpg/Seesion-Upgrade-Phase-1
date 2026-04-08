@@ -490,7 +490,8 @@ const MarketingDashboard = ({ user, onLogout }) => {
   // PDF Generation
   const generatePDF = (quotation) => {
     const client = quotation.client || {};
-    const sigData = user?.digital_signature || '';
+    const marketerSig = quotation.marketer?.digital_signature || '';
+    const approverSig = quotation.approver?.digital_signature || '';
     
     const html = `
 <!DOCTYPE html>
@@ -638,10 +639,11 @@ const MarketingDashboard = ({ user, onLogout }) => {
   
   <div class="footer">
     <div class="signature-box">
-      ${sigData ? `<img src="${sigData}" style="max-height:50px;max-width:150px;margin-bottom:4px;" /><br>` : ''}
-      <p>Prepared by: ${quotation.marketer?.full_name || ''}</p>
+      ${marketerSig ? `<img src="${marketerSig}" style="max-height:50px;max-width:150px;margin-bottom:4px;" /><br>` : ''}
+      <p>Prepared by: ${quotation.marketer?.full_name || quotation.marketer_name || ''}</p>
     </div>
     <div class="signature-box">
+      ${approverSig ? `<img src="${approverSig}" style="max-height:50px;max-width:150px;margin-bottom:4px;" /><br>` : ''}
       <p>Approved by: ${quotation.approver?.full_name || ''}</p>
     </div>
   </div>
@@ -657,7 +659,8 @@ const MarketingDashboard = ({ user, onLogout }) => {
     try {
       const { asBlob } = await import('html-docx-js-typescript');
       const client = quotation.client || {};
-      const sigData = user?.digital_signature || '';
+      const marketerSig = quotation.marketer?.digital_signature || '';
+      const approverSig = quotation.approver?.digital_signature || '';
       const fmtCurrency = (v) => (v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 });
       const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-MY', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
 
@@ -702,8 +705,8 @@ const MarketingDashboard = ({ user, onLogout }) => {
         ${quotation.terms_conditions ? `<p><strong>Terms & Conditions:</strong></p><ol>${(quotation.terms_conditions || '').split('\\n').filter(t => t.trim()).map(t => '<li>' + t.replace(/^\\d+\\.\\s*/, '') + '</li>').join('')}</ol>` : ''}
         <br><br>
         <table style="width:100%"><tr>
-          <td style="width:50%">${sigData ? `<img src="${sigData}" style="max-height:50px" /><br>` : ''}<strong>Prepared by:</strong> ${quotation.marketer?.full_name || ''}</td>
-          <td style="width:50%"><strong>Approved by:</strong> ${quotation.approver?.full_name || ''}</td>
+          <td style="width:50%">${marketerSig ? `<img src="${marketerSig}" style="max-height:50px" /><br>` : ''}<strong>Prepared by:</strong> ${quotation.marketer?.full_name || quotation.marketer_name || ''}</td>
+          <td style="width:50%">${approverSig ? `<img src="${approverSig}" style="max-height:50px" /><br>` : ''}<strong>Approved by:</strong> ${quotation.approver?.full_name || ''}</td>
         </tr></table>
       </body></html>`;
 

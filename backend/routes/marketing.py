@@ -626,14 +626,20 @@ async def get_quotations(status: str = None, current_user: User = Depends(get_cu
     client_map = {c["id"]: c for c in clients}
     
     user_ids = list(set(q.get("created_by") for q in quotations if q.get("created_by")))
-    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "full_name": 1}).to_list(100)
-    user_map = {u["id"]: u.get("full_name", "Unknown") for u in users}
+    approver_ids = list(set(q.get("approved_by") for q in quotations if q.get("approved_by")))
+    all_user_ids = list(set(user_ids + approver_ids))
+    users = await db.users.find({"id": {"$in": all_user_ids}}, {"_id": 0, "id": 1, "full_name": 1, "digital_signature": 1}).to_list(100)
+    user_map = {u["id"]: u for u in users}
     
     for q in quotations:
         client = client_map.get(q.get("client_id"), {})
         q["client_name"] = client.get("company_name", "Unknown")
         q["contact_person"] = client.get("contact_person", "")
-        q["marketer_name"] = user_map.get(q.get("created_by"), "Unknown")
+        marketer_user = user_map.get(q.get("created_by"), {})
+        q["marketer_name"] = marketer_user.get("full_name", "Unknown")
+        q["marketer"] = {"full_name": marketer_user.get("full_name"), "digital_signature": marketer_user.get("digital_signature")}
+        approver_user = user_map.get(q.get("approved_by"), {})
+        q["approver"] = {"full_name": approver_user.get("full_name"), "digital_signature": approver_user.get("digital_signature")} if q.get("approved_by") else {}
         # Normalize created_at to string for sorting
         if isinstance(q.get("created_at"), datetime):
             q["created_at"] = q["created_at"].isoformat()
@@ -659,6 +665,17 @@ async def get_quotation(quotation_id: str, current_user: User = Depends(get_curr
     client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
     if client:
         quotation["client"] = client
+    
+    # Enrich with marketer and approver details (including digital signatures)
+    if quotation.get("created_by"):
+        marketer = await db.users.find_one({"id": quotation["created_by"]}, {"_id": 0, "id": 1, "full_name": 1, "digital_signature": 1})
+        if marketer:
+            quotation["marketer"] = {"full_name": marketer.get("full_name"), "digital_signature": marketer.get("digital_signature")}
+            quotation["marketer_name"] = marketer.get("full_name", "Unknown")
+    if quotation.get("approved_by"):
+        approver = await db.users.find_one({"id": quotation["approved_by"]}, {"_id": 0, "id": 1, "full_name": 1, "digital_signature": 1})
+        if approver:
+            quotation["approver"] = {"full_name": approver.get("full_name"), "digital_signature": approver.get("digital_signature")}
     
     return quotation
 
