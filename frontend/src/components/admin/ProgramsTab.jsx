@@ -177,28 +177,28 @@ const ProgramsTab = ({
               filteredPrograms.map((program) => (
                 <div key={program.id} className="mb-4">
                   <Card>
-                    <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <CardTitle>{program.name}</CardTitle>
+                    <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 overflow-hidden">
+                      <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
+                        <div className="flex-1 min-w-0 w-full">
+                          <CardTitle className="text-sm sm:text-base break-words leading-snug">{program.name}</CardTitle>
                           {program.description && (
-                            <CardDescription>{program.description}</CardDescription>
+                            <CardDescription className="text-xs break-words">{program.description}</CardDescription>
                           )}
-                          <div className="flex gap-3 mt-2">
+                          <div className="flex flex-wrap gap-2 mt-2">
                             <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                              Pass Mark: {program.pass_percentage}%
+                              Pass: {program.pass_percentage}%
                             </span>
                             {program.certificate_title && (
-                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded truncate max-w-[150px]">
                                 Cert: {program.certificate_title}
                               </span>
                             )}
                             <span className="text-xs text-gray-500">
-                              Created: {new Date(program.created_at).toLocaleDateString()}
+                              {new Date(program.created_at).toLocaleDateString()}
                             </span>
                           </div>
                         </div>
-                        <div className="flex gap-2 flex-wrap">
+                        <div className="flex gap-2 flex-shrink-0">
                           <Button
                             size="sm"
                             variant="outline"
@@ -218,19 +218,21 @@ const ProgramsTab = ({
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="pt-4">
+                    <CardContent className="pt-3 px-3 sm:px-6">
                       <div className="flex gap-2 flex-wrap">
                         <Button
                           size="sm"
                           variant="outline"
+                          className="text-xs flex-1 sm:flex-none"
                           onClick={() => setSelectedProgram(selectedProgram?.id === program.id ? null : program)}
                         >
-                          <ClipboardList className="w-4 h-4 mr-2" />
-                          Manage Tests & Checklists
+                          <ClipboardList className="w-3.5 h-3.5 mr-1" />
+                          Tests & Checklists
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
+                          className="text-xs flex-1 sm:flex-none"
                           onClick={() => {
                             if (selectedProgram?.id === program.id) {
                               setSelectedProgram(null);
@@ -239,8 +241,8 @@ const ProgramsTab = ({
                             }
                           }}
                         >
-                          <MessageSquare className="w-4 h-4 mr-2" />
-                          Manage Feedback Form
+                          <MessageSquare className="w-3.5 h-3.5 mr-1" />
+                          Feedback
                         </Button>
                       </div>
                     </CardContent>
@@ -248,21 +250,22 @@ const ProgramsTab = ({
                   
                   {/* Expandable Management Section */}
                   {selectedProgram?.id === program.id && (
-                    <Card className="mt-2 border-l-4 border-blue-500">
-                      <CardContent className="pt-6">
+                    <Card className="mt-2 border-l-4 border-blue-500 overflow-hidden">
+                      <CardContent className="pt-4 px-3 sm:px-6">
                         <Tabs defaultValue="tests" className="w-full" data-program-id={program.id}>
-                          <TabsList className="grid w-full grid-cols-3 mb-4">
-                            <TabsTrigger value="tests">
-                              <ClipboardList className="w-4 h-4 mr-2" />
-                              Tests
+                          <TabsList className="grid w-full grid-cols-3 mb-4 h-auto">
+                            <TabsTrigger value="tests" className="text-xs px-1 py-2">
+                              <ClipboardList className="w-3.5 h-3.5 sm:mr-1.5" />
+                              <span className="hidden sm:inline">Tests</span>
+                              <span className="sm:hidden">Tests</span>
                             </TabsTrigger>
-                            <TabsTrigger value="checklists">
-                              <ClipboardCheck className="w-4 h-4 mr-2" />
-                              Checklists
+                            <TabsTrigger value="checklists" className="text-xs px-1 py-2">
+                              <ClipboardCheck className="w-3.5 h-3.5 sm:mr-1.5" />
+                              <span>Checklists</span>
                             </TabsTrigger>
-                            <TabsTrigger value="feedback-form">
-                              <MessageSquare className="w-4 h-4 mr-2" />
-                              Feedback
+                            <TabsTrigger value="feedback-form" className="text-xs px-1 py-2">
+                              <MessageSquare className="w-3.5 h-3.5 sm:mr-1.5" />
+                              <span>Feedback</span>
                             </TabsTrigger>
                           </TabsList>
                           

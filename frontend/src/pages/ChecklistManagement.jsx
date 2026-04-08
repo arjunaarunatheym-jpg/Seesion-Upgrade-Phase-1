@@ -111,18 +111,18 @@ const ChecklistManagement = ({ program }) => {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex justify-between items-center">
-          <div>
-            <CardTitle>Vehicle Inspection Checklist Items</CardTitle>
-            <CardDescription>
-              Manage checklist items for {program.name}
+      <CardHeader className="px-3 sm:px-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-sm sm:text-base">Vehicle Inspection Checklist</CardTitle>
+            <CardDescription className="text-xs break-words">
+              {program.name}
             </CardDescription>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0">
             <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-              <Button variant="outline" onClick={() => setUploadDialogOpen(true)}>
-                <Upload className="w-4 h-4 mr-2" />
+              <Button size="sm" variant="outline" className="text-xs" onClick={() => setUploadDialogOpen(true)}>
+                <Upload className="w-3.5 h-3.5 mr-1" />
                 Bulk Upload
               </Button>
               <DialogContent>
@@ -165,8 +165,8 @@ const ChecklistManagement = ({ program }) => {
 
             <Dialog open={checklistDialogOpen} onOpenChange={setChecklistDialogOpen}>
               <DialogTrigger asChild>
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
+                <Button size="sm" className="text-xs">
+                  <Plus className="w-3.5 h-3.5 mr-1" />
                   Add Item
                 </Button>
               </DialogTrigger>
@@ -197,7 +197,7 @@ const ChecklistManagement = ({ program }) => {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-3 sm:px-6">
         {!currentTemplate || currentTemplate.items.length === 0 ? (
           <div className="text-center py-12">
             <ClipboardList className="w-12 h-12 mx-auto text-gray-400 mb-4" />
@@ -208,26 +208,30 @@ const ChecklistManagement = ({ program }) => {
           </div>
         ) : (
           <div className="space-y-2">
-            {currentTemplate.items.map((item, idx) => (
-              <div
-                key={idx}
-                className="flex justify-between items-center p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-gray-700 bg-white px-3 py-1 rounded">
-                    {idx + 1}
-                  </span>
-                  <span className="text-gray-900">{item}</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDeleteChecklistItem(currentTemplate.id, idx)}
+            {currentTemplate.items.map((item, idx) => {
+              const itemName = typeof item === "string" ? item : (item.name || item.item || JSON.stringify(item));
+              return (
+                <div
+                  key={idx}
+                  className="flex justify-between items-center p-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg"
                 >
-                  <Trash2 className="w-4 h-4 text-red-600" />
-                </Button>
-              </div>
-            ))}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-semibold text-gray-700 bg-white px-2 py-0.5 rounded text-xs flex-shrink-0">
+                      {idx + 1}
+                    </span>
+                    <span className="text-sm text-gray-900 break-words">{itemName}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-shrink-0"
+                    onClick={() => handleDeleteChecklistItem(currentTemplate.id, idx)}
+                  >
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         )}
       </CardContent>
