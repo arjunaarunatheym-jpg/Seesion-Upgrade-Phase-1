@@ -548,7 +548,7 @@ async def submit_trainer_checklist(checklist_data: TrainerChecklistSubmit, curre
 
 @router.get("/trainer-checklist/{session_id}/assigned-participants")
 async def get_trainer_assigned_participants(session_id: str, current_user: User = Depends(get_current_user)):
-    """Get participants assigned to the current trainer for a session"""
+    """Get ALL session participants with claim/checklist status for the trainer self-select flow"""
     if current_user.role not in ["trainer", "admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Only trainers can view their assigned participants")
 
@@ -566,22 +566,31 @@ async def get_trainer_assigned_participants(session_id: str, current_user: User 
     if not trainer_assignment and current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="You are not assigned to this session")
 
-    if trainer_assignment and trainer_assignment.get("participant_ids"):
-        participant_ids = trainer_assignment.get("participant_ids", [])
-    else:
-        participant_ids = session.get("participant_ids", [])
+    # Always show ALL participants — trainers self-select (claim) who to inspect
+    participant_ids = session.get("participant_ids", [])
+
+    # Build a map of trainer claims from all trainer_assignments
+    claim_map = {}  # participant_id -> {trainer_id, trainer_name}
+    for ta in trainer_assignments:
+        for pid in ta.get("claimed_participant_ids", []):
+            claimed_trainer = await db.users.find_one({"id": ta["trainer_id"]}, {"_id": 0, "full_name": 1, "id": 1})
+            claim_map[pid] = {
+                "trainer_id": ta["trainer_id"],
+                "trainer_name": claimed_trainer.get("full_name", "") if claimed_trainer else ""
+            }
 
     participants = []
     for pid in participant_ids:
         p = await db.users.find_one({"id": pid}, {"_id": 0})
         if p:
+            # Check if ANY trainer submitted a checklist for this participant
             existing_checklist = await db.vehicle_checklists.find_one({
                 "session_id": session_id,
                 "participant_id": pid,
-                "trainer_id": current_user.id,
                 "interval": "trainer_inspection"
             }, {"_id": 0})
 
+            claimed_by = claim_map.get(pid)
             participants.append({
                 "id": p["id"],
                 "full_name": p.get("full_name", ""),
@@ -591,7 +600,11 @@ async def get_trainer_assigned_participants(session_id: str, current_user: User 
                 "emergency_contact_phone": p.get("emergency_contact_phone", ""),
                 "contact_phone": p.get("contact_phone", ""),
                 "checklist_submitted": existing_checklist is not None,
-                "checklist_id": existing_checklist.get("id") if existing_checklist else None
+                "checklist_id": existing_checklist.get("id") if existing_checklist else None,
+                "submitted_by_trainer_id": existing_checklist.get("trainer_id") if existing_checklist else None,
+                "submitted_by_trainer_name": existing_checklist.get("trainer_name") if existing_checklist else None,
+                "claimed_by_trainer_id": claimed_by["trainer_id"] if claimed_by else None,
+                "claimed_by_trainer_name": claimed_by["trainer_name"] if claimed_by else None,
             })
 
     return {
@@ -599,3 +612,72 @@ async def get_trainer_assigned_participants(session_id: str, current_user: User 
         "trainer_role": trainer_assignment.get("role") if trainer_assignment else "admin",
         "participants": participants
     }
+
+
+@router.post("/trainer-checklist/{session_id}/claim/{participant_id}")
+async def claim_participant(session_id: str, participant_id: str, current_user: User = Depends(get_current_user)):
+    """Trainer claims a participant for checklist inspection"""
+    if current_user.role not in ["trainer", "admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only trainers can claim participants")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    trainer_assignments = session.get("trainer_assignments", [])
+
+    # Check if participant is already claimed by another trainer
+    for ta in trainer_assignments:
+        if ta.get("trainer_id") != current_user.id:
+            if participant_id in ta.get("claimed_participant_ids", []):
+                claimer = await db.users.find_one({"id": ta["trainer_id"]}, {"_id": 0, "full_name": 1})
+                claimer_name = claimer.get("full_name", "Another trainer") if claimer else "Another trainer"
+                raise HTTPException(status_code=409, detail=f"Already claimed by {claimer_name}")
+
+    # Add to this trainer's claimed list
+    updated = False
+    for i, ta in enumerate(trainer_assignments):
+        if ta.get("trainer_id") == current_user.id:
+            claimed = ta.get("claimed_participant_ids", [])
+            if participant_id not in claimed:
+                claimed.append(participant_id)
+                trainer_assignments[i]["claimed_participant_ids"] = claimed
+            updated = True
+            break
+
+    if not updated:
+        raise HTTPException(status_code=403, detail="You are not assigned to this session")
+
+    await db.sessions.update_one(
+        {"id": session_id},
+        {"$set": {"trainer_assignments": trainer_assignments}}
+    )
+
+    return {"message": "Participant claimed successfully"}
+
+
+@router.delete("/trainer-checklist/{session_id}/claim/{participant_id}")
+async def unclaim_participant(session_id: str, participant_id: str, current_user: User = Depends(get_current_user)):
+    """Trainer unclaims a participant"""
+    if current_user.role not in ["trainer", "admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Only trainers can unclaim participants")
+
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    trainer_assignments = session.get("trainer_assignments", [])
+    for i, ta in enumerate(trainer_assignments):
+        if ta.get("trainer_id") == current_user.id:
+            claimed = ta.get("claimed_participant_ids", [])
+            if participant_id in claimed:
+                claimed.remove(participant_id)
+                trainer_assignments[i]["claimed_participant_ids"] = claimed
+            break
+
+    await db.sessions.update_one(
+        {"id": session_id},
+        {"$set": {"trainer_assignments": trainer_assignments}}
+    )
+
+    return {"message": "Participant unclaimed successfully"}

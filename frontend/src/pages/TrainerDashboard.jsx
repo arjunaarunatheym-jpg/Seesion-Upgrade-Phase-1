@@ -227,38 +227,17 @@ const TrainerDashboard = ({ user, onLogout }) => {
 
   const loadSessionParticipants = async (sessionId) => {
     try {
-      // Get assigned participants for this trainer (auto-distributed equally)
       const response = await axiosInstance.get(`/trainer-checklist/${sessionId}/assigned-participants`);
-      const participants = response.data;
+      const data = response.data;
+      // Backend now returns { participants: [...], session_id, trainer_role }
+      const participantsList = data.participants || data;
       
-      // Load checklists for this session to check completion status
-      try {
-        const checklistsRes = await axiosInstance.get(`/checklists/session/${sessionId}`);
-        const checklists = checklistsRes.data || [];
-        
-        // Attach checklist status to each participant
-        const participantsWithStatus = participants.map(p => {
-          const checklist = checklists.find(c => c.participant_id === p.id);
-          return {
-            ...p,
-            checklist: checklist || null
-          };
-        });
-        
-        setSessionParticipants(prev => ({
-          ...prev,
-          [sessionId]: participantsWithStatus
-        }));
-      } catch (checklistError) {
-        // If checklist loading fails, just set participants without status
-        setSessionParticipants(prev => ({
-          ...prev,
-          [sessionId]: participants
-        }));
-      }
+      setSessionParticipants(prev => ({
+        ...prev,
+        [sessionId]: participantsList
+      }));
     } catch (error) {
       console.error("Failed to load assigned participants for session", sessionId, error);
-      // Set empty array if no participants assigned
       setSessionParticipants(prev => ({
         ...prev,
         [sessionId]: []
@@ -840,6 +819,8 @@ const TrainerDashboard = ({ user, onLogout }) => {
               isChiefTrainer={isChiefTrainer}
               getMyRole={getMyRole}
               onNavigateChecklist={(sessionId, participantId) => navigate(`/trainer-checklist/${sessionId}/${participantId}`)}
+              user={user}
+              onRefreshParticipants={loadSessionParticipants}
             />
           </TabsContent>
 

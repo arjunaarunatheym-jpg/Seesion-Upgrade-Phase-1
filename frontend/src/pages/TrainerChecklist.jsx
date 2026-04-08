@@ -8,8 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { CheckCircle2 } from "lucide-react";
-import { ArrowLeft, Upload, Camera } from "lucide-react";
+import { CheckCircle2, ArrowLeft, Upload, Camera, ChevronLeft, ChevronRight, Users } from "lucide-react";
 
 const TrainerChecklist = ({ user }) => {
   const { sessionId, participantId } = useParams();
@@ -23,10 +22,37 @@ const TrainerChecklist = ({ user }) => {
   const [submitting, setSubmitting] = useState(false);
   const [existingChecklist, setExistingChecklist] = useState(null);
   const [isCompleted, setIsCompleted] = useState(false);
+  
+  // Swipe-through navigation state
+  const [allParticipants, setAllParticipants] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(-1);
 
   useEffect(() => {
     loadData();
-  }, []);
+    loadAllParticipants();
+  }, [participantId]);
+
+  const loadAllParticipants = async () => {
+    try {
+      const res = await axiosInstance.get(`/trainer-checklist/${sessionId}/assigned-participants`);
+      const list = res.data.participants || [];
+      // Show participants claimed by me or with my completed checklists
+      const myList = list.filter(p =>
+        p.claimed_by_trainer_id === user?.id || p.submitted_by_trainer_id === user?.id
+      );
+      setAllParticipants(myList);
+      const idx = myList.findIndex(p => p.id === participantId);
+      setCurrentIndex(idx);
+    } catch {
+      setAllParticipants([]);
+    }
+  };
+
+  const goToParticipant = (idx) => {
+    if (idx >= 0 && idx < allParticipants.length) {
+      navigate(`/trainer-checklist/${sessionId}/${allParticipants[idx].id}`, { replace: true });
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -213,18 +239,20 @@ const TrainerChecklist = ({ user }) => {
       
       // Mark as completed
       setIsCompleted(true);
-      toast.success("✓ Checklist submitted successfully! Returning to dashboard...", {
-        duration: 2000,
-        style: {
-          background: '#10B981',
-          color: '#fff',
-        }
-      });
+      // Refresh participant list to update progress
+      loadAllParticipants();
       
-      // Navigate back to trainer dashboard after short delay
-      setTimeout(() => {
-        navigate('/trainer');
-      }, 2000);
+      if (currentIndex < allParticipants.length - 1) {
+        toast.success("Checklist submitted! Moving to next participant...", { duration: 2000 });
+        setTimeout(() => {
+          goToParticipant(currentIndex + 1);
+        }, 1500);
+      } else {
+        toast.success("All checklists completed! Returning to dashboard...", { duration: 2000 });
+        setTimeout(() => {
+          navigate('/trainer-dashboard');
+        }, 2000);
+      }
       
       setSubmitting(false);
     } catch (error) {
@@ -248,31 +276,90 @@ const TrainerChecklist = ({ user }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-cyan-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-cyan-50 p-4 sm:p-6">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <Button 
-            onClick={() => navigate('/trainer-dashboard')} 
-            variant="outline"
-            className="mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
-          </Button>
+        {/* Header with Back + Navigation */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <Button 
+              onClick={() => navigate('/trainer-dashboard')} 
+              variant="outline"
+              size="sm"
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Back
+            </Button>
+            
+            {/* Participant Navigation */}
+            {allParticipants.length > 1 && (
+              <div className="flex items-center gap-2" data-testid="participant-nav">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={currentIndex <= 0}
+                  onClick={() => goToParticipant(currentIndex - 1)}
+                  data-testid="prev-participant"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-sm font-medium text-gray-600 min-w-[80px] text-center">
+                  {currentIndex + 1} / {allParticipants.length}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={currentIndex >= allParticipants.length - 1}
+                  onClick={() => goToParticipant(currentIndex + 1)}
+                  data-testid="next-participant"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Progress Bar (all claimed participants) */}
+          {allParticipants.length > 1 && (
+            <div className="mb-3">
+              <div className="flex gap-1">
+                {allParticipants.map((p, i) => (
+                  <button
+                    key={p.id}
+                    onClick={() => goToParticipant(i)}
+                    className={`h-2 flex-1 rounded-full transition-all ${
+                      p.checklist_submitted
+                        ? "bg-green-500"
+                        : i === currentIndex
+                        ? "bg-blue-500"
+                        : "bg-gray-300"
+                    }`}
+                    title={p.full_name}
+                  />
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-1 text-center">
+                {allParticipants.filter(p => p.checklist_submitted).length}/{allParticipants.length} completed
+              </p>
+            </div>
+          )}
           
           {isCompleted && (
-            <div className="mb-4 p-4 bg-green-100 border-2 border-green-500 rounded-lg">
+            <div className="mb-4 p-3 bg-green-100 border-2 border-green-500 rounded-lg">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                  <CheckCircle2 className="text-white w-6 h-6" />
+                <CheckCircle2 className="text-green-600 w-6 h-6 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-bold text-green-800">Checklist Submitted</p>
+                  <p className="text-sm text-green-700">Proceed to the next participant.</p>
                 </div>
-                <div>
-                  <p className="font-bold text-green-800 text-lg">✓ Checklist Submitted Successfully</p>
-                  <p className="text-sm text-green-700">
-                    This checklist has been completed and saved. You may now proceed to the next participant.
-                  </p>
-                </div>
+                {currentIndex < allParticipants.length - 1 && (
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={() => goToParticipant(currentIndex + 1)}
+                  >
+                    Next <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                )}
               </div>
             </div>
           )}

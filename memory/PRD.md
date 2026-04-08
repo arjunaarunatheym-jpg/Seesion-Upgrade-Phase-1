@@ -1,7 +1,7 @@
 # MDDRC Training Management System — PRD
 
 ## Original Problem Statement
-Comprehensive training management platform for Malaysian Defensive Driving and Riding Centre (MDDRC). Features include session management, participant tracking, financial management (invoices, quotations, receipts), HR (payroll, payslips, claims), marketing (leads, quotations), certificate generation, and role-based dashboards.
+Comprehensive training management platform for Malaysian Defensive Driving and Riding Centre (MDDRC).
 
 ## Core Requirements
 - Strict financial data integrity
@@ -15,28 +15,30 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - **Backend**: FastAPI + MongoDB (38+ routers)
 - **Frontend**: React + Shadcn/UI + Tailwind
 - **Document Generation**: html2pdf.js (PDF), html-docx-js-typescript (Word), FPDF (server-side)
-- **Certificate Designer**: Visual drag-and-drop over PNG template (CertificateDesigner.jsx)
 
 ## What's Been Implemented
 
 ### Session Management
-- Full CRUD for training sessions
-- Participant assignment (bulk upload Excel + single add)
-- Trainer assignment with chief/regular roles
-- Coordinator and assistant coordinator assignment
-- Session status management (active/draft/completed/archived)
-- Protected field stripping on session updates (prevents accidental status changes)
+- Full CRUD, participant assignment (bulk + single), trainer/coordinator assignment
+- Protected field stripping on session updates
 - Coordinator query includes both active + draft sessions
 
 ### Participant Management (April 2026)
-- **Admin SessionsTab**: Bulk Upload + Add Participant (single) buttons per session card
-- **Coordinator Dashboard**: Bulk Participants + Add Participant buttons per session card
-- **Coordinator "My Sessions"**: Sessions grouped by month/year with section headers
+- Admin + Coordinator: Bulk Upload + Add Participant (single) buttons per session card
+- Coordinator "My Sessions": Sessions grouped by month/year
 
 ### Participant Portal — Active vs Past Sessions (April 2026)
-- **Overview tab**: Only shows active sessions (today/future). Past sessions collapsed under "Past Sessions (N)" toggle
-- **My Details tab**: Only active sessions show clock-in/out and vehicle forms. Past sessions collapsed with read-only summary
-- **Certificates tab**: Shows ALL sessions (no filtering — user explicitly requested this)
+- Overview + Details tabs: Only active sessions shown; past sessions collapsed
+- Certificates tab: Shows ALL sessions
+- Tab order: Overview, My Details, Tests, Checklists, Certs, Settings
+- Participant session filtering: Backend filters by participant_ids (fixed data leak bug)
+
+### Trainer Checklist — Self-Select & Swipe-Through (April 2026)
+- **Self-Select Flow**: Trainers see ALL session participants with search bar. They "Claim" participants to inspect, other trainers see who's claimed/taken.
+- **Stats Bar**: Total / Mine / Available / Done filter buttons
+- **Claim/Unclaim API**: `POST/DELETE /trainer-checklist/{session_id}/claim/{participant_id}`
+- **Swipe-Through UI**: After claiming, trainer sees one participant at a time. Prev/Next navigation with progress bar. Auto-advances to next participant after submission.
+- Backend: `assigned-participants` endpoint shows all participants with claim status and checklist submission status
 
 ### Document Generation
 - Quotation PDF/Word with digital signatures (marketer + approver)
@@ -44,18 +46,13 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 
 ### Certificate Designer
 - Drag-and-drop visual editor (CertificateDesigner.jsx)
-- Backend generates PNG from uploaded .docx template
-- Admin and Coordinator access via "Cert Generator" tab
 
 ### Digital Signatures
 - DigitalSignatureManager across all role dashboards
-- Signature embedding in Quotation PDF/Word (marketer + approver)
-- User model supports profile_photo + digital_signature (base64)
+- Signature embedding in Quotation PDF/Word
 
-### Financial Management
-- Quotation pricing with add-on items (has_pricing, default_unit_price)
-- Description items with unit pricing
-- Costing management per session
+### Test Results Review
+- Backend enriches test results with questions from original test for review
 
 ## P0 — In Progress / Pending
 - System-wide digital signature audit & implementation (Invoices, Receipts, Payslips, Pay Advice, EA Forms, Claim Forms, Credit Notes)
