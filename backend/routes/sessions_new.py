@@ -66,10 +66,11 @@ async def get_sessions(
         }
     elif current_user.role == "coordinator":
         # Coordinator sees sessions they're assigned to as coordinator OR assistant coordinator
+        # Include both "active" and "draft" sessions so coordinators can see newly assigned sessions
         query = {
             "$and": [
                 {"is_archived": {"$ne": True}},
-                {"status": "active"},
+                {"status": {"$in": ["active", "draft"]}},
                 {
                     "$or": [
                         {"completion_status": {"$exists": False}},
@@ -935,6 +936,11 @@ async def update_session(session_id: str, session_data: dict, current_user: User
     old_company_name = session.get("company_name")
     old_location = session.get("location")
     old_program_id = session.get("program_id")
+    
+    # Prevent accidental status changes via general update — use toggle-status endpoint instead
+    protected_fields = {"id", "created_at", "status", "completion_status", "is_archived"}
+    for field in protected_fields:
+        session_data.pop(field, None)
     
     # Check if participant_ids changed (new participants added)
     old_participant_ids = set(session.get("participant_ids", []))
