@@ -460,12 +460,18 @@ async def get_session_results(session_id: str, current_user: User = Depends(get_
 
 @router.get("/results/{result_id}")
 async def get_test_result(result_id: str, current_user: User = Depends(get_current_user)):
-    """Get a specific test result"""
+    """Get a specific test result with questions for review"""
     result = await db.test_results.find_one({"id": result_id}, {"_id": 0})
     if not result:
         raise HTTPException(status_code=404, detail="Test result not found")
     
     if isinstance(result.get('submitted_at'), str):
         result['submitted_at'] = datetime.fromisoformat(result['submitted_at'])
+    
+    # Enrich with test questions for review
+    if not result.get('test_questions') and result.get('test_id'):
+        test_doc = await db.tests.find_one({"id": result['test_id']}, {"_id": 0})
+        if test_doc and test_doc.get('questions'):
+            result['test_questions'] = test_doc['questions']
     
     return result

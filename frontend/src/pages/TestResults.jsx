@@ -113,8 +113,8 @@ const TestResults = () => {
           <CardContent>
             <div className="space-y-6">
               {result.test_questions && result.test_questions.map((question, qIndex) => {
-                const userAnswer = result.answers[qIndex];
-                const correctAnswer = question.correct_answer;
+                const userAnswer = Number(result.answers[qIndex]);
+                const correctAnswer = Number(question.correct_answer);
                 const isCorrect = userAnswer === correctAnswer;
 
                 return (
@@ -168,7 +168,7 @@ const TestResults = () => {
                                     <span className="font-semibold mr-2">
                                       {String.fromCharCode(65 + optIndex)}.
                                     </span>
-                                    {option}
+                                    {typeof option === 'string' ? option : option.text}
                                   </span>
                                   {badge && (
                                     <span className="text-xs font-semibold">{badge}</span>
