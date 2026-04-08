@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { axiosInstance } from "../App";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,25 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
   const [currentTrainingSession, setCurrentTrainingSession] = useState(null);
   const [showSocialPopup, setShowSocialPopup] = useState(false);
   const [socialMediaLinks, setSocialMediaLinks] = useState([]);
+  
+  // Split sessions into active vs past
+  const { activeSessions, pastSessions } = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const active = [];
+    const past = [];
+    sessions.forEach((s) => {
+      const endDate = s.end_date ? new Date(s.end_date) : null;
+      const isCompleted = s.completion_status === "completed" || s.completion_status === "archived";
+      const isPast = isCompleted || (endDate && endDate < today);
+      if (isPast) {
+        past.push(s);
+      } else {
+        active.push(s);
+      }
+    });
+    return { activeSessions: active, pastSessions: past };
+  }, [sessions]);
   
   // Tab restrictions removed - all tabs accessible
 
@@ -745,7 +764,8 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
           {/* Overview Tab */}
           <TabsContent value="overview">
             <OverviewTab
-              sessions={sessions}
+              sessions={activeSessions}
+              pastSessions={pastSessions}
               participantAccess={participantAccess}
               availableTests={availableTests}
               attendanceToday={attendanceToday}
@@ -768,7 +788,8 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
           {/* Details Tab */}
           <TabsContent value="details">
             <DetailsTab
-              sessions={sessions}
+              sessions={activeSessions}
+              pastSessions={pastSessions}
               vehicleDetails={vehicleDetails}
               attendanceToday={attendanceToday}
               participantAccess={participantAccess}

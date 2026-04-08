@@ -33,14 +33,14 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - **Coordinator Dashboard**: Bulk Participants + Add Participant buttons per session card
 - **Coordinator "My Sessions"**: Sessions grouped by month/year with section headers
 
+### Participant Portal — Active vs Past Sessions (April 2026)
+- **Overview tab**: Only shows active sessions (today/future). Past sessions collapsed under "Past Sessions (N)" toggle
+- **My Details tab**: Only active sessions show clock-in/out and vehicle forms. Past sessions collapsed with read-only summary
+- **Certificates tab**: Shows ALL sessions (no filtering — user explicitly requested this)
+
 ### Document Generation
 - Quotation PDF/Word with digital signatures (marketer + approver)
-- Invoice generation
-- Receipt generation
-- Credit note generation
-- Payslip and Pay Advice printing
-- Claim form printing
-- Indemnity form printing
+- Invoice, Receipt, Credit Note, Payslip, Pay Advice, Claim Form, Indemnity Form printing
 
 ### Certificate Designer
 - Drag-and-drop visual editor (CertificateDesigner.jsx)
