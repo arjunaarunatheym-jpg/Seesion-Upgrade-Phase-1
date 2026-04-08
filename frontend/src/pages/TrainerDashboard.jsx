@@ -229,8 +229,14 @@ const TrainerDashboard = ({ user, onLogout }) => {
     try {
       const response = await axiosInstance.get(`/trainer-checklist/${sessionId}/assigned-participants`);
       const data = response.data;
-      // Backend now returns { participants: [...], session_id, trainer_role }
-      const participantsList = data.participants || data;
+      // Backend returns { participants: [...], session_id, trainer_role }
+      // Safely extract participants array
+      let participantsList = [];
+      if (Array.isArray(data)) {
+        participantsList = data;
+      } else if (data && Array.isArray(data.participants)) {
+        participantsList = data.participants;
+      }
       
       setSessionParticipants(prev => ({
         ...prev,

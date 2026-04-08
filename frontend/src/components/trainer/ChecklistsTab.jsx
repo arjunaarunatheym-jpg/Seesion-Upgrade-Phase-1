@@ -25,8 +25,11 @@ const ChecklistsTab = ({
 
   const participants = sessionParticipants[selectedSession?.id] || [];
 
+  // Safety: ensure participants is always an array of objects
+  const safeParticipants = Array.isArray(participants) ? participants : [];
+
   const filteredParticipants = useMemo(() => {
-    let list = participants;
+    let list = safeParticipants;
     // Search filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -44,15 +47,15 @@ const ChecklistsTab = ({
       list = list.filter(p => p.checklist_submitted);
     }
     return list;
-  }, [participants, searchQuery, filter, user?.id]);
+  }, [safeParticipants, searchQuery, filter, user?.id]);
 
   const stats = useMemo(() => {
-    const total = participants.length;
-    const mine = participants.filter(p => p.claimed_by_trainer_id === user?.id || p.submitted_by_trainer_id === user?.id).length;
-    const completed = participants.filter(p => p.checklist_submitted).length;
-    const unclaimed = participants.filter(p => !p.claimed_by_trainer_id && !p.checklist_submitted).length;
+    const total = safeParticipants.length;
+    const mine = safeParticipants.filter(p => p.claimed_by_trainer_id === user?.id || p.submitted_by_trainer_id === user?.id).length;
+    const completed = safeParticipants.filter(p => p.checklist_submitted).length;
+    const unclaimed = safeParticipants.filter(p => !p.claimed_by_trainer_id && !p.checklist_submitted).length;
     return { total, mine, completed, unclaimed };
-  }, [participants, user?.id]);
+  }, [safeParticipants, user?.id]);
 
   const handleClaim = async (participantId) => {
     if (!selectedSession) return;

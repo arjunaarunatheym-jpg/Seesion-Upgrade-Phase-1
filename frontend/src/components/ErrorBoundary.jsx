@@ -3,7 +3,7 @@ import React from 'react';
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, showDetails: false };
   }
 
   static getDerivedStateFromError(error) {
@@ -13,6 +13,21 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo);
   }
+
+  handleClearAndReload = () => {
+    // Clear service worker caches and reload
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        for (const name of names) caches.delete(name);
+      });
+    }
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        for (const reg of regs) reg.unregister();
+      });
+    }
+    setTimeout(() => window.location.reload(true), 500);
+  };
 
   render() {
     if (this.state.hasError) {
@@ -25,14 +40,34 @@ class ErrorBoundary extends React.Component {
               </svg>
             </div>
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Something went wrong</h2>
-            <p className="text-gray-500 mb-6 text-sm">An unexpected error occurred. Please try refreshing the page.</p>
+            <p className="text-gray-500 mb-4 text-sm">An unexpected error occurred. Try clearing cache first.</p>
+            <div className="flex gap-2 justify-center mb-4">
+              <button
+                onClick={this.handleClearAndReload}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+                data-testid="error-boundary-reload"
+              >
+                Clear Cache & Reload
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm"
+              >
+                Quick Reload
+              </button>
+            </div>
             <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-              data-testid="error-boundary-reload"
+              onClick={() => this.setState({ showDetails: !this.state.showDetails })}
+              className="text-xs text-gray-400 underline"
             >
-              Refresh Page
+              {this.state.showDetails ? 'Hide' : 'Show'} error details
             </button>
+            {this.state.showDetails && this.state.error && (
+              <pre className="mt-3 text-left text-xs bg-gray-100 p-3 rounded-lg overflow-auto max-h-40 text-red-600">
+                {this.state.error.toString()}
+                {this.state.error.stack && '\n\n' + this.state.error.stack.substring(0, 500)}
+              </pre>
+            )}
           </div>
         </div>
       );
