@@ -743,10 +743,6 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
               <Users className="w-4 h-4 sm:mr-1.5" />
               <span className="hidden sm:inline">My Details</span>
             </TabsTrigger>
-            <TabsTrigger value="certificates" data-testid="certificates-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
-              <Award className="w-4 h-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Certs</span>
-            </TabsTrigger>
             <TabsTrigger value="tests" data-testid="tests-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
               <ClipboardCheck className="w-4 h-4 sm:mr-1.5" />
               <span className="hidden sm:inline">Tests</span>
@@ -754,6 +750,10 @@ const ParticipantDashboard = ({ user, onLogout, onUserUpdate }) => {
             <TabsTrigger value="checklists" data-testid="checklists-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
               <ClipboardCheck className="w-4 h-4 sm:mr-1.5" />
               <span className="hidden sm:inline">Checklists</span>
+            </TabsTrigger>
+            <TabsTrigger value="certificates" data-testid="certificates-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
+              <Award className="w-4 h-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Certs</span>
             </TabsTrigger>
             <TabsTrigger value="settings" data-testid="settings-tab" className="flex-1 min-w-[80px] md:min-w-0 text-xs sm:text-sm">
               <Settings className="w-4 h-4 sm:mr-1.5" />
