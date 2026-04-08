@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Calendar, Plus, Trash2, Edit, Upload, DollarSign, FileText } from "lucide-react";
+import { Calendar, Plus, Trash2, Edit, Upload, DollarSign, FileText, UserPlus } from "lucide-react";
 import { SearchBar } from "../SearchBar";
 
 // Initial form state for session creation
@@ -89,6 +89,10 @@ const SessionsTab = ({
   // Edit session states
   const [editingSession, setEditingSession] = useState(null);
   const [editSessionDialogOpen, setEditSessionDialogOpen] = useState(false);
+  
+  // Add single participant states
+  const [addParticipantSession, setAddParticipantSession] = useState(null);
+  const [singleParticipant, setSingleParticipant] = useState({ full_name: "", id_number: "", email: "", phone_number: "" });
   
   // Search and filter states
   const [sessionsSearch, setSessionsSearch] = useState("");
@@ -377,6 +381,34 @@ const SessionsTab = ({
       onRefresh();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to update session");
+    }
+  };
+
+  // Add single participant to a session
+  const handleAddSingleParticipant = async () => {
+    if (!singleParticipant.full_name || !singleParticipant.id_number) {
+      toast.error("Please fill Full Name and ID Number");
+      return;
+    }
+    if (!addParticipantSession) return;
+    try {
+      const userRes = await axiosInstance.post("/auth/register", {
+        ...singleParticipant,
+        password: singleParticipant.password || "mddrc1",
+        email: singleParticipant.email || "",
+        role: "participant",
+        company_id: addParticipantSession.company_id,
+      });
+      const newId = userRes.data.id;
+      const updatedIds = [...(addParticipantSession.participant_ids || []), newId];
+      await axiosInstance.put(`/sessions/${addParticipantSession.id}`, { participant_ids: updatedIds });
+      toast.success(`Participant ${singleParticipant.full_name} added successfully`);
+      setAddParticipantSession(null);
+      setSingleParticipant({ full_name: "", id_number: "", email: "", phone_number: "" });
+      onRefresh();
+    } catch (error) {
+      const msg = error.response?.data?.detail;
+      toast.error(typeof msg === "string" ? msg : "Failed to add participant");
     }
   };
 
@@ -1127,6 +1159,16 @@ const SessionsTab = ({
                             Bulk Upload
                           </Button>
                           <Button
+                            data-testid={`add-participant-session-${session.id}`}
+                            size="sm"
+                            variant="outline"
+                            className="bg-teal-50 border-teal-200 hover:bg-teal-100 text-teal-700"
+                            onClick={() => setAddParticipantSession(session)}
+                          >
+                            <UserPlus className="w-4 h-4 mr-1" />
+                            Add Participant
+                          </Button>
+                          <Button
                             data-testid={`costing-session-${session.id}`}
                             size="sm"
                             variant="outline"
@@ -1445,6 +1487,40 @@ const SessionsTab = ({
               Save Changes
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Single Participant Dialog */}
+      <Dialog open={addParticipantSession !== null} onOpenChange={(open) => { if (!open) { setAddParticipantSession(null); setSingleParticipant({ full_name: "", id_number: "", email: "", phone_number: "" }); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Participant</DialogTitle>
+            <DialogDescription>
+              Add a single participant to: <strong>{addParticipantSession?.company_name || "Session"}</strong> — {addParticipantSession?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="sp-name">Full Name *</Label>
+              <Input id="sp-name" data-testid="add-participant-name" value={singleParticipant.full_name} onChange={(e) => setSingleParticipant({ ...singleParticipant, full_name: e.target.value })} placeholder="Full Name" />
+            </div>
+            <div>
+              <Label htmlFor="sp-ic">IC / ID Number *</Label>
+              <Input id="sp-ic" data-testid="add-participant-ic" value={singleParticipant.id_number} onChange={(e) => setSingleParticipant({ ...singleParticipant, id_number: e.target.value })} placeholder="990101011234" />
+            </div>
+            <div>
+              <Label htmlFor="sp-email">Email (optional)</Label>
+              <Input id="sp-email" data-testid="add-participant-email" type="email" value={singleParticipant.email} onChange={(e) => setSingleParticipant({ ...singleParticipant, email: e.target.value })} placeholder="john@example.com" />
+            </div>
+            <div>
+              <Label htmlFor="sp-phone">Phone (optional)</Label>
+              <Input id="sp-phone" data-testid="add-participant-phone" type="tel" value={singleParticipant.phone_number} onChange={(e) => setSingleParticipant({ ...singleParticipant, phone_number: e.target.value })} placeholder="+60123456789" />
+            </div>
+            <p className="text-xs text-gray-500 bg-blue-50 p-2 rounded">Default login: IC number / password: mddrc1</p>
+            <Button data-testid="add-participant-submit" onClick={handleAddSingleParticipant} className="w-full">
+              <UserPlus className="w-4 h-4 mr-2" /> Add Participant
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </Card>

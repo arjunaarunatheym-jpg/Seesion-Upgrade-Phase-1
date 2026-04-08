@@ -1199,7 +1199,7 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
               <Card>
                 <CardHeader>
                   <CardTitle>My Assigned Sessions</CardTitle>
-                  <CardDescription>Training sessions you are coordinating</CardDescription>
+                  <CardDescription>Training sessions you are coordinating — grouped by month</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {sessions.length === 0 ? (
@@ -1210,9 +1210,29 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                       <h3 className="text-lg font-semibold text-slate-700 mb-1">No sessions assigned yet</h3>
                       <p className="text-sm text-slate-500 max-w-sm">Sessions will appear here once an admin assigns you as coordinator.</p>
                     </div>
-                  ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {sessions.map((session) => {
+                  ) : (() => {
+                    // Group sessions by month/year
+                    const grouped = {};
+                    sessions.forEach((session) => {
+                      const d = session.start_date ? new Date(session.start_date) : new Date();
+                      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                      const label = d.toLocaleDateString("en-MY", { month: "long", year: "numeric" });
+                      if (!grouped[key]) grouped[key] = { label, sessions: [] };
+                      grouped[key].sessions.push(session);
+                    });
+                    const sortedKeys = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+                    return sortedKeys.map((key) => (
+                      <div key={key} className="mb-8">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="h-px flex-1 bg-gray-200" />
+                          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider px-3 py-1 bg-gray-100 rounded-full" data-testid={`month-group-${key}`}>
+                            {grouped[key].label} ({grouped[key].sessions.length})
+                          </h3>
+                          <div className="h-px flex-1 bg-gray-200" />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {grouped[key].sessions.map((session) => {
                       const stats = sessionStats[session.id] || {};
                       const participantTotal = stats.participantCount || 0;
                       
@@ -1267,61 +1287,109 @@ const CoordinatorDashboard = ({ user, onLogout }) => {
                               </div>
                             </div>
                           </div>
-                          <div className="mt-3 pt-2 border-t flex gap-2">
-                            <Button size="sm" variant="outline" className="flex-1 text-xs h-7"
-                              title="Download Excel Template"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                (async () => {
-                                  try {
-                                    const response = await axiosInstance.get(`/sessions/${session.id}/export-template`, { responseType: 'blob' });
-                                    const url = window.URL.createObjectURL(new Blob([response.data]));
-                                    const link = document.createElement('a');
-                                    link.href = url;
-                                    link.download = `MDDRC_Template_${(session.company_name || "session").replace(/\s+/g, "_").substring(0,30)}_${session.start_date}.xlsx`;
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    link.remove();
-                                    window.URL.revokeObjectURL(url);
-                                    toast.success("Template downloaded");
-                                  } catch { toast.error("Download failed"); }
-                                })();
-                              }}>
-                              <Download className="w-3 h-3 mr-1" /> Template
-                            </Button>
-                            <label className="flex-1">
-                              <Button size="sm" variant="outline" className="w-full text-xs h-7 text-purple-600 border-purple-300"
-                                title="Upload Excel Data"
-                                onClick={(e) => e.stopPropagation()}>
-                                <Upload className="w-3 h-3 mr-1" /> Import
-                              </Button>
-                              <input type="file" accept=".xlsx,.xls" className="hidden"
-                                onChange={(e) => {
+                          <div className="mt-3 pt-2 border-t space-y-2">
+                            {/* Row 1: Template + Import Data */}
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" className="flex-1 text-xs h-7"
+                                title="Download Excel Template"
+                                onClick={(e) => {
                                   e.stopPropagation();
-                                  const file = e.target.files?.[0];
-                                  if (!file) return;
                                   (async () => {
                                     try {
-                                      const formData = new FormData();
-                                      formData.append('file', file);
-                                      const res = await axiosInstance.post(`/sessions/${session.id}/import-data`, formData, {
-                                        headers: { 'Content-Type': 'multipart/form-data' }
-                                      });
-                                      const data = res.data;
-                                      toast.success(`Imported: ${data.test_scores_imported} scores, ${data.attendance_imported} attendance${data.vehicle_checklists_imported ? `, ${data.vehicle_checklists_imported} checklists` : ''}${data.feedback_imported ? `, ${data.feedback_imported} feedback` : ''}`);
-                                      if (data.errors?.length > 0) toast.warning(`${data.errors.length} errors`);
-                                    } catch { toast.error("Import failed"); }
-                                    e.target.value = '';
+                                      const response = await axiosInstance.get(`/sessions/${session.id}/export-template`, { responseType: 'blob' });
+                                      const url = window.URL.createObjectURL(new Blob([response.data]));
+                                      const link = document.createElement('a');
+                                      link.href = url;
+                                      link.download = `MDDRC_Template_${(session.company_name || "session").replace(/\s+/g, "_").substring(0,30)}_${session.start_date}.xlsx`;
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      link.remove();
+                                      window.URL.revokeObjectURL(url);
+                                      toast.success("Template downloaded");
+                                    } catch { toast.error("Download failed"); }
                                   })();
-                                }}
-                              />
-                            </label>
+                                }}>
+                                <Download className="w-3 h-3 mr-1" /> Template
+                              </Button>
+                              <label className="flex-1">
+                                <Button size="sm" variant="outline" className="w-full text-xs h-7 text-purple-600 border-purple-300"
+                                  title="Upload Excel Data"
+                                  onClick={(e) => e.stopPropagation()}>
+                                  <Upload className="w-3 h-3 mr-1" /> Import
+                                </Button>
+                                <input type="file" accept=".xlsx,.xls" className="hidden"
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    (async () => {
+                                      try {
+                                        const formData = new FormData();
+                                        formData.append('file', file);
+                                        const res = await axiosInstance.post(`/sessions/${session.id}/import-data`, formData, {
+                                          headers: { 'Content-Type': 'multipart/form-data' }
+                                        });
+                                        const data = res.data;
+                                        toast.success(`Imported: ${data.test_scores_imported} scores, ${data.attendance_imported} attendance${data.vehicle_checklists_imported ? `, ${data.vehicle_checklists_imported} checklists` : ''}${data.feedback_imported ? `, ${data.feedback_imported} feedback` : ''}`);
+                                        if (data.errors?.length > 0) toast.warning(`${data.errors.length} errors`);
+                                      } catch { toast.error("Import failed"); }
+                                      e.target.value = '';
+                                    })();
+                                  }}
+                                />
+                              </label>
+                            </div>
+                            {/* Row 2: Bulk Upload Participants + Add Single Participant */}
+                            <div className="flex gap-2">
+                              <label className="flex-1">
+                                <Button size="sm" variant="outline" className="w-full text-xs h-7 text-indigo-600 border-indigo-300"
+                                  data-testid={`bulk-upload-coord-${session.id}`}
+                                  title="Bulk upload participants from Excel"
+                                  onClick={(e) => e.stopPropagation()}>
+                                  <Upload className="w-3 h-3 mr-1" /> Bulk Participants
+                                </Button>
+                                <input type="file" accept=".xlsx,.xls" className="hidden"
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    (async () => {
+                                      try {
+                                        setUploading(true);
+                                        const formData = new FormData();
+                                        formData.append('file', file);
+                                        const res = await axiosInstance.post(`/sessions/${session.id}/participants/bulk-upload`, formData, {
+                                          headers: { 'Content-Type': 'multipart/form-data' }
+                                        });
+                                        toast.success(`Uploaded ${res.data.total_uploaded} participant(s)`);
+                                        loadSessions();
+                                      } catch (err) { toast.error(err.response?.data?.detail || "Bulk upload failed"); }
+                                      finally { setUploading(false); }
+                                      e.target.value = '';
+                                    })();
+                                  }}
+                                />
+                              </label>
+                              <Button size="sm" variant="outline" className="flex-1 text-xs h-7 text-teal-600 border-teal-300"
+                                data-testid={`add-participant-coord-${session.id}`}
+                                title="Add a single participant"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedSession(session);
+                                  selectSession(session);
+                                  setAddParticipantDialogOpen(true);
+                                }}>
+                                <Plus className="w-3 h-3 mr-1" /> Add Participant
+                              </Button>
+                            </div>
                           </div>
                         </button>
                       );
                     })}
-                  </div>
-                  )}
+                        </div>
+                      </div>
+                    ));
+                  })()}
                 </CardContent>
               </Card>
             </TabsContent>
