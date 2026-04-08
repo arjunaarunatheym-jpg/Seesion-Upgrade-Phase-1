@@ -112,20 +112,25 @@ const TrainerChecklist = ({ user }) => {
       
       // Check for existing checklist
       console.log('Checking for existing checklist...');
+      let hasExistingChecklist = false;
       try {
         const existingRes = await axiosInstance.get(`/vehicle-checklists/${sessionId}/${participantId}`);
-        console.log('Existing checklist found:', existingRes.data);
-        setExistingChecklist(existingRes.data);
-        setIsCompleted(existingRes.data.verification_status === 'completed');
-        
-        // Load existing items
-        if (existingRes.data.checklist_items) {
-          setChecklistItems(existingRes.data.checklist_items);
+        const existingData = existingRes.data;
+        // Backend may return [] or {} or a valid checklist object
+        if (existingData && !Array.isArray(existingData) && existingData.id && existingData.checklist_items && existingData.checklist_items.length > 0) {
+          console.log('Existing checklist found:', existingData);
+          setExistingChecklist(existingData);
+          setIsCompleted(existingData.verification_status === 'completed');
+          setChecklistItems(existingData.checklist_items);
+          hasExistingChecklist = true;
         }
       } catch (existingError) {
-        console.log('No existing checklist found, creating new one');
-        
-        // Initialize checklist items from template
+        console.log('No existing checklist found');
+      }
+      
+      // If no valid existing checklist, initialize from template
+      if (!hasExistingChecklist) {
+        console.log('Initializing checklist from template');
         if (template && template.items && template.items.length > 0) {
           const items = template.items.map(item => ({
             item: typeof item === 'string' ? item : item.item || item.name || 'Item',
@@ -133,12 +138,12 @@ const TrainerChecklist = ({ user }) => {
             comments: "",
             photo_url: null
           }));
-          console.log('Initialized checklist items:', items);
+          console.log('Initialized checklist items:', items.length);
           setChecklistItems(items);
         } else {
           console.error('Template or items missing:', template);
           toast.error("No checklist items in template");
-          setChecklistItems([]); // Set empty array to prevent undefined error
+          setChecklistItems([]);
         }
       }
       
