@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { axiosInstance } from "../App";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { CheckCircle2, ArrowLeft, Upload, Camera, ChevronLeft, ChevronRight, Use
 const TrainerChecklist = ({ user }) => {
   const { sessionId, participantId } = useParams();
   const navigate = useNavigate();
+  const loadIdRef = useRef(0);
   
   const [participant, setParticipant] = useState(null);
   const [vehicle, setVehicle] = useState(null);
@@ -28,6 +29,13 @@ const TrainerChecklist = ({ user }) => {
   const [currentIndex, setCurrentIndex] = useState(-1);
 
   useEffect(() => {
+    // Reset state when switching participants to prevent stale data
+    setChecklistItems([]);
+    setExistingChecklist(null);
+    setIsCompleted(false);
+    setParticipant(null);
+    setVehicle(null);
+    setTemplate(null);
     loadData();
     loadAllParticipants();
   }, [participantId]);
@@ -55,24 +63,24 @@ const TrainerChecklist = ({ user }) => {
   };
 
   const loadData = async () => {
+    // Prevent stale closures from race conditions
+    const thisLoadId = ++loadIdRef.current;
+    
     try {
       setLoading(true);
       
       // Load participant details
-      console.log('Loading participant:', participantId);
       const participantRes = await axiosInstance.get(`/users/${participantId}`);
-      console.log('Participant loaded:', participantRes.data);
+      if (loadIdRef.current !== thisLoadId) return; // stale
       setParticipant(participantRes.data);
       
       // Load vehicle details
-      console.log('Loading vehicle details for session:', sessionId, 'participant:', participantId);
       try {
         const vehicleRes = await axiosInstance.get(`/vehicle-details/${sessionId}/${participantId}`);
-        console.log('Vehicle loaded:', vehicleRes.data);
+        if (loadIdRef.current !== thisLoadId) return;
         setVehicle(vehicleRes.data);
       } catch (vehicleError) {
-        console.error('Vehicle details not found:', vehicleError);
-        toast.error("Participant hasn't entered vehicle details yet");
+        if (loadIdRef.current !== thisLoadId) return;
         setVehicle({ 
           registration_number: 'Not provided', 
           vehicle_model: 'Not provided', 
@@ -81,81 +89,84 @@ const TrainerChecklist = ({ user }) => {
       }
       
       // Load session to get program_id
-      console.log('Loading session:', sessionId);
       const sessionRes = await axiosInstance.get(`/sessions/${sessionId}`);
+      if (loadIdRef.current !== thisLoadId) return;
       const programId = sessionRes.data.program_id;
-      console.log('Program ID:', programId);
       
       // Load checklist template
-      console.log('Loading checklist template for program:', programId);
       const templateRes = await axiosInstance.get(`/checklists/templates/program/${programId}`);
-      console.log('Template loaded:', templateRes.data);
+      if (loadIdRef.current !== thisLoadId) return;
       
-      // API returns a single template object (not an array)
-      const template = templateRes.data;
-      if (!template || !template.program_id) {
+      const tmpl = templateRes.data;
+      if (!tmpl || !tmpl.program_id) {
         toast.error("No checklist template found for this program");
-        setChecklistItems([]); // Ensure checklistItems is initialized
+        setChecklistItems([]);
         setLoading(false);
         return;
       }
       
-      setTemplate(template);
+      setTemplate(tmpl);
       
-      // Ensure template has items
-      if (!template.items || template.items.length === 0) {
+      if (!tmpl.items || tmpl.items.length === 0) {
         toast.error("Checklist template has no items. Please contact administrator.");
         setChecklistItems([]);
         setLoading(false);
         return;
       }
       
-      // Check for existing checklist
-      console.log('Checking for existing checklist...');
+      // Check for existing trainer checklist from vehicle_checklists collection
       let hasExistingChecklist = false;
       try {
         const existingRes = await axiosInstance.get(`/vehicle-checklists/${sessionId}/${participantId}`);
+        if (loadIdRef.current !== thisLoadId) return;
         const existingData = existingRes.data;
-        // Backend may return [] or {} or a valid checklist object
-        if (existingData && !Array.isArray(existingData) && existingData.id && existingData.checklist_items && existingData.checklist_items.length > 0) {
-          console.log('Existing checklist found:', existingData);
-          setExistingChecklist(existingData);
-          setIsCompleted(existingData.verification_status === 'completed');
-          setChecklistItems(existingData.checklist_items);
-          hasExistingChecklist = true;
+        
+        // Response can be an array or a single object
+        let found = null;
+        if (Array.isArray(existingData)) {
+          // Find first valid checklist with items
+          found = existingData.find(c => c && c.id && ((c.checklist_items && c.checklist_items.length > 0) || (c.items && c.items.length > 0)));
+        } else if (existingData && existingData.id) {
+          found = existingData;
+        }
+        
+        if (found) {
+          const items = found.checklist_items || found.items || [];
+          if (items.length > 0) {
+            setExistingChecklist(found);
+            setIsCompleted(true);
+            setChecklistItems(items);
+            hasExistingChecklist = true;
+          }
         }
       } catch (existingError) {
-        console.log('No existing checklist found');
+        // No existing checklist - that's fine
       }
       
       // If no valid existing checklist, initialize from template
       if (!hasExistingChecklist) {
-        console.log('Initializing checklist from template');
-        if (template && template.items && template.items.length > 0) {
-          const items = template.items.map(item => ({
+        if (tmpl.items && tmpl.items.length > 0) {
+          const items = tmpl.items.map(item => ({
             item: typeof item === 'string' ? item : item.item || item.name || 'Item',
             status: "good",
             comments: "",
             photo_url: null
           }));
-          console.log('Initialized checklist items:', items.length);
           setChecklistItems(items);
         } else {
-          console.error('Template or items missing:', template);
-          toast.error("No checklist items in template");
           setChecklistItems([]);
         }
       }
       
+      if (loadIdRef.current !== thisLoadId) return;
       setLoading(false);
     } catch (error) {
-      console.error('Load error:', error);
-      console.error('Error response:', error.response?.data);
+      if (loadIdRef.current !== thisLoadId) return;
       const errorMessage = typeof error.response?.data?.detail === 'string' 
         ? error.response.data.detail 
         : error.response?.data?.message || error.message || "Failed to load checklist data";
       toast.error(errorMessage);
-      setChecklistItems([]); // Ensure checklistItems is initialized even on error
+      setChecklistItems([]);
       setLoading(false);
     }
   };

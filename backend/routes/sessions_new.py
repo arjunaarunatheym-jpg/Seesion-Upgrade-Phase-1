@@ -451,7 +451,10 @@ async def get_enriched_participants(session_id: str, current_user: User = Depend
     attendances = await db.attendance.find({"session_id": session_id, "participant_id": {"$in": participant_ids}}, {"_id": 0}).to_list(1000)
     accesses = await db.participant_access.find({"session_id": session_id, "participant_id": {"$in": participant_ids}}, {"_id": 0}).to_list(1000)
     test_results = await db.test_results.find({"session_id": session_id, "participant_id": {"$in": participant_ids}}, {"_id": 0}).to_list(2000)
-    checklists = await db.checklist_submissions.find({"session_id": session_id, "participant_id": {"$in": participant_ids}}, {"_id": 0}).to_list(1000)
+    checklists = await db.vehicle_checklists.find({"session_id": session_id, "participant_id": {"$in": participant_ids}, "interval": "trainer_inspection"}, {"_id": 0}).to_list(1000)
+    # Fallback: also check checklist_submissions
+    if not checklists:
+        checklists = await db.checklist_submissions.find({"session_id": session_id, "participant_id": {"$in": participant_ids}}, {"_id": 0}).to_list(1000)
     feedbacks = await db.course_feedback.find({"session_id": session_id, "participant_id": {"$in": participant_ids}}, {"_id": 0}).to_list(1000)
     
     # Create lookup maps
@@ -517,9 +520,14 @@ async def get_session_status(session_id: str, current_user: User = Depends(get_c
         "test_type": {"$in": ["post", "post_test"]}
     })
     
-    checklist_complete = await db.checklist_submissions.count_documents({
-        "session_id": session_id
+    checklist_complete = await db.vehicle_checklists.count_documents({
+        "session_id": session_id,
+        "interval": "trainer_inspection"
     })
+    if checklist_complete == 0:
+        checklist_complete = await db.checklist_submissions.count_documents({
+            "session_id": session_id
+        })
     
     feedback_complete = await db.course_feedback.count_documents({
         "session_id": session_id
@@ -578,9 +586,15 @@ async def get_completion_checklist(session_id: str, current_user: User = Depends
         })
         checklist["all_post_tests_completed"] = post_test_count >= total
         
-        checklist_count = await db.checklist_submissions.count_documents({
-            "session_id": session_id
+        checklist_count = await db.vehicle_checklists.count_documents({
+            "session_id": session_id,
+            "interval": "trainer_inspection"
         })
+        # Also count from checklist_submissions as fallback
+        if checklist_count == 0:
+            checklist_count = await db.checklist_submissions.count_documents({
+                "session_id": session_id
+            })
         checklist["all_checklists_submitted"] = checklist_count >= total
         
         feedback_count = await db.course_feedback.count_documents({
@@ -1252,7 +1266,7 @@ async def admin_mark_session_complete(session_id: str, data: dict, current_user:
         pass
     
     return {
-        "message": f"Session marked as completed by admin",
+        "message": "Session marked as completed by admin",
         "session_id": session_id,
         "reason": reason
     }
@@ -1629,7 +1643,7 @@ async def export_session_template(session_id: str, current_user: User = Depends(
         ("MDDRC Session Data Import Template", Font(bold=True, size=16)),
         ("", None),
         ("Sheet 1: Pre/Post Tests", Font(bold=True, size=12)),
-        (f"- Enter raw marks: 'Marks Obtained' and 'Total Marks' for each test", None),
+        ("- Enter raw marks: 'Marks Obtained' and 'Total Marks' for each test", None),
         (f"- System will auto-calculate percentage and pass/fail (pass mark: {pass_pct}%)", None),
         ("- Do NOT modify the IC Number column - it's used for matching", None),
         ("- Leave blank if no score available", None),

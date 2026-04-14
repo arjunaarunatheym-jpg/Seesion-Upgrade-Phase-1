@@ -18,7 +18,7 @@ Endpoints: 12+
 - GET /chief-trainer-feedback/{session_id}
 """
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
-from typing import List
+from typing import List, Any
 from datetime import datetime
 import uuid
 
@@ -53,20 +53,20 @@ class CourseFeedback(BaseModel):
     participant_id: str
     session_id: str
     program_id: str
-    responses: dict = {}
+    responses: Any = {}
     submitted_at: datetime = Field(default_factory=get_malaysia_time)
 
 class FeedbackSubmit(BaseModel):
     session_id: str
     program_id: str
-    responses: dict
+    responses: Any
 
 class CoordinatorFeedback(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str
     coordinator_id: str
-    responses: dict = {}
+    responses: Any = {}
     submitted_at: datetime = Field(default_factory=get_malaysia_time)
 
 class ChiefTrainerFeedback(BaseModel):
@@ -74,7 +74,7 @@ class ChiefTrainerFeedback(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str
     trainer_id: str
-    responses: dict = {}
+    responses: Any = {}
     submitted_at: datetime = Field(default_factory=get_malaysia_time)
 
 # Default templates
@@ -165,7 +165,7 @@ async def delete_feedback_template(template_id: str, current_user: User = Depend
 
 
 # Course Feedback Routes
-@router.post("/feedback/submit", response_model=CourseFeedback)
+@router.post("/feedback/submit")
 async def submit_feedback(feedback_data: FeedbackSubmit, current_user: User = Depends(get_current_user)):
     """Submit course feedback"""
     if current_user.role != "participant":
@@ -200,7 +200,7 @@ async def submit_feedback(feedback_data: FeedbackSubmit, current_user: User = De
     return feedback_obj
 
 
-@router.get("/feedback/session/{session_id}", response_model=List[CourseFeedback])
+@router.get("/feedback/session/{session_id}")
 async def get_session_feedback(session_id: str, current_user: User = Depends(get_current_user)):
     """Get all feedback for a session"""
     if current_user.role not in ["admin", "supervisor", "coordinator", "trainer"]:

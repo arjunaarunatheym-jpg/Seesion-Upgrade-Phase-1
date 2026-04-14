@@ -469,7 +469,20 @@ async def get_vehicle_details(session_id: str, participant_id: str, current_user
 
 @router.get("/vehicle-checklists/{session_id}/{participant_id}")
 async def get_vehicle_checklists(session_id: str, participant_id: str, current_user: User = Depends(get_current_user)):
-    """Get vehicle checklist for a participant"""
+    """Get vehicle checklist for a participant - checks both collections"""
+    # Check vehicle_checklists first (trainer inspection checklists)
+    trainer_checklist = await db.vehicle_checklists.find_one({
+        "participant_id": participant_id,
+        "session_id": session_id,
+        "interval": "trainer_inspection"
+    }, {"_id": 0})
+    
+    if trainer_checklist:
+        if isinstance(trainer_checklist.get('submitted_at'), str):
+            trainer_checklist['submitted_at'] = datetime.fromisoformat(trainer_checklist['submitted_at'])
+        return [trainer_checklist]
+    
+    # Fallback to checklist_submissions
     checklists = await db.checklist_submissions.find({
         "participant_id": participant_id,
         "session_id": session_id
@@ -534,12 +547,11 @@ async def submit_trainer_checklist(checklist_data: TrainerChecklistSubmit, curre
 
     access = await get_or_create_participant_access(
         checklist_data.participant_id,
-        checklist_data.session_id,
-        session.get("program_id")
+        checklist_data.session_id
     )
     if access:
         await db.participant_access.update_one(
-            {"id": access["id"]},
+            {"id": access.id},
             {"$set": {"trainer_checklist_submitted": True, "updated_at": now.isoformat()}}
         )
 
