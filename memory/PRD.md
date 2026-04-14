@@ -54,6 +54,12 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 ### Test Results Review
 - Backend enriches test results with questions from original test for review
 
+### Bug Fixes (April 14, 2026)
+- **Fixed**: Trainer checklist "No checklist items available" for participant 2 — state reset on navigation + stale closure prevention with loadIdRef
+- **Fixed**: Feedback submission 422 error — `FeedbackSubmit.responses` changed from `dict` to `Any` to accept array format from frontend
+- **Fixed**: Coordinator visibility of checklists — completion-checklist, session-status, and enriched-participants endpoints now query `vehicle_checklists` collection (not just `checklist_submissions`)
+- **Fixed**: `/vehicle-checklists/{session_id}/{participant_id}` now checks `vehicle_checklists` collection first for trainer inspection checklists
+
 ## P0 — In Progress / Pending
 - System-wide digital signature audit & implementation (Invoices, Receipts, Payslips, Pay Advice, EA Forms, Claim Forms, Credit Notes)
 
@@ -68,5 +74,7 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - Native Mobile App (Capacitor)
 
 ## Refactoring Backlog
+- Break down `sessions_new.py` (~2300+ lines) into smaller route modules
 - Delete CertificateAdjuster.jsx (dead code)
 - Extract HTML generators from MarketingDashboard.jsx (~1700 lines) to utils
+- Mobile responsiveness audit on older Admin/Coordinator tables
