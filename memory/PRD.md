@@ -54,11 +54,23 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 ### Test Results Review
 - Backend enriches test results with questions from original test for review
 
+### Payment Reversal System (April 18, 2026) — NEW
+- **Super Admin only** access (role check + specific email whitelist)
+- **3-Step Formal Flow**: 
+  1. Select payment → Preview impact (affected credit notes, journal entries, invoice status change)
+  2. Enter mandatory reason (min 10 characters)
+  3. Confirm & execute
+- **Full reversal actions**: Payment status → "reversed", credit notes → "voided", journal entries → "voided", invoice status reverted
+- **Comprehensive audit trail**: Logged to super_admin_audit_log, finance_audit_log, and audit_trail collections
+- **Reversal History tab**: Shows all past reversals with date, company, amount, reason
+- **Finance portal indicators**: REVERSED badge on payments, VOIDED badge on credit notes
+- **Entity audit trail API**: `GET /api/superadmin/audit-trail/{entity_type}/{entity_id}`
+
 ### Bug Fixes (April 14, 2026)
-- **Fixed**: Trainer checklist "No checklist items available" for participant 2 — state reset on navigation + stale closure prevention with loadIdRef
-- **Fixed**: Feedback submission 422 error — `FeedbackSubmit.responses` changed from `dict` to `Any` to accept array format from frontend
-- **Fixed**: Coordinator visibility of checklists — completion-checklist, session-status, and enriched-participants endpoints now query `vehicle_checklists` collection (not just `checklist_submissions`)
-- **Fixed**: `/vehicle-checklists/{session_id}/{participant_id}` now checks `vehicle_checklists` collection first for trainer inspection checklists
+- Fixed: Trainer checklist "No checklist items available" — state reset on navigation + stale closure prevention
+- Fixed: Feedback submission 422 error — `FeedbackSubmit.responses` changed from `dict` to `Any`
+- Fixed: Coordinator visibility of checklists — endpoints now query `vehicle_checklists` collection
+- Fixed: `/vehicle-checklists/` endpoint now checks `vehicle_checklists` collection first
 
 ## P0 — In Progress / Pending
 - System-wide digital signature audit & implementation (Invoices, Receipts, Payslips, Pay Advice, EA Forms, Claim Forms, Credit Notes)
