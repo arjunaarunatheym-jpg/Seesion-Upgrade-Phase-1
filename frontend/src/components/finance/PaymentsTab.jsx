@@ -292,25 +292,35 @@ const PaymentsTab = ({
           ) : (
             <div className="space-y-3">
               {payments.slice(0, 10).map((payment) => (
-                <div key={payment.id} className="p-3 bg-gray-50 rounded-lg">
+                <div key={payment.id} className={`p-3 rounded-lg ${payment.status === 'reversed' ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="font-medium">{payment.invoice_number}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{payment.invoice_number}</p>
+                        {payment.status === 'reversed' && (
+                          <span className="px-2 py-0.5 text-xs font-bold bg-red-100 text-red-700 rounded" data-testid="reversed-badge">REVERSED</span>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-500">{payment.payment_date}</p>
+                      {payment.status === 'reversed' && payment.reversal_reason && (
+                        <p className="text-xs text-red-600 mt-1">Reason: {payment.reversal_reason}</p>
+                      )}
                     </div>
                     <div className="text-right flex items-center gap-2">
                       <div>
-                        <p className="font-bold text-green-600">RM {payment.amount?.toLocaleString()}</p>
+                        <p className={`font-bold ${payment.status === 'reversed' ? 'text-red-400 line-through' : 'text-green-600'}`}>RM {payment.amount?.toLocaleString()}</p>
                         <p className="text-xs text-gray-500">{payment.payment_method}</p>
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => handlePrintReceipt(payment)}
-                        title="Print Receipt"
-                      >
-                        <Receipt className="w-4 h-4 text-purple-600" />
-                      </Button>
+                      {payment.status !== 'reversed' && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handlePrintReceipt(payment)}
+                          title="Print Receipt"
+                        >
+                          <Receipt className="w-4 h-4 text-purple-600" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -165,6 +165,7 @@ const CreditNotesTab = ({
                 <SelectItem value="draft">Draft</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="issued">Issued</SelectItem>
+                <SelectItem value="voided">Voided</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="default" onClick={() => setShowCreateDialog(true)} data-testid="create-credit-note-btn">
@@ -243,10 +244,14 @@ const CreditNotesTab = ({
                               <Badge className={
                                 cn.status === 'issued' ? 'bg-green-500' : 
                                 cn.status === 'approved' ? 'bg-blue-500' : 
+                                cn.status === 'voided' ? 'bg-red-500' :
                                 'bg-yellow-500'
                               }>
                                 {cn.status}
                               </Badge>
+                              {cn.status === 'voided' && cn.void_reason && (
+                                <p className="text-xs text-red-500 mt-1">{cn.void_reason}</p>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-center">
                               <div className="flex items-center justify-center gap-1">

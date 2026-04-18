@@ -72,6 +72,16 @@ const SuperAdminPortal = () => {
   const [editInvoiceDialog, setEditInvoiceDialog] = useState({ open: false, invoice: null });
   const [editJournalDialog, setEditJournalDialog] = useState({ open: false, entry: null });
 
+  // Payment Reversal
+  const [reversalPayments, setReversalPayments] = useState([]);
+  const [reversalPreview, setReversalPreview] = useState(null);
+  const [reversalStep, setReversalStep] = useState(0); // 0=list, 1=preview, 2=reason, 3=confirm
+  const [reversalReason, setReversalReason] = useState('');
+  const [reversalExecuting, setReversalExecuting] = useState(false);
+  const [reversalHistory, setReversalHistory] = useState([]);
+  const [reversalResult, setReversalResult] = useState(null);
+  const [reversalSearch, setReversalSearch] = useState('');
+
   useEffect(() => {
     loadDashboard();
   }, []);
@@ -169,6 +179,61 @@ const SuperAdminPortal = () => {
       toast.error('Failed to load settings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Payment Reversal Functions
+  const loadReversalPayments = async () => {
+    setLoading(true);
+    try {
+      const [paymentsRes, historyRes] = await Promise.all([
+        axiosInstance.get('/superadmin/payments-for-reversal'),
+        axiosInstance.get('/superadmin/payment-reversals')
+      ]);
+      setReversalPayments(paymentsRes.data || []);
+      setReversalHistory(historyRes.data || []);
+    } catch (error) {
+      toast.error('Failed to load payments');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePreviewReversal = async (paymentId) => {
+    setLoading(true);
+    try {
+      const response = await axiosInstance.get(`/superadmin/payment-reversal/preview/${paymentId}`);
+      setReversalPreview(response.data);
+      setReversalStep(1);
+      setReversalReason('');
+      setReversalResult(null);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to load preview');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExecuteReversal = async () => {
+    if (reversalReason.length < 10) {
+      toast.error('Reason must be at least 10 characters');
+      return;
+    }
+    setReversalExecuting(true);
+    try {
+      const response = await axiosInstance.post('/superadmin/payment-reversal/execute', {
+        payment_id: reversalPreview.payment.id,
+        reason: reversalReason,
+        confirm: true
+      });
+      setReversalResult(response.data);
+      setReversalStep(3);
+      toast.success('Payment reversed successfully');
+      loadReversalPayments(); // refresh
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Reversal failed');
+    } finally {
+      setReversalExecuting(false);
     }
   };
 
@@ -522,6 +587,9 @@ const SuperAdminPortal = () => {
           </TabsTrigger>
           <TabsTrigger value="session-data" className="flex items-center gap-1">
             <Activity className="w-4 h-4" /> Session Data
+          </TabsTrigger>
+          <TabsTrigger value="reversals" className="flex items-center gap-1" onClick={loadReversalPayments}>
+            <RefreshCw className="w-4 h-4" /> Reversals
           </TabsTrigger>
           <TabsTrigger value="audit" className="flex items-center gap-1" onClick={loadAuditLog}>
             <Clock className="w-4 h-4" /> Audit Log
@@ -1095,6 +1163,418 @@ const SuperAdminPortal = () => {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Audit Log Tab */}
+        {/* Payment Reversals Tab */}
+        <TabsContent value="reversals">
+          <div className="space-y-6">
+            {/* Step indicator */}
+            {reversalStep > 0 && (
+              <div className="flex items-center gap-2 mb-4">
+                <Button variant="outline" size="sm" onClick={() => { setReversalStep(0); setReversalPreview(null); setReversalResult(null); }}>
+                  <ArrowLeft className="w-4 h-4 mr-1" /> Back to Payments
+                </Button>
+                <div className="flex items-center gap-1 text-sm text-gray-500 ml-4">
+                  <span className={`px-2 py-1 rounded ${reversalStep >= 1 ? 'bg-red-100 text-red-800 font-semibold' : 'bg-gray-100'}`}>1. Review</span>
+                  <span className="text-gray-300">&rarr;</span>
+                  <span className={`px-2 py-1 rounded ${reversalStep >= 2 ? 'bg-red-100 text-red-800 font-semibold' : 'bg-gray-100'}`}>2. Reason</span>
+                  <span className="text-gray-300">&rarr;</span>
+                  <span className={`px-2 py-1 rounded ${reversalStep >= 3 ? 'bg-green-100 text-green-800 font-semibold' : 'bg-gray-100'}`}>3. Complete</span>
+                </div>
+              </div>
+            )}
+
+            {/* Step 0: Payment List */}
+            {reversalStep === 0 && (
+              <>
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <RefreshCw className="w-5 h-5 text-red-600" />
+                          Payment Reversal
+                        </CardTitle>
+                        <CardDescription>Select a payment to reverse. This will void all linked credit notes and journal entries.</CardDescription>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Search by company, receipt..."
+                          value={reversalSearch}
+                          onChange={(e) => setReversalSearch(e.target.value)}
+                          className="w-64"
+                          data-testid="reversal-search"
+                        />
+                        <Button variant="outline" onClick={loadReversalPayments}>
+                          <RefreshCw className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? (
+                      <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Receipt #</TableHead>
+                              <TableHead>Company</TableHead>
+                              <TableHead>Invoice</TableHead>
+                              <TableHead className="text-right">Amount (RM)</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Method</TableHead>
+                              <TableHead className="text-center">Action</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {reversalPayments
+                              .filter(p => {
+                                if (!reversalSearch) return true;
+                                const s = reversalSearch.toLowerCase();
+                                return (p.company_name || '').toLowerCase().includes(s) ||
+                                  (p.receipt_number || '').toLowerCase().includes(s) ||
+                                  (p.invoice_number || '').toLowerCase().includes(s) ||
+                                  (p.payment_method || '').toLowerCase().includes(s);
+                              })
+                              .map(payment => (
+                              <TableRow key={payment.id}>
+                                <TableCell className="font-mono text-sm">{payment.receipt_number || '-'}</TableCell>
+                                <TableCell className="max-w-[200px] truncate">{payment.company_name || '-'}</TableCell>
+                                <TableCell className="font-mono text-sm">{payment.invoice_number || '-'}</TableCell>
+                                <TableCell className="text-right font-semibold">{(payment.amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</TableCell>
+                                <TableCell className="text-sm">{payment.payment_date || '-'}</TableCell>
+                                <TableCell className="text-sm">{payment.payment_method || '-'}</TableCell>
+                                <TableCell className="text-center">
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handlePreviewReversal(payment.id)}
+                                    data-testid={`reverse-btn-${payment.id}`}
+                                  >
+                                    <AlertTriangle className="w-3 h-3 mr-1" /> Reverse
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {reversalPayments.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={7} className="text-center py-8 text-gray-400">No active payments found</TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Reversal History */}
+                {reversalHistory.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Clock className="w-4 h-4" /> Reversal History
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Company</TableHead>
+                            <TableHead>Receipt #</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead>Reversed By</TableHead>
+                            <TableHead>Reason</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {reversalHistory.map(r => (
+                            <TableRow key={r.id} className="text-sm">
+                              <TableCell>{r.reversed_at ? new Date(r.reversed_at).toLocaleDateString('en-MY') : '-'}</TableCell>
+                              <TableCell>{r.company_name || '-'}</TableCell>
+                              <TableCell className="font-mono">{r.receipt_number || '-'}</TableCell>
+                              <TableCell className="text-right">RM {(r.payment_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</TableCell>
+                              <TableCell>{r.reversed_by_name || '-'}</TableCell>
+                              <TableCell className="max-w-[250px] truncate">{r.reason || '-'}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+
+            {/* Step 1: Preview */}
+            {reversalStep === 1 && reversalPreview && (
+              <div className="space-y-4">
+                <Card className="border-red-200 bg-red-50/30">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-red-800">
+                      <AlertTriangle className="w-5 h-5" />
+                      Reversal Impact Preview
+                    </CardTitle>
+                    <CardDescription className="text-red-700">Review everything that will be affected before proceeding.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Payment Info */}
+                    <div>
+                      <h4 className="font-semibold text-sm text-gray-700 mb-2 uppercase tracking-wide">Payment to Reverse</h4>
+                      <div className="bg-white rounded-lg p-4 border grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500">Receipt #</p>
+                          <p className="font-mono font-semibold">{reversalPreview.payment.receipt_number || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Amount</p>
+                          <p className="font-bold text-lg text-red-700">RM {(reversalPreview.payment.amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Date</p>
+                          <p className="font-medium">{reversalPreview.payment.payment_date || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Method</p>
+                          <p className="font-medium">{reversalPreview.payment.payment_method || '-'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Invoice Info */}
+                    {reversalPreview.invoice && (
+                      <div>
+                        <h4 className="font-semibold text-sm text-gray-700 mb-2 uppercase tracking-wide">Linked Invoice</h4>
+                        <div className="bg-white rounded-lg p-4 border grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500">Invoice #</p>
+                            <p className="font-mono font-semibold">{reversalPreview.invoice.invoice_number}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Company</p>
+                            <p className="font-medium">{reversalPreview.invoice.company_name}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Total Amount</p>
+                            <p className="font-medium">RM {(reversalPreview.invoice.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Status Change</p>
+                            <p className="font-bold">{reversalPreview.summary.invoice_status_change}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Credit Notes to Void */}
+                    {reversalPreview.linked_credit_notes.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-sm text-gray-700 mb-2 uppercase tracking-wide">
+                          Credit Notes to be Voided ({reversalPreview.linked_credit_notes.length})
+                        </h4>
+                        <div className="bg-white rounded-lg border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>CN #</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                                <TableHead>%</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Reason</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {reversalPreview.linked_credit_notes.map(cn => (
+                                <TableRow key={cn.id}>
+                                  <TableCell className="font-mono text-sm">{cn.cn_number}</TableCell>
+                                  <TableCell className="text-right font-semibold">RM {(cn.amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</TableCell>
+                                  <TableCell>{cn.percentage}%</TableCell>
+                                  <TableCell><Badge variant="outline">{cn.status}</Badge></TableCell>
+                                  <TableCell className="text-sm">{cn.reason || '-'}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Journal Entries to Void */}
+                    {reversalPreview.linked_journal_entries.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold text-sm text-gray-700 mb-2 uppercase tracking-wide">
+                          Journal Entries to be Voided ({reversalPreview.linked_journal_entries.length})
+                        </h4>
+                        <div className="bg-white rounded-lg border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Journal #</TableHead>
+                                <TableHead>Description</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                                <TableHead>Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {reversalPreview.linked_journal_entries.map(je => (
+                                <TableRow key={je.id}>
+                                  <TableCell className="font-mono text-sm">{je.journal_no}</TableCell>
+                                  <TableCell className="text-sm max-w-[300px] truncate">{je.description}</TableCell>
+                                  <TableCell className="text-right">RM {(je.total_debit || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</TableCell>
+                                  <TableCell><Badge variant="outline">{je.status}</Badge></TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    <div className="bg-red-100 border border-red-300 rounded-lg p-4">
+                      <h4 className="font-bold text-red-900 mb-2">Summary of Changes</h4>
+                      <ul className="text-sm text-red-800 space-y-1">
+                        <li>Payment of <strong>RM {(reversalPreview.summary.payment_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</strong> will be marked as <strong>REVERSED</strong></li>
+                        <li><strong>{reversalPreview.summary.credit_notes_to_void}</strong> credit note(s) totalling <strong>RM {(reversalPreview.summary.credit_notes_total || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</strong> will be <strong>VOIDED</strong></li>
+                        <li><strong>{reversalPreview.summary.journals_to_void}</strong> journal entry/entries will be <strong>VOIDED</strong></li>
+                        <li>Invoice status: <strong>{reversalPreview.summary.invoice_status_change}</strong></li>
+                      </ul>
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                      <Button variant="outline" onClick={() => { setReversalStep(0); setReversalPreview(null); }}>
+                        Cancel
+                      </Button>
+                      <Button
+                        className="bg-red-600 hover:bg-red-700"
+                        onClick={() => setReversalStep(2)}
+                        data-testid="proceed-to-reason"
+                      >
+                        Proceed to Enter Reason
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Step 2: Reason & Confirm */}
+            {reversalStep === 2 && reversalPreview && (
+              <Card className="border-red-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-red-800">
+                    <Shield className="w-5 h-5" />
+                    Confirm Payment Reversal
+                  </CardTitle>
+                  <CardDescription>
+                    Reversing payment {reversalPreview.payment.receipt_number} — RM {(reversalPreview.payment.amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                    {reversalPreview.invoice && ` for ${reversalPreview.invoice.company_name}`}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-semibold">
+                      Reason for Reversal <span className="text-red-500">*</span>
+                    </Label>
+                    <p className="text-xs text-gray-500 mb-2">Minimum 10 characters. This will be permanently recorded in the audit log.</p>
+                    <Textarea
+                      value={reversalReason}
+                      onChange={(e) => setReversalReason(e.target.value)}
+                      placeholder="E.g., HRDF only approved RM 1,800 instead of RM 3,000. Need to reverse the RM 3K payment and re-record correct amount."
+                      rows={4}
+                      className="w-full"
+                      data-testid="reversal-reason-input"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">{reversalReason.length}/10 characters minimum</p>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-300 rounded-lg p-4">
+                    <p className="text-amber-900 text-sm font-semibold flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      This action cannot be undone
+                    </p>
+                    <p className="text-amber-800 text-xs mt-1">
+                      The payment, {reversalPreview.summary.credit_notes_to_void} credit note(s), and {reversalPreview.summary.journals_to_void} journal entry/entries will be voided permanently.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                    <Button variant="outline" onClick={() => setReversalStep(1)}>
+                      Back to Review
+                    </Button>
+                    <Button
+                      className="bg-red-600 hover:bg-red-700"
+                      onClick={handleExecuteReversal}
+                      disabled={reversalReason.length < 10 || reversalExecuting}
+                      data-testid="confirm-reversal-btn"
+                    >
+                      {reversalExecuting ? (
+                        <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Executing...</>
+                      ) : (
+                        <><AlertTriangle className="w-4 h-4 mr-1" /> Execute Reversal</>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Step 3: Success */}
+            {reversalStep === 3 && reversalResult && (
+              <Card className="border-green-200 bg-green-50/30">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-green-800">
+                    <CheckCircle className="w-5 h-5" />
+                    Reversal Complete
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="bg-white rounded-lg p-4 border space-y-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                      <div>
+                        <p className="text-xs text-gray-500">Payment Reversed</p>
+                        <p className="font-bold text-lg text-red-700">{reversalResult.summary.payment_reversed}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Credit Notes Voided</p>
+                        <p className="font-bold text-lg">{reversalResult.summary.credit_notes_voided}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Journals Voided</p>
+                        <p className="font-bold text-lg">{reversalResult.summary.journals_voided}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Invoice Status</p>
+                        <p className="font-bold text-lg">{reversalResult.summary.invoice_status}</p>
+                      </div>
+                    </div>
+                    <hr />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Actions Taken:</p>
+                      <ul className="text-sm text-gray-600 space-y-1">
+                        {reversalResult.actions_taken.map((action, i) => (
+                          <li key={i} className="flex items-center gap-2">
+                            <CheckCircle className="w-3 h-3 text-green-600 flex-shrink-0" />
+                            {action}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-2">Reversal ID: {reversalResult.reversal_id}</div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button onClick={() => { setReversalStep(0); setReversalPreview(null); setReversalResult(null); }}>
+                      Back to Payments
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
 
         {/* Audit Log Tab */}
