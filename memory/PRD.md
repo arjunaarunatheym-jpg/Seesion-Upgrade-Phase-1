@@ -34,11 +34,8 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - Participant session filtering: Backend filters by participant_ids (fixed data leak bug)
 
 ### Trainer Checklist — Self-Select & Swipe-Through (April 2026)
-- **Self-Select Flow**: Trainers see ALL session participants with search bar. They "Claim" participants to inspect, other trainers see who's claimed/taken.
-- **Stats Bar**: Total / Mine / Available / Done filter buttons
-- **Claim/Unclaim API**: `POST/DELETE /trainer-checklist/{session_id}/claim/{participant_id}`
-- **Swipe-Through UI**: After claiming, trainer sees one participant at a time. Prev/Next navigation with progress bar. Auto-advances to next participant after submission.
-- Backend: `assigned-participants` endpoint shows all participants with claim status and checklist submission status
+- **Self-Select Flow**: Trainers see ALL session participants with search bar
+- **Swipe-Through UI**: Prev/Next navigation with progress bar
 
 ### Document Generation
 - Quotation PDF/Word with digital signatures (marketer + approver)
@@ -51,26 +48,28 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - DigitalSignatureManager across all role dashboards
 - Signature embedding in Quotation PDF/Word
 
-### Test Results Review
-- Backend enriches test results with questions from original test for review
+### Payment Reversal System (April 18, 2026)
+- Super Admin only, 3-step formal flow, full audit trail
+- Reverses payment, voids linked credit notes + journal entries, reverts invoice status
 
-### Payment Reversal System (April 18, 2026) — NEW
-- **Super Admin only** access (role check + specific email whitelist)
-- **3-Step Formal Flow**: 
-  1. Select payment → Preview impact (affected credit notes, journal entries, invoice status change)
-  2. Enter mandatory reason (min 10 characters)
-  3. Confirm & execute
-- **Full reversal actions**: Payment status → "reversed", credit notes → "voided", journal entries → "voided", invoice status reverted
-- **Comprehensive audit trail**: Logged to super_admin_audit_log, finance_audit_log, and audit_trail collections
-- **Reversal History tab**: Shows all past reversals with date, company, amount, reason
-- **Finance portal indicators**: REVERSED badge on payments, VOIDED badge on credit notes
-- **Entity audit trail API**: `GET /api/superadmin/audit-trail/{entity_type}/{entity_id}`
+### Ad-Hoc Invoice System (April 20, 2026) — NEW
+- **Standalone invoices** not tied to training sessions (Finance + Admin access)
+- **Same INV numbering sequence** as session invoices
+- **Custom billing entity**: company name, address, reg no, contact person, email, phone
+- **Flexible line items**: multiple rows with description, qty, unit price, auto-calculated amount
+- **Flexible SST %**: optional, configurable percentage (0% default, ready for future SST)
+- **Optional references**: link to existing session/invoice + free-text reference field
+- **Discount & rounding** support
+- **"Ad-Hoc" badge** in invoice list + reference text shown in session column
+- Use case: Billing shortfalls to different company entities, venue rental, consulting fees
 
-### Bug Fixes (April 14, 2026)
-- Fixed: Trainer checklist "No checklist items available" — state reset on navigation + stale closure prevention
-- Fixed: Feedback submission 422 error — `FeedbackSubmit.responses` changed from `dict` to `Any`
-- Fixed: Coordinator visibility of checklists — endpoints now query `vehicle_checklists` collection
-- Fixed: `/vehicle-checklists/` endpoint now checks `vehicle_checklists` collection first
+### Bug Fixes (April 20, 2026)
+- Quotation PDF: Address text wrapping (cell_safe → multi_cell_safe) for long addresses
+- Quotation PDF: Digital signature embedding (marketer/approver queries now include digital_signature field)
+- Quotation dialog: Added "Download Word" button alongside PDF download
+- Trainer checklist: State reset on participant navigation
+- Feedback submission: responses type dict → Any
+- Coordinator checklist visibility: queries now hit vehicle_checklists collection
 
 ## P0 — In Progress / Pending
 - System-wide digital signature audit & implementation (Invoices, Receipts, Payslips, Pay Advice, EA Forms, Claim Forms, Credit Notes)
@@ -78,6 +77,7 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 ## P1 — Upcoming
 - Email integration (Resend) + WhatsApp link integration
 - Trainer Contract Workflow
+- Session P&L / Profitability view (revenue vs expenses per session)
 
 ## P2 — Future/Backlog
 - Post-Training Evaluation System (3/6 month feedback)
