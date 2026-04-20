@@ -1,0 +1,113 @@
+{
+  "summary": "Iteration 40: Ad-Hoc Invoice feature fully tested. All 12 backend tests passed (1 skipped - Word download endpoint not implemented). Frontend Ad-Hoc Invoice dialog verified with all required fields. Quotation PDF address wrapping uses multi_cell_safe. Word download button exists in frontend for approved/sent/accepted quotations.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/marketing/quotations/{id}/download-word",
+        "issue": "Word download endpoint not implemented in backend (frontend generates Word client-side using html-docx-js-typescript)",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration40_adhoc_invoice.py",
+    "/app/test_reports/pytest/iteration40_adhoc_invoice.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Ad-hoc invoice endpoint correctly validates bill_to_name and line_items requirements",
+    "SST calculation verified: subtotal * sst_percent / 100",
+    "Invoice sequence correctly shared between regular and ad-hoc invoices",
+    "Role check working: coordinator gets 403 on ad-hoc invoice creation",
+    "Quotation PDF address wrapping implemented using multi_cell_safe (lines 2431-2434, 2555-2558 in marketing.py)",
+    "Digital signature embedding implemented in quotation PDF (lines 2770-2831 in marketing.py)",
+    "Word download is client-side generation using html-docx-js-typescript library (not backend endpoint)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration40_adhoc_invoice.py"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 passed, 1 skipped)",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "admin": "arjuna@mddrc.com.my / Dana102229",
+    "coordinator": "malek@mddrc.com.my / mddrc1"
+  },
+  "seed_data_creation": "Test ad-hoc invoices created and cleaned up during testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Ad-hoc invoice feature is fully implemented. Key endpoint: POST /api/finance/invoices/adhoc. Ad-hoc invoices appear in invoice list with invoice_type='adhoc' and show 'Ad-Hoc' badge in UI. Word download for quotations is client-side (not backend endpoint). Quotation PDF address wrapping and signature embedding are working.",
+  "features_tested": {
+    "adhoc_invoice_creation": {
+      "status": "PASS",
+      "details": "POST /api/finance/invoices/adhoc creates invoice with custom line items, billing entity, SST, discount, rounding, reference"
+    },
+    "adhoc_invoice_in_list": {
+      "status": "PASS",
+      "details": "Ad-hoc invoices appear in GET /api/finance/invoices with invoice_type=adhoc and reference_info"
+    },
+    "adhoc_invoice_approve_issue": {
+      "status": "PASS",
+      "details": "Ad-hoc invoices can be approved and issued like regular invoices"
+    },
+    "sst_calculation": {
+      "status": "PASS",
+      "details": "SST calculated as subtotal * sst_percent / 100"
+    },
+    "role_check_403": {
+      "status": "PASS",
+      "details": "Coordinator role correctly gets 403 Forbidden on ad-hoc invoice creation"
+    },
+    "validation_bill_to_name": {
+      "status": "PASS",
+      "details": "Empty bill_to_name returns 400 Bad Request"
+    },
+    "validation_line_items": {
+      "status": "PASS",
+      "details": "Empty line_items returns 400 Bad Request"
+    },
+    "invoice_sequence": {
+      "status": "PASS",
+      "details": "Ad-hoc invoices use same INV/MDDRC/YYYY/MM/XXXX sequence as regular invoices"
+    },
+    "frontend_adhoc_button": {
+      "status": "PASS",
+      "details": "Ad-Hoc Invoice button visible in Finance Portal Invoices tab"
+    },
+    "frontend_adhoc_dialog": {
+      "status": "PASS",
+      "details": "Dialog has all fields: Bill To section, Line Items with Add Row, SST %, Discount, Rounding, Reference, Notes"
+    },
+    "quotation_pdf_address_wrapping": {
+      "status": "PASS",
+      "details": "Address uses multi_cell_safe for text wrapping (verified in code: lines 2431-2434, 2555-2558)"
+    },
+    "quotation_pdf_signature": {
+      "status": "PASS",
+      "details": "Digital signature embedding implemented (lines 2770-2831 in marketing.py)"
+    },
+    "word_download_button": {
+      "status": "PASS",
+      "details": "Word download button visible in quotation view dialog for approved/sent/accepted quotations (client-side generation)"
+    }
+  },
+  "api_tests_summary": {
+    "total_tests": 13,
+    "passed": 12,
+    "skipped": 1,
+    "failed": 0,
+    "test_file": "/app/backend/tests/test_iteration40_adhoc_invoice.py"
+  },
+  "screenshots": [
+    ".screenshots/adhoc_dialog.png - Ad-Hoc Invoice dialog with all fields",
+    ".screenshots/finance_invoices_tab.png - Finance Portal Invoices tab",
+    ".screenshots/quotations_tab.png - Marketing Portal Quotations tab"
+  ]
+}

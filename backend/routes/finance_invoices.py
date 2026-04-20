@@ -1299,3 +1299,129 @@ async def remove_deleted_invoice_number(invoice_number: str, current_user: User 
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Invoice number not found in deleted pool")
     return {"message": f"Invoice number {decoded_number} removed from reuse pool"}
+
+
+# ============ AD-HOC INVOICE ============
+
+class AdhocLineItem(BaseModel):
+    description: str
+    quantity: float = 1
+    unit_price: float = 0
+    amount: float = 0
+
+
+class AdhocInvoiceCreate(BaseModel):
+    bill_to_name: str
+    bill_to_address: str = ""
+    bill_to_reg_no: str = ""
+    contact_person: str = ""
+    contact_email: str = ""
+    contact_phone: str = ""
+    your_reference: str = ""
+    line_items: List[AdhocLineItem]
+    sst_percent: float = 0
+    discount: float = 0
+    rounding: float = 0
+    notes: str = ""
+    invoice_date: Optional[str] = None
+    due_date: Optional[str] = None
+    # Optional references
+    reference_session_id: Optional[str] = None
+    reference_invoice_id: Optional[str] = None
+    reference_text: str = ""
+
+
+@router.post("/invoices/adhoc")
+async def create_adhoc_invoice(
+    data: AdhocInvoiceCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a standalone ad-hoc invoice (not linked to a training session)"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Finance can create ad-hoc invoices")
+
+    if not data.bill_to_name or not data.bill_to_name.strip():
+        raise HTTPException(status_code=400, detail="Bill To name is required")
+
+    if not data.line_items or len(data.line_items) == 0:
+        raise HTTPException(status_code=400, detail="At least one line item is required")
+
+    # Calculate totals
+    line_items_data = []
+    subtotal = 0
+    for item in data.line_items:
+        amount = round(item.quantity * item.unit_price, 2)
+        line_items_data.append({
+            "description": item.description,
+            "quantity": item.quantity,
+            "unit_price": item.unit_price,
+            "amount": amount
+        })
+        subtotal += amount
+
+    sst_amount = round(subtotal * data.sst_percent / 100, 2) if data.sst_percent > 0 else 0
+    total_amount = round(subtotal + sst_amount - (data.discount or 0) + (data.rounding or 0), 2)
+
+    now = get_malaysia_time()
+    invoice_number = await generate_invoice_number()
+    invoice_date = data.invoice_date or now.strftime("%Y-%m-%d")
+
+    # Build reference info
+    reference_info = {}
+    if data.reference_session_id:
+        ref_session = await db.sessions.find_one({"id": data.reference_session_id}, {"_id": 0, "name": 1})
+        reference_info["session_id"] = data.reference_session_id
+        reference_info["session_name"] = ref_session.get("name", "") if ref_session else ""
+    if data.reference_invoice_id:
+        ref_inv = await db.invoices.find_one({"id": data.reference_invoice_id}, {"_id": 0, "invoice_number": 1})
+        reference_info["invoice_id"] = data.reference_invoice_id
+        reference_info["invoice_number"] = ref_inv.get("invoice_number", "") if ref_inv else ""
+    if data.reference_text:
+        reference_info["text"] = data.reference_text
+
+    invoice = {
+        "id": str(uuid.uuid4()),
+        "invoice_number": invoice_number,
+        "invoice_type": "adhoc",
+        "bill_to_name": data.bill_to_name.strip(),
+        "bill_to_address": data.bill_to_address.strip(),
+        "bill_to_reg_no": data.bill_to_reg_no.strip(),
+        "contact_person": data.contact_person.strip(),
+        "contact_email": data.contact_email.strip(),
+        "contact_phone": data.contact_phone.strip(),
+        "your_reference": data.your_reference.strip(),
+        "company_name": data.bill_to_name.strip(),
+        "line_items": line_items_data,
+        "subtotal": subtotal,
+        "sst_percent": data.sst_percent,
+        "tax_rate": data.sst_percent,
+        "tax_amount": sst_amount,
+        "discount": data.discount,
+        "rounding": data.rounding,
+        "total_amount": total_amount,
+        "notes": data.notes.strip(),
+        "status": "draft",
+        "invoice_date": invoice_date,
+        "due_date": data.due_date,
+        "reference_info": reference_info if reference_info else None,
+        "created_by": current_user.id,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "version": 1
+    }
+
+    await db.invoices.insert_one(invoice)
+    invoice.pop("_id", None)
+
+    await log_finance_action(
+        "invoice", invoice["id"], "adhoc_created",
+        current_user.id, after_value=invoice,
+        reason=f"Ad-hoc invoice created for {data.bill_to_name}"
+    )
+
+    return {
+        "message": "Ad-hoc invoice created successfully",
+        "id": invoice["id"],
+        "invoice_number": invoice_number,
+        "total_amount": total_amount
+    }

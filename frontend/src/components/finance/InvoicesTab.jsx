@@ -9,8 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { FileSpreadsheet, RefreshCw, Edit, Check, FileText, Download, CreditCard, X, RotateCcw, Plus, ChevronDown, ChevronRight, Calendar } from "lucide-react";
+import { FileSpreadsheet, RefreshCw, Edit, Check, FileText, Download, CreditCard, X, RotateCcw, Plus, ChevronDown, ChevronRight, Calendar, Trash2 } from "lucide-react";
 
 const InvoicesTab = ({
   invoices,
@@ -26,6 +30,94 @@ const InvoicesTab = ({
   
   // Collapsible state for month groups
   const [expandedMonths, setExpandedMonths] = useState({});
+
+  // Ad-Hoc Invoice state
+  const [showAdhocDialog, setShowAdhocDialog] = useState(false);
+  const [adhocSubmitting, setAdhocSubmitting] = useState(false);
+  const [adhocForm, setAdhocForm] = useState({
+    bill_to_name: '',
+    bill_to_address: '',
+    bill_to_reg_no: '',
+    contact_person: '',
+    contact_email: '',
+    contact_phone: '',
+    your_reference: '',
+    line_items: [{ description: '', quantity: 1, unit_price: 0 }],
+    sst_percent: 0,
+    discount: 0,
+    rounding: 0,
+    notes: '',
+    invoice_date: new Date().toISOString().split('T')[0],
+    due_date: '',
+    reference_text: '',
+  });
+
+  const resetAdhocForm = () => {
+    setAdhocForm({
+      bill_to_name: '', bill_to_address: '', bill_to_reg_no: '',
+      contact_person: '', contact_email: '', contact_phone: '', your_reference: '',
+      line_items: [{ description: '', quantity: 1, unit_price: 0 }],
+      sst_percent: 0, discount: 0, rounding: 0, notes: '',
+      invoice_date: new Date().toISOString().split('T')[0], due_date: '',
+      reference_text: '',
+    });
+  };
+
+  const addLineItem = () => {
+    setAdhocForm(prev => ({
+      ...prev,
+      line_items: [...prev.line_items, { description: '', quantity: 1, unit_price: 0 }]
+    }));
+  };
+
+  const removeLineItem = (idx) => {
+    if (adhocForm.line_items.length <= 1) return;
+    setAdhocForm(prev => ({
+      ...prev,
+      line_items: prev.line_items.filter((_, i) => i !== idx)
+    }));
+  };
+
+  const updateLineItem = (idx, field, value) => {
+    setAdhocForm(prev => ({
+      ...prev,
+      line_items: prev.line_items.map((item, i) => i === idx ? { ...item, [field]: value } : item)
+    }));
+  };
+
+  const adhocSubtotal = adhocForm.line_items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0), 0);
+  const adhocSst = adhocSubtotal * (parseFloat(adhocForm.sst_percent) || 0) / 100;
+  const adhocTotal = adhocSubtotal + adhocSst - (parseFloat(adhocForm.discount) || 0) + (parseFloat(adhocForm.rounding) || 0);
+
+  const handleCreateAdhocInvoice = async () => {
+    if (!adhocForm.bill_to_name.trim()) { toast.error("Bill To name is required"); return; }
+    if (!adhocForm.line_items.some(li => li.description.trim())) { toast.error("At least one line item description is required"); return; }
+    
+    setAdhocSubmitting(true);
+    try {
+      const payload = {
+        ...adhocForm,
+        line_items: adhocForm.line_items.filter(li => li.description.trim()).map(li => ({
+          description: li.description,
+          quantity: parseFloat(li.quantity) || 1,
+          unit_price: parseFloat(li.unit_price) || 0,
+          amount: (parseFloat(li.quantity) || 1) * (parseFloat(li.unit_price) || 0)
+        })),
+        sst_percent: parseFloat(adhocForm.sst_percent) || 0,
+        discount: parseFloat(adhocForm.discount) || 0,
+        rounding: parseFloat(adhocForm.rounding) || 0,
+      };
+      const res = await axiosInstance.post('/finance/invoices/adhoc', payload);
+      toast.success(`Ad-hoc invoice ${res.data.invoice_number} created`);
+      setShowAdhocDialog(false);
+      resetAdhocForm();
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to create invoice");
+    } finally {
+      setAdhocSubmitting(false);
+    }
+  };
 
   // Filter invoices by status
   const filteredInvoices = useMemo(() => {
@@ -175,7 +267,11 @@ const InvoicesTab = ({
       <CardHeader>
         <div className="flex justify-between items-center flex-wrap gap-4">
           <CardTitle>Invoice Management</CardTitle>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button onClick={() => { resetAdhocForm(); setShowAdhocDialog(true); }} data-testid="create-adhoc-invoice-btn">
+              <Plus className="w-4 h-4 mr-1" />
+              Ad-Hoc Invoice
+            </Button>
             <Button variant="outline" onClick={handleExportInvoices} className="text-green-600">
               <FileSpreadsheet className="w-4 h-4 mr-1" />
               Export Excel
@@ -269,12 +365,19 @@ const InvoicesTab = ({
                       <tbody className="divide-y divide-gray-200">
                         {group.invoices.map((invoice) => (
                           <tr key={invoice.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium">{invoice.invoice_number}</td>
+                            <td className="px-4 py-3 text-sm font-medium">
+                              {invoice.invoice_number}
+                              {invoice.invoice_type === 'adhoc' && (
+                                <Badge className="ml-2 bg-indigo-100 text-indigo-700 text-[10px] px-1 py-0">Ad-Hoc</Badge>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('en-MY') : '-'}
                             </td>
                             <td className="px-4 py-3 text-sm">{invoice.company_name || '-'}</td>
-                            <td className="px-4 py-3 text-sm">{invoice.session_name || '-'}</td>
+                            <td className="px-4 py-3 text-sm">
+                              {invoice.session_name || (invoice.reference_info?.text) || (invoice.invoice_type === 'adhoc' ? 'Ad-Hoc' : '-')}
+                            </td>
                             <td className="px-4 py-3 text-sm text-right font-medium">
                               RM {invoice.total_amount?.toLocaleString()}
                             </td>
@@ -413,6 +516,240 @@ const InvoicesTab = ({
           </div>
         )}
       </CardContent>
+
+      {/* Ad-Hoc Invoice Dialog */}
+      <Dialog open={showAdhocDialog} onOpenChange={setShowAdhocDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Create Ad-Hoc Invoice
+            </DialogTitle>
+            <DialogDescription>
+              Create a standalone invoice not tied to a training session. Uses the same invoice numbering sequence.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Bill To Section */}
+            <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+              <h4 className="font-semibold text-sm text-gray-700 uppercase tracking-wide">Bill To</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <Label>Company Name <span className="text-red-500">*</span></Label>
+                  <Input
+                    value={adhocForm.bill_to_name}
+                    onChange={(e) => setAdhocForm(p => ({ ...p, bill_to_name: e.target.value }))}
+                    placeholder="Company name"
+                    data-testid="adhoc-bill-to-name"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Label>Address</Label>
+                  <Textarea
+                    value={adhocForm.bill_to_address}
+                    onChange={(e) => setAdhocForm(p => ({ ...p, bill_to_address: e.target.value }))}
+                    placeholder="Full billing address"
+                    rows={2}
+                  />
+                </div>
+                <div>
+                  <Label>Registration No</Label>
+                  <Input
+                    value={adhocForm.bill_to_reg_no}
+                    onChange={(e) => setAdhocForm(p => ({ ...p, bill_to_reg_no: e.target.value }))}
+                    placeholder="SSM / Company Reg No"
+                  />
+                </div>
+                <div>
+                  <Label>Contact Person</Label>
+                  <Input
+                    value={adhocForm.contact_person}
+                    onChange={(e) => setAdhocForm(p => ({ ...p, contact_person: e.target.value }))}
+                    placeholder="Attn: Name"
+                  />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input
+                    value={adhocForm.contact_email}
+                    onChange={(e) => setAdhocForm(p => ({ ...p, contact_email: e.target.value }))}
+                    placeholder="billing@company.com"
+                  />
+                </div>
+                <div>
+                  <Label>Phone</Label>
+                  <Input
+                    value={adhocForm.contact_phone}
+                    onChange={(e) => setAdhocForm(p => ({ ...p, contact_phone: e.target.value }))}
+                    placeholder="+60..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Line Items */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-sm text-gray-700 uppercase tracking-wide">Line Items</h4>
+                <Button size="sm" variant="outline" onClick={addLineItem}>
+                  <Plus className="w-3 h-3 mr-1" /> Add Row
+                </Button>
+              </div>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="px-3 py-2 text-left font-medium">Description</th>
+                      <th className="px-3 py-2 text-right font-medium w-20">Qty</th>
+                      <th className="px-3 py-2 text-right font-medium w-28">Unit Price</th>
+                      <th className="px-3 py-2 text-right font-medium w-28">Amount</th>
+                      <th className="w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adhocForm.line_items.map((item, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="px-2 py-1">
+                          <Input
+                            value={item.description}
+                            onChange={(e) => updateLineItem(idx, 'description', e.target.value)}
+                            placeholder="Item description"
+                            className="h-8 text-sm"
+                            data-testid={`adhoc-line-desc-${idx}`}
+                          />
+                        </td>
+                        <td className="px-2 py-1">
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => updateLineItem(idx, 'quantity', e.target.value)}
+                            className="h-8 text-sm text-right"
+                            min="0"
+                            step="1"
+                          />
+                        </td>
+                        <td className="px-2 py-1">
+                          <Input
+                            type="number"
+                            value={item.unit_price}
+                            onChange={(e) => updateLineItem(idx, 'unit_price', e.target.value)}
+                            className="h-8 text-sm text-right"
+                            min="0"
+                            step="0.01"
+                          />
+                        </td>
+                        <td className="px-3 py-1 text-right font-medium">
+                          RM {((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0)).toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-1 py-1">
+                          {adhocForm.line_items.length > 1 && (
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500" onClick={() => removeLineItem(idx)}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Totals */}
+              <div className="ml-auto w-64 space-y-1 text-sm">
+                <div className="flex justify-between"><span>Subtotal:</span><span>RM {adhocSubtotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span></div>
+                <div className="flex justify-between items-center gap-2">
+                  <span>SST (%):</span>
+                  <Input
+                    type="number"
+                    value={adhocForm.sst_percent}
+                    onChange={(e) => setAdhocForm(p => ({ ...p, sst_percent: e.target.value }))}
+                    className="h-7 w-16 text-sm text-right"
+                    min="0" max="100" step="0.5"
+                  />
+                  <span className="w-24 text-right">RM {adhocSst.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between items-center gap-2">
+                  <span>Discount:</span>
+                  <Input
+                    type="number"
+                    value={adhocForm.discount}
+                    onChange={(e) => setAdhocForm(p => ({ ...p, discount: e.target.value }))}
+                    className="h-7 w-16 text-sm text-right"
+                    min="0" step="0.01"
+                  />
+                </div>
+                <div className="flex justify-between items-center gap-2">
+                  <span>Rounding:</span>
+                  <Input
+                    type="number"
+                    value={adhocForm.rounding}
+                    onChange={(e) => setAdhocForm(p => ({ ...p, rounding: e.target.value }))}
+                    className="h-7 w-16 text-sm text-right"
+                    step="0.01"
+                  />
+                </div>
+                <div className="flex justify-between font-bold text-base border-t pt-1">
+                  <span>TOTAL:</span>
+                  <span>RM {adhocTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Invoice Details */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Invoice Date</Label>
+                <Input
+                  type="date"
+                  value={adhocForm.invoice_date}
+                  onChange={(e) => setAdhocForm(p => ({ ...p, invoice_date: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Due Date</Label>
+                <Input
+                  type="date"
+                  value={adhocForm.due_date}
+                  onChange={(e) => setAdhocForm(p => ({ ...p, due_date: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Your Reference</Label>
+                <Input
+                  value={adhocForm.your_reference}
+                  onChange={(e) => setAdhocForm(p => ({ ...p, your_reference: e.target.value }))}
+                  placeholder="PO number, ref no, etc."
+                />
+              </div>
+              <div>
+                <Label>Reference (link to session/invoice)</Label>
+                <Input
+                  value={adhocForm.reference_text}
+                  onChange={(e) => setAdhocForm(p => ({ ...p, reference_text: e.target.value }))}
+                  placeholder="e.g., Balance for INV/MDDRC/2026/04/0001"
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={adhocForm.notes}
+                  onChange={(e) => setAdhocForm(p => ({ ...p, notes: e.target.value }))}
+                  placeholder="Internal notes or payment instructions..."
+                  rows={2}
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAdhocDialog(false)}>Cancel</Button>
+            <Button onClick={handleCreateAdhocInvoice} disabled={adhocSubmitting} data-testid="submit-adhoc-invoice">
+              {adhocSubmitting ? 'Creating...' : `Create Invoice (RM ${adhocTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
