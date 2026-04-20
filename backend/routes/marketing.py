@@ -93,7 +93,6 @@ class QuotationPDF(FPDF):
 
     def render_rich_text(self, text, line_height=5, default_size=10):
         """Render text with formatting tags like **bold**, *italic*, <u>, <big>, <small>, <highlight>, colors, <center>, <br>, <hr>, <pb>"""
-        import re
         if not text:
             return
         lines = text.replace('<br>', '\n').replace('<br/>', '\n').split('\n')
@@ -175,7 +174,6 @@ class QuotationPDF(FPDF):
 
     def _parse_rich_segments(self, text):
         """Parse text into segments with formatting attributes"""
-        import re
         segments = []
         pattern = r'(\*\*([^*]+)\*\*|\*([^*]+)\*|<b>([^<]+)</b>|<i>([^<]+)</i>|<u>([^<]+)</u>|<big>([^<]+)</big>|<small>([^<]+)</small>|<highlight>([^<]+)</highlight>|<hl>([^<]+)</hl>|<red>([^<]+)</red>|<blue>([^<]+)</blue>|<green>([^<]+)</green>)'
         last_end = 0
@@ -1660,7 +1658,7 @@ async def create_lead(lead_data: LeadCreate, current_user: User = Depends(get_cu
     # Send email notification to admin
     try:
         await notify_new_lead(doc, current_user.full_name)
-    except Exception as e:
+    except Exception:
         # Don't fail lead creation if email fails
         pass
     
@@ -2391,11 +2389,11 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
         ).to_list(100)
         description_items_text = [item.get("name", "") or item.get("description", "") for item in items]
     
-    # Get marketer/approver info
-    marketer = await db.users.find_one({"id": quotation.get("created_by")}, {"_id": 0, "full_name": 1})
+    # Get marketer/approver info (including digital signatures)
+    marketer = await db.users.find_one({"id": quotation.get("created_by")}, {"_id": 0, "full_name": 1, "digital_signature": 1})
     approver = None
     if quotation.get("approved_by"):
-        approver = await db.users.find_one({"id": quotation.get("approved_by")}, {"_id": 0, "full_name": 1})
+        approver = await db.users.find_one({"id": quotation.get("approved_by")}, {"_id": 0, "full_name": 1, "digital_signature": 1})
     
     # Parse primary color from templates
     primary_color_hex = templates.get("primary_color", "#1a365d")
@@ -2428,10 +2426,12 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.set_font_safe('', 10)
     pdf.cell_safe(0, 5, client.get("company_name", ""), ln=True)
     
-    # Address - multi-line
+    # Address - multi-line with wrapping for long addresses
     address = client.get("company_address", "")
     for line in address.split('\n'):
-        pdf.cell_safe(0, 5, line.strip(), ln=True)
+        stripped = line.strip()
+        if stripped:
+            pdf.multi_cell_safe(0, 5, stripped)
     
     pdf.ln(8)
     
@@ -2553,7 +2553,9 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.set_font_safe('', 9)
     pdf.cell_safe(0, 5, client.get("company_name", ""), ln=True)
     for line in client.get("company_address", "").split('\n'):
-        pdf.cell_safe(0, 5, line.strip(), ln=True)
+        stripped = line.strip()
+        if stripped:
+            pdf.multi_cell_safe(0, 5, stripped)
     pdf.cell_safe(0, 5, f"Attn: {client.get('contact_person', '')}", ln=True)
     pdf.cell_safe(0, 5, f"Tel: {client.get('contact_phone', '')}", ln=True)
     pdf.ln(5)
@@ -2757,7 +2759,7 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
         pdf.set_font_safe('I', 8)
         pdf.multi_cell_safe(0, 4, f"Remarks: {quotation.get('remarks')}")
     
-    # Signatures at bottom - clean format with blue signature names
+    # Signatures at bottom - with digital signature images
     pdf.ln(10)
     pdf.set_font_safe('', 9)
     y_pos = pdf.get_y()
@@ -2765,8 +2767,71 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     pdf.cell_safe(90, 5, "Prepared by:", ln=False)
     pdf.cell_safe(90, 5, "Approved by:", ln=True)
     
+    # Embed digital signature images if available
+    marketer_sig = marketer.get("digital_signature", "") if marketer else ""
+    approver_sig = approver.get("digital_signature", "") if approver else ""
+    
+    sig_y = pdf.get_y() + 2
+    
+    # Try to embed marketer signature image
+    if marketer_sig:
+        try:
+            import base64
+            import tempfile
+            import os as _os
+            
+            sig_data = marketer_sig
+            if sig_data.startswith('data:image'):
+                sig_data = sig_data.split(',', 1)[1]
+            elif sig_data.startswith('/api/') or sig_data.startswith('/static/'):
+                # It's a URL path - read the file
+                sig_file_path = sig_data.replace('/api/static/', str(Path(__file__).parent.parent / 'static') + '/')
+                if _os.path.exists(sig_file_path):
+                    with open(sig_file_path, 'rb') as f:
+                        sig_data = base64.b64encode(f.read()).decode()
+                else:
+                    sig_data = None
+            
+            if sig_data:
+                sig_bytes = base64.b64decode(sig_data)
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                    tmp.write(sig_bytes)
+                    tmp_path = tmp.name
+                pdf.image(tmp_path, x=20, y=sig_y, h=15)
+                _os.unlink(tmp_path)
+        except Exception as e:
+            print(f"Error embedding marketer signature: {e}")
+    
+    # Try to embed approver signature image
+    if approver_sig:
+        try:
+            import base64
+            import tempfile
+            import os as _os
+            
+            sig_data = approver_sig
+            if sig_data.startswith('data:image'):
+                sig_data = sig_data.split(',', 1)[1]
+            elif sig_data.startswith('/api/') or sig_data.startswith('/static/'):
+                sig_file_path = sig_data.replace('/api/static/', str(Path(__file__).parent.parent / 'static') + '/')
+                if _os.path.exists(sig_file_path):
+                    with open(sig_file_path, 'rb') as f:
+                        sig_data = base64.b64encode(f.read()).decode()
+                else:
+                    sig_data = None
+            
+            if sig_data:
+                sig_bytes = base64.b64decode(sig_data)
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                    tmp.write(sig_bytes)
+                    tmp_path = tmp.name
+                pdf.image(tmp_path, x=110, y=sig_y, h=15)
+                _os.unlink(tmp_path)
+        except Exception as e:
+            print(f"Error embedding approver signature: {e}")
+    
     # Signature names in blue - cursive style
-    pdf.ln(8)
+    pdf.set_y(sig_y + 18)
     pdf.set_font_safe('I', 12)  # Italic for cursive effect
     pdf.set_text_color(0, 0, 128)  # Dark blue for signature
     marketer_name = marketer.get("full_name", "") if marketer else ""

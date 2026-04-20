@@ -1563,11 +1563,16 @@ const MarketingDashboard = ({ user, onLogout }) => {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-wrap gap-2">
             {viewQuotation && ['approved', 'sent', 'accepted'].includes(viewQuotation.status) && (
-              <Button onClick={() => handleDownloadPdf(viewQuotation.id)} disabled={downloadingPdf}>
-                <Download className="w-4 h-4 mr-2" /> {downloadingPdf ? 'Downloading...' : 'Download PDF Package'}
-              </Button>
+              <>
+                <Button onClick={() => handleDownloadPdf(viewQuotation.id)} disabled={downloadingPdf}>
+                  <Download className="w-4 h-4 mr-2" /> {downloadingPdf ? 'Downloading...' : 'Download PDF'}
+                </Button>
+                <Button variant="outline" onClick={() => generateWord(viewQuotation)}>
+                  <FileText className="w-4 h-4 mr-2" /> Download Word
+                </Button>
+              </>
             )}
             <Button variant="outline" onClick={() => setShowViewDialog(false)}>Close</Button>
           </DialogFooter>
