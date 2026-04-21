@@ -2479,7 +2479,40 @@ async def download_quotation_pdf(quotation_id: str, current_user: User = Depends
     # Signature
     pdf.set_font_safe('', 10)
     pdf.cell_safe(0, 5, "Yours faithfully,", ln=True)
-    pdf.ln(15)
+    pdf.ln(3)
+
+    # Embed digital signature image above the name (cover letter)
+    cover_marketer_sig = marketer.get("digital_signature", "") if marketer else ""
+    sig_embedded = False
+    if cover_marketer_sig:
+        try:
+            import base64, tempfile, os as _os
+            sig_data = cover_marketer_sig
+            if sig_data.startswith('data:image'):
+                sig_data = sig_data.split(',', 1)[1]
+            elif sig_data.startswith('/api/') or sig_data.startswith('/static/'):
+                sig_file_path = sig_data.replace('/api/static/', str(Path(__file__).parent.parent / 'static') + '/')
+                if _os.path.exists(sig_file_path):
+                    with open(sig_file_path, 'rb') as f:
+                        sig_data = base64.b64encode(f.read()).decode()
+                else:
+                    sig_data = None
+            if sig_data:
+                sig_bytes = base64.b64decode(sig_data)
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                    tmp.write(sig_bytes)
+                    tmp_path = tmp.name
+                sig_y_start = pdf.get_y()
+                pdf.image(tmp_path, x=10, y=sig_y_start, h=18)
+                _os.unlink(tmp_path)
+                sig_embedded = True
+                pdf.set_y(sig_y_start + 20)
+        except Exception as e:
+            print(f"Error embedding cover letter marketer signature: {e}")
+
+    if not sig_embedded:
+        pdf.ln(15)
+
     pdf.set_font_safe('B', 10)
     pdf.cell_safe(0, 5, marketer.get("full_name", "") if marketer else "", ln=True)
     pdf.set_font_safe('', 10)
