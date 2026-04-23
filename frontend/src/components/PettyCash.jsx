@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { 
   Wallet, Plus, Minus, RefreshCw, Check, X, Trash2, Settings,
   Loader2, Calendar, Receipt, AlertTriangle, CheckCircle, Clock,
-  ArrowUpCircle, ArrowDownCircle, Scale
+  ArrowUpCircle, ArrowDownCircle, Scale, FileDown, Camera, Upload, Eye
 } from 'lucide-react';
 
 const PettyCash = () => {
@@ -29,6 +29,15 @@ const PettyCash = () => {
   const [showExpenseDialog, setShowExpenseDialog] = useState(false);
   const [showTopupDialog, setShowTopupDialog] = useState(false);
   const [showReconcileDialog, setShowReconcileDialog] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showReceiptDialog, setShowReceiptDialog] = useState(false);
+  const [receiptToView, setReceiptToView] = useState('');
+  const [exporting, setExporting] = useState(false);
+
+  // Export range
+  const firstOfYear = `${new Date().getFullYear()}-01-01`;
+  const today = new Date().toISOString().split('T')[0];
+  const [exportRange, setExportRange] = useState({ start_date: firstOfYear, end_date: today });
 
   // Form states
   const [setupForm, setSetupForm] = useState({
@@ -41,7 +50,8 @@ const PettyCash = () => {
     description: '',
     category: 'Miscellaneous',
     date: new Date().toISOString().split('T')[0],
-    notes: ''
+    notes: '',
+    receipt_url: ''
   });
   const [reconcileForm, setReconcileForm] = useState({
     physical_count: '',
@@ -204,8 +214,85 @@ const PettyCash = () => {
       description: '',
       category: 'Miscellaneous',
       date: new Date().toISOString().split('T')[0],
-      notes: ''
+      notes: '',
+      receipt_url: ''
     });
+  };
+
+  // Receipt upload (camera or gallery). Image is downscaled and stored as base64.
+  const handleReceiptUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5 MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      // Downscale via canvas to keep DB payload manageable (~max 1280px on long edge)
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1280;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const ratio = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        setTransactionForm((prev) => ({ ...prev, receipt_url: dataUrl }));
+        toast.success('Receipt attached');
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    // reset input so same file can be chosen again if removed
+    e.target.value = '';
+  };
+
+  const handleExport = async (format) => {
+    if (!exportRange.start_date || !exportRange.end_date) {
+      toast.error('Please pick both start and end dates');
+      return;
+    }
+    if (exportRange.start_date > exportRange.end_date) {
+      toast.error('Start date must be before end date');
+      return;
+    }
+    setExporting(true);
+    try {
+      const res = await axiosInstance.get(
+        `/finance/petty-cash/export/${format}?start_date=${exportRange.start_date}&end_date=${exportRange.end_date}`,
+        { responseType: 'blob' }
+      );
+      const mime = format === 'excel'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'application/pdf';
+      const ext = format === 'excel' ? 'xlsx' : 'pdf';
+      const blob = new Blob([res.data], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `PettyCash_${exportRange.start_date}_to_${exportRange.end_date}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 8000);
+      toast.success(`${format.toUpperCase()} downloaded`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Export failed');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const formatCurrency = (val) => `RM ${(val || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}`;
@@ -317,14 +404,17 @@ const PettyCash = () => {
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-3">
-        <Button onClick={() => setShowExpenseDialog(true)} className="bg-red-600 hover:bg-red-700">
+        <Button onClick={() => setShowExpenseDialog(true)} className="bg-red-600 hover:bg-red-700" data-testid="record-expense-btn">
           <Minus className="w-4 h-4 mr-2" /> Record Expense
         </Button>
-        <Button onClick={() => setShowTopupDialog(true)} className="bg-green-600 hover:bg-green-700">
+        <Button onClick={() => setShowTopupDialog(true)} className="bg-green-600 hover:bg-green-700" data-testid="topup-btn">
           <Plus className="w-4 h-4 mr-2" /> Top-up Cash
         </Button>
-        <Button onClick={() => setShowReconcileDialog(true)} variant="outline">
+        <Button onClick={() => setShowReconcileDialog(true)} variant="outline" data-testid="reconcile-btn">
           <Scale className="w-4 h-4 mr-2" /> Reconcile
+        </Button>
+        <Button onClick={() => setShowExportDialog(true)} variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50" data-testid="export-petty-cash-btn">
+          <FileDown className="w-4 h-4 mr-2" /> Export
         </Button>
       </div>
 
@@ -381,6 +471,11 @@ const PettyCash = () => {
                           </p>
                           <p className="text-xs text-gray-400">Bal: {formatCurrency(txn.balance_after)}</p>
                         </div>
+                        {txn.receipt_url && (
+                          <Button size="sm" variant="ghost" onClick={() => { setReceiptToView(txn.receipt_url); setShowReceiptDialog(true); }} title="View receipt" data-testid={`view-receipt-${txn.id}`}>
+                            <Eye className="w-4 h-4 text-blue-500" />
+                          </Button>
+                        )}
                         {txn.status === 'approved' && (
                           <Button size="sm" variant="ghost" onClick={() => handleDelete(txn.id)}>
                             <Trash2 className="w-4 h-4 text-gray-400" />
@@ -619,6 +714,31 @@ const PettyCash = () => {
                 placeholder="Additional notes (optional)"
               />
             </div>
+            {/* Receipt upload (optional) */}
+            <div>
+              <Label>Receipt (optional)</Label>
+              {transactionForm.receipt_url ? (
+                <div className="mt-1 flex items-center gap-3 p-2 border rounded-lg bg-gray-50">
+                  <img src={transactionForm.receipt_url} alt="receipt" className="h-16 w-auto rounded border" />
+                  <div className="flex-1 text-xs text-gray-600">Receipt attached</div>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setTransactionForm({ ...transactionForm, receipt_url: '' })} data-testid="remove-receipt-btn">
+                    <X className="w-4 h-4 text-red-500" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-1 flex flex-wrap gap-2">
+                  <label className="inline-flex items-center px-3 py-2 text-sm rounded-md border border-gray-300 cursor-pointer hover:bg-gray-50" data-testid="receipt-camera-label">
+                    <Camera className="w-4 h-4 mr-2" /> Take Photo
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleReceiptUpload} />
+                  </label>
+                  <label className="inline-flex items-center px-3 py-2 text-sm rounded-md border border-gray-300 cursor-pointer hover:bg-gray-50" data-testid="receipt-upload-label">
+                    <Upload className="w-4 h-4 mr-2" /> Upload Image
+                    <input type="file" accept="image/*" className="hidden" onChange={handleReceiptUpload} />
+                  </label>
+                </div>
+              )}
+              <p className="text-xs text-gray-400 mt-1">JPG/PNG up to 5MB. Optional — recommended for audit.</p>
+            </div>
             {parseFloat(transactionForm.amount) > (settings?.approval_threshold || 100) && (
               <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <AlertTriangle className="w-5 h-5 text-yellow-600" />
@@ -734,6 +854,81 @@ const PettyCash = () => {
               <Button onClick={handleReconcile}>Complete Reconciliation</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent data-testid="export-dialog">
+          <DialogHeader>
+            <DialogTitle>Export Petty Cash Log</DialogTitle>
+            <DialogDescription>Pick a date range and download as Excel or PDF for your records.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Start Date *</Label>
+                <Input
+                  type="date"
+                  value={exportRange.start_date}
+                  onChange={(e) => setExportRange({ ...exportRange, start_date: e.target.value })}
+                  data-testid="export-start-date"
+                />
+              </div>
+              <div>
+                <Label>End Date *</Label>
+                <Input
+                  type="date"
+                  value={exportRange.end_date}
+                  onChange={(e) => setExportRange({ ...exportRange, end_date: e.target.value })}
+                  data-testid="export-end-date"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => setExportRange({ start_date: firstOfYear, end_date: today })}>This Year</Button>
+              <Button variant="outline" size="sm" onClick={() => {
+                const now = new Date();
+                const first = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+                setExportRange({ start_date: first, end_date: today });
+              }}>This Month</Button>
+              <Button variant="outline" size="sm" onClick={() => {
+                const now = new Date();
+                const first = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+                const last = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+                setExportRange({ start_date: first, end_date: last });
+              }}>Last Month</Button>
+            </div>
+            <p className="text-xs text-gray-500">
+              Exports include all approved and pending transactions in the selected range, with opening balance,
+              running balance, totals, and a signature block for custodian &amp; approver.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowExportDialog(false)}>Close</Button>
+              <Button onClick={() => handleExport('pdf')} disabled={exporting} variant="outline" className="border-red-300 text-red-700 hover:bg-red-50" data-testid="export-pdf-btn">
+                {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileDown className="w-4 h-4 mr-2" />}
+                Download PDF
+              </Button>
+              <Button onClick={() => handleExport('excel')} disabled={exporting} className="bg-emerald-600 hover:bg-emerald-700" data-testid="export-excel-btn">
+                {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileDown className="w-4 h-4 mr-2" />}
+                Download Excel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Receipt Viewer Dialog */}
+      <Dialog open={showReceiptDialog} onOpenChange={setShowReceiptDialog}>
+        <DialogContent data-testid="receipt-dialog" className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Receipt</DialogTitle>
+          </DialogHeader>
+          {receiptToView ? (
+            <img src={receiptToView} alt="Receipt" className="max-h-[70vh] w-auto mx-auto rounded-md border" />
+          ) : (
+            <p className="text-gray-500">No receipt available.</p>
+          )}
         </DialogContent>
       </Dialog>
     </div>

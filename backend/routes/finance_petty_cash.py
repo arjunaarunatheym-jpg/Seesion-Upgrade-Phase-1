@@ -3,9 +3,15 @@ Finance Petty Cash & Manual Entries routes
 Stage F6: ~14 endpoints
 """
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from typing import Optional
 from pydantic import BaseModel
+from io import BytesIO
+from datetime import datetime
 import uuid
+import base64
+import tempfile
+import os as _os
 
 from core import db, get_current_user, get_malaysia_time
 from models import User
@@ -501,3 +507,332 @@ async def get_petty_cash_summary(year: int = None, current_user: User = Depends(
         "by_month": by_month,
         "total_expenses": sum(c["total"] for c in by_category.values())
     }
+
+
+
+# ============ EXPORT ENDPOINTS ============
+async def _load_export_data(start_date: str, end_date: str, current_user: User):
+    """Load petty cash transactions + settings + custodian signature for export."""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    query = {
+        "date": {"$gte": start_date, "$lte": end_date},
+        "status": {"$in": ["approved", "pending"]},
+    }
+    txns = await db.petty_cash_transactions.find(query, {"_id": 0}).sort("date", 1).to_list(5000)
+
+    settings = await db.petty_cash_settings.find_one({}, {"_id": 0}) or {}
+    company = await db.company_settings.find_one({}, {"_id": 0}) or {}
+
+    custodian_sig = ""
+    approver_sig = current_user.digital_signature or ""
+    custodian_id = settings.get("custodian_id")
+    if custodian_id:
+        cust = await db.users.find_one({"id": custodian_id}, {"_id": 0, "digital_signature": 1})
+        if cust:
+            custodian_sig = cust.get("digital_signature") or ""
+
+    return txns, settings, company, custodian_sig, approver_sig
+
+
+@router.get("/petty-cash/export/excel")
+async def export_petty_cash_excel(
+    start_date: str,
+    end_date: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Export petty cash transactions to Excel within a date range"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    txns, settings, company, _, _ = await _load_export_data(start_date, end_date, current_user)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Petty Cash Log"
+
+    header_fill = PatternFill("solid", fgColor="1A365D")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    title_font = Font(bold=True, size=14, color="1A365D")
+    total_fill = PatternFill("solid", fgColor="FFF3CD")
+    thin = Side(border_style="thin", color="AAAAAA")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    # Title rows
+    ws.merge_cells("A1:I1")
+    ws["A1"] = f"{company.get('company_name', 'MDDRC')} — Petty Cash Claim"
+    ws["A1"].font = title_font
+    ws["A1"].alignment = Alignment(horizontal="center")
+
+    ws.merge_cells("A2:I2")
+    ws["A2"] = f"Period: {start_date} to {end_date}  |  Custodian: {settings.get('custodian_name', '-')}  |  Float: RM {settings.get('float_amount', 0):,.2f}"
+    ws["A2"].alignment = Alignment(horizontal="center")
+    ws["A2"].font = Font(italic=True, size=10, color="555555")
+
+    ws.append([])  # row 3 blank
+
+    headers = ["BIL", "Date", "Item", "Category", "Description", "Debit (RM)", "Credit (RM)", "Balance (RM)", "Receipt"]
+    ws.append(headers)
+    header_row_idx = ws.max_row
+    for col_idx, _h in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row_idx, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+
+    # Determine opening balance (balance_before of first txn)
+    opening_balance = txns[0].get("balance_before", 0) if txns else settings.get("current_balance", 0)
+    ws.append(["", "", "Opening Balance", "", "", "", "", round(opening_balance, 2), ""])
+    opening_row = ws.max_row
+    ws.cell(row=opening_row, column=3).font = Font(bold=True)
+    ws.cell(row=opening_row, column=8).font = Font(bold=True)
+    for c in range(1, 10):
+        ws.cell(row=opening_row, column=c).border = border
+
+    total_debit = 0.0
+    total_credit = 0.0
+
+    for idx, t in enumerate(txns, start=1):
+        is_expense = t.get("type") == "expense"
+        is_topup = t.get("type") == "topup"
+        amt = float(t.get("amount", 0) or 0)
+        debit = amt if is_expense else 0.0  # expense out of petty cash
+        credit = amt if is_topup else 0.0   # top-up into petty cash
+        total_debit += debit
+        total_credit += credit
+
+        receipt_mark = "YES" if t.get("receipt_url") else ""
+
+        ws.append([
+            idx,
+            t.get("date", ""),
+            t.get("description", ""),
+            t.get("category", ""),
+            t.get("notes", "") or "",
+            round(debit, 2) if debit else "",
+            round(credit, 2) if credit else "",
+            round(float(t.get("balance_after", 0) or 0), 2),
+            receipt_mark,
+        ])
+        row = ws.max_row
+        for c in range(1, 10):
+            ws.cell(row=row, column=c).border = border
+        ws.cell(row=row, column=1).alignment = Alignment(horizontal="center")
+        ws.cell(row=row, column=2).alignment = Alignment(horizontal="center")
+        for c in (6, 7, 8):
+            ws.cell(row=row, column=c).alignment = Alignment(horizontal="right")
+        if t.get("status") == "pending":
+            ws.cell(row=row, column=3).font = Font(italic=True, color="B58900")
+
+    # Totals row
+    closing_balance = txns[-1].get("balance_after", opening_balance) if txns else opening_balance
+    ws.append(["", "", "TOTAL", "", "", round(total_debit, 2), round(total_credit, 2), round(float(closing_balance), 2), ""])
+    total_row = ws.max_row
+    for c in range(1, 10):
+        ws.cell(row=total_row, column=c).fill = total_fill
+        ws.cell(row=total_row, column=c).font = Font(bold=True)
+        ws.cell(row=total_row, column=c).border = border
+    for c in (6, 7, 8):
+        ws.cell(row=total_row, column=c).alignment = Alignment(horizontal="right")
+
+    # Signature block
+    ws.append([])
+    ws.append([])
+    sig_row = ws.max_row + 1
+    ws.cell(row=sig_row, column=1, value="Prepared by (Custodian):").font = Font(bold=True)
+    ws.cell(row=sig_row, column=5, value="Approved by:").font = Font(bold=True)
+    ws.cell(row=sig_row + 3, column=1, value=f"Name: {settings.get('custodian_name', '__________________________')}")
+    ws.cell(row=sig_row + 3, column=5, value=f"Name: {current_user.full_name}")
+    ws.cell(row=sig_row + 4, column=1, value="Date: __________________________")
+    ws.cell(row=sig_row + 4, column=5, value=f"Date: {get_malaysia_time().strftime('%d %b %Y')}")
+
+    # Column widths
+    widths = [6, 12, 32, 18, 30, 13, 13, 14, 10]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[ws.cell(row=4, column=i).column_letter].width = w
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"PettyCash_{start_date}_to_{end_date}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.get("/petty-cash/export/pdf")
+async def export_petty_cash_pdf(
+    start_date: str,
+    end_date: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Export petty cash transactions to a printable PDF within a date range"""
+    from fpdf import FPDF
+
+    txns, settings, company, custodian_sig, approver_sig = await _load_export_data(start_date, end_date, current_user)
+
+    def _s(t):
+        if t is None:
+            return ""
+        t = str(t)
+        repl = {"\u2013": "-", "\u2014": "-", "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2022": "*"}
+        for k, v in repl.items():
+            t = t.replace(k, v)
+        return "".join(c if ord(c) < 128 else "?" for c in t)
+
+    pdf = FPDF(orientation="L", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    # Title
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(26, 54, 93)
+    pdf.cell(0, 8, _s(company.get("company_name", "MDDRC")) + " - Petty Cash Claim", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(80, 80, 80)
+    pdf.cell(
+        0, 6,
+        f"Period: {start_date} to {end_date}   |   Custodian: {_s(settings.get('custodian_name', '-'))}   |   Float: RM {settings.get('float_amount', 0):,.2f}",
+        ln=True, align="C",
+    )
+    pdf.ln(3)
+
+    # Header row
+    pdf.set_fill_color(26, 54, 93)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 9)
+    # widths (total ≈ 277)
+    cw = [10, 22, 60, 30, 60, 25, 25, 27, 18]
+    headers = ["BIL", "Date", "Item", "Category", "Description", "Debit (RM)", "Credit (RM)", "Balance (RM)", "Receipt"]
+    for w, h in zip(cw, headers):
+        pdf.cell(w, 7, h, border=1, align="C", fill=True)
+    pdf.ln()
+
+    # Opening balance row
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.set_fill_color(245, 245, 245)
+    opening_balance = txns[0].get("balance_before", 0) if txns else settings.get("current_balance", 0)
+    pdf.cell(cw[0], 6, "", border=1, fill=True)
+    pdf.cell(cw[1], 6, "", border=1, fill=True)
+    pdf.cell(cw[2], 6, "Opening Balance", border=1, fill=True)
+    pdf.cell(cw[3], 6, "", border=1, fill=True)
+    pdf.cell(cw[4], 6, "", border=1, fill=True)
+    pdf.cell(cw[5], 6, "", border=1, fill=True)
+    pdf.cell(cw[6], 6, "", border=1, fill=True)
+    pdf.cell(cw[7], 6, f"{float(opening_balance):,.2f}", border=1, align="R", fill=True)
+    pdf.cell(cw[8], 6, "", border=1, fill=True)
+    pdf.ln()
+
+    pdf.set_font("Helvetica", "", 8)
+    total_debit = 0.0
+    total_credit = 0.0
+    alt = False
+    for idx, t in enumerate(txns, start=1):
+        is_expense = t.get("type") == "expense"
+        is_topup = t.get("type") == "topup"
+        amt = float(t.get("amount", 0) or 0)
+        debit = amt if is_expense else 0.0
+        credit = amt if is_topup else 0.0
+        total_debit += debit
+        total_credit += credit
+
+        item = _s(t.get("description", ""))[:55]
+        category = _s(t.get("category", ""))[:22]
+        desc = _s(t.get("notes", "") or "")[:55]
+
+        if alt:
+            pdf.set_fill_color(250, 250, 250)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+        alt = not alt
+
+        pdf.cell(cw[0], 6, str(idx), border=1, align="C", fill=True)
+        pdf.cell(cw[1], 6, _s(t.get("date", "")), border=1, align="C", fill=True)
+        pdf.cell(cw[2], 6, item, border=1, fill=True)
+        pdf.cell(cw[3], 6, category, border=1, fill=True)
+        pdf.cell(cw[4], 6, desc, border=1, fill=True)
+        pdf.cell(cw[5], 6, f"{debit:,.2f}" if debit else "", border=1, align="R", fill=True)
+        pdf.cell(cw[6], 6, f"{credit:,.2f}" if credit else "", border=1, align="R", fill=True)
+        pdf.cell(cw[7], 6, f"{float(t.get('balance_after', 0) or 0):,.2f}", border=1, align="R", fill=True)
+        pdf.cell(cw[8], 6, "YES" if t.get("receipt_url") else "", border=1, align="C", fill=True)
+        pdf.ln()
+
+    # Totals
+    closing_balance = txns[-1].get("balance_after", opening_balance) if txns else opening_balance
+    pdf.set_fill_color(255, 243, 205)
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.cell(cw[0] + cw[1] + cw[2] + cw[3] + cw[4], 7, "TOTAL", border=1, align="R", fill=True)
+    pdf.cell(cw[5], 7, f"{total_debit:,.2f}", border=1, align="R", fill=True)
+    pdf.cell(cw[6], 7, f"{total_credit:,.2f}", border=1, align="R", fill=True)
+    pdf.cell(cw[7], 7, f"{float(closing_balance):,.2f}", border=1, align="R", fill=True)
+    pdf.cell(cw[8], 7, "", border=1, fill=True)
+    pdf.ln(12)
+
+    # Signature blocks
+    def _embed_sig(sig_data, x, y, h=16):
+        if not sig_data:
+            return False
+        try:
+            data = sig_data
+            if data.startswith("data:image"):
+                data = data.split(",", 1)[1]
+            raw = base64.b64decode(data)
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                tmp.write(raw)
+                tmp_path = tmp.name
+            pdf.image(tmp_path, x=x, y=y, h=h)
+            _os.unlink(tmp_path)
+            return True
+        except Exception:
+            return False
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(0, 0, 0)
+    y_sig = pdf.get_y()
+    pdf.set_xy(15, y_sig)
+    pdf.cell(120, 6, "Prepared by (Custodian):", ln=False)
+    pdf.set_xy(160, y_sig)
+    pdf.cell(120, 6, "Approved by:", ln=True)
+
+    sig_y = pdf.get_y() + 2
+    _embed_sig(custodian_sig, x=15, y=sig_y)
+    _embed_sig(approver_sig, x=160, y=sig_y)
+
+    pdf.set_y(sig_y + 20)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_x(15)
+    pdf.cell(120, 5, f"Name: {_s(settings.get('custodian_name', '__________________________'))}", ln=False)
+    pdf.set_x(160)
+    pdf.cell(120, 5, f"Name: {_s(current_user.full_name)}", ln=True)
+    pdf.set_x(15)
+    pdf.cell(120, 5, "Date: __________________________", ln=False)
+    pdf.set_x(160)
+    pdf.cell(120, 5, f"Date: {get_malaysia_time().strftime('%d %b %Y')}", ln=True)
+
+    pdf_bytes = pdf.output(dest="S")
+    if isinstance(pdf_bytes, str):
+        pdf_bytes = pdf_bytes.encode("latin-1")
+    buf = BytesIO(bytes(pdf_bytes))
+    buf.seek(0)
+    fname = f"PettyCash_{start_date}_to_{end_date}.pdf"
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.get("/petty-cash/transaction/{transaction_id}/receipt")
+async def get_petty_cash_receipt(transaction_id: str, current_user: User = Depends(get_current_user)):
+    """Return the receipt image for a petty cash transaction"""
+    if current_user.role not in ["admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    txn = await db.petty_cash_transactions.find_one({"id": transaction_id}, {"_id": 0, "receipt_url": 1})
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return {"receipt_url": txn.get("receipt_url", "") or ""}
