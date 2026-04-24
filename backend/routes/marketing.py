@@ -61,6 +61,22 @@ def sanitize_text_for_pdf(text):
     return text
 
 
+def _break_long_tokens(text: str, max_len: int = 30) -> str:
+    """Insert break opportunities inside unusually long unbroken tokens so fpdf2 can wrap them.
+    Prevents FPDFException: 'Not enough horizontal space to render a single character'."""
+    if not text:
+        return text
+    out_words = []
+    for word in text.split(' '):
+        if len(word) <= max_len:
+            out_words.append(word)
+            continue
+        # Insert a zero-width break (space) every max_len chars
+        chunks = [word[i:i + max_len] for i in range(0, len(word), max_len)]
+        out_words.append(' '.join(chunks))
+    return ' '.join(out_words)
+
+
 # ============ QUOTATION PDF CLASS ============
 class QuotationPDF(FPDF):
     """Custom PDF class for quotation document generation - EXACT invoice styling"""
@@ -86,10 +102,32 @@ class QuotationPDF(FPDF):
             self.set_font('Helvetica', style, size)
     
     def cell_safe(self, w, h, txt, **kwargs):
-        self.cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
+        try:
+            self.cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
+        except Exception as e:
+            # Fallback: truncate aggressively to fit
+            safe_txt = sanitize_text_for_pdf(txt)[:max(1, int((w or 180) / 2))]
+            try:
+                self.cell(w, h, safe_txt, **kwargs)
+            except Exception:
+                print(f"[cell_safe] dropped text due to: {e}")
+                self.cell(w, h, "", **kwargs)
     
     def multi_cell_safe(self, w, h, txt, **kwargs):
-        self.multi_cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
+        safe = sanitize_text_for_pdf(txt)
+        # Break long unbroken tokens (URLs / concatenated emails / no-space addresses)
+        # so fpdf2 can wrap them across lines and avoid FPDFException.
+        safe = _break_long_tokens(safe, max_len=30)
+        try:
+            self.multi_cell(w, h, safe, **kwargs)
+        except Exception as e:
+            # Last-resort: aggressively break every 20 chars
+            safe2 = _break_long_tokens(safe, max_len=20)
+            try:
+                self.multi_cell(w, h, safe2, **kwargs)
+            except Exception:
+                print(f"[multi_cell_safe] dropped text due to: {e}")
+                self.multi_cell(w, h, safe2[:80] + "...", **kwargs)
 
     def render_rich_text(self, text, line_height=5, default_size=10):
         """Render text with formatting tags like **bold**, *italic*, <u>, <big>, <small>, <highlight>, colors, <center>, <br>, <hr>, <pb>"""
@@ -2705,7 +2743,7 @@ async def _generate_quotation_pdf(quotation_id: str, current_user: User):
     y_start = pdf.get_y()
     
     # Draw description cell with wrapping
-    pdf.multi_cell(col_desc, 5, programme_name, border=1)
+    pdf.multi_cell_safe(col_desc, 5, programme_name, border=1)
     y_after_desc = pdf.get_y()
     actual_height = y_after_desc - y_start
     
@@ -2721,7 +2759,7 @@ async def _generate_quotation_pdf(quotation_id: str, current_user: User):
         x_start = pdf.get_x()
         y_start = pdf.get_y()
         item_name = sanitize_text_for_pdf(p_item["name"])
-        pdf.multi_cell(col_desc, 5, item_name, border=1)
+        pdf.multi_cell_safe(col_desc, 5, item_name, border=1)
         y_after = pdf.get_y()
         row_h = y_after - y_start
         pdf.set_xy(x_start + col_desc, y_start)
