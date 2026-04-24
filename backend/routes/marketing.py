@@ -2317,6 +2317,22 @@ async def link_quotation_to_lead(lead_id: str, quotation_id: str, current_user: 
 @router.get("/quotations/{quotation_id}/download-pdf")
 async def download_quotation_pdf(quotation_id: str, current_user: User = Depends(get_current_user)):
     """Generate and download full quotation PDF package (7 pages)"""
+    try:
+        return await _generate_quotation_pdf(quotation_id, current_user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[download_quotation_pdf] FAILED for quotation_id={quotation_id} user={current_user.email}: {e}\n{tb}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unable to generate PDF: {type(e).__name__}: {str(e)[:200]}",
+        )
+
+
+async def _generate_quotation_pdf(quotation_id: str, current_user: User):
+    """Core PDF generation logic (separated so the public route can catch unexpected errors)"""
     if not check_marketing_access(current_user):
         raise HTTPException(status_code=403, detail="Marketing access required")
     

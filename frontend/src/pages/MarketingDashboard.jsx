@@ -439,39 +439,69 @@ const MarketingDashboard = ({ user, onLogout }) => {
     setDownloadingPdf(true);
     try {
       const response = await axiosInstance.get(`/marketing/quotations/${quotationId}/download-pdf`, {
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: 60000
       });
-      
+
+      // Guard: if backend returned JSON error with blob responseType, parse it
+      const ct = response.headers?.['content-type'] || '';
+      if (!ct.includes('pdf')) {
+        try {
+          const txt = await response.data.text();
+          const obj = JSON.parse(txt);
+          throw new Error(obj.detail || 'Server did not return a PDF');
+        } catch (_) {
+          throw new Error('Server did not return a PDF');
+        }
+      }
+
       // Create download link
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
-      
+
       // Get filename from quotation
       const quotation = quotations.find(q => q.id === quotationId);
       const filename = quotation?.quotation_number?.replace(/\//g, '_') || 'quotation';
-      
-      // For mobile compatibility, open in new tab instead of programmatic download
+      const downloadName = `Quotation_${filename}.pdf`;
+
+      // Detect iframed / mobile contexts where programmatic <a download> is blocked
+      const inIframe = (() => { try { return window.self !== window.top; } catch (_) { return true; } })();
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (isMobile) {
-        // Open PDF in new tab - user can then save/share from there
-        window.open(url, '_blank');
-        toast.success('PDF opened in new tab');
+
+      if (isMobile || inIframe) {
+        // Open in a new tab – user can then Save/Share from browser
+        const win = window.open(url, '_blank');
+        if (!win) {
+          // Popup blocked – last-resort inline navigate
+          window.location.href = url;
+        }
+        toast.success('PDF opened in a new tab. Use the browser menu to save it.');
       } else {
-        // Desktop: use download link
         const link = document.createElement('a');
         link.href = url;
-        link.download = `Quotation_${filename}.pdf`;
+        link.download = downloadName;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         toast.success('PDF downloaded successfully');
       }
-      
-      // Cleanup after a delay to allow mobile preview
-      setTimeout(() => window.URL.revokeObjectURL(url), 10000);
+
+      // Cleanup after a delay to allow the new tab to load the blob
+      setTimeout(() => window.URL.revokeObjectURL(url), 30000);
     } catch (error) {
       console.error('PDF download error:', error);
-      toast.error(error.response?.data?.detail || 'Failed to download PDF');
+      // Try to extract JSON error if the response was a blob
+      let msg = error.response?.data?.detail || error.message || 'Failed to download PDF';
+      if (error.response?.data && typeof error.response.data.text === 'function') {
+        try {
+          const txt = await error.response.data.text();
+          const obj = JSON.parse(txt);
+          msg = obj.detail || msg;
+        } catch (_) { /* ignore */ }
+      }
+      toast.error(msg);
     } finally {
       setDownloadingPdf(false);
     }
@@ -488,12 +518,12 @@ const MarketingDashboard = ({ user, onLogout }) => {
   };
 
   // PDF Generation
-  const generatePDF = (quotation) => {
+  const buildQuotationHtml = (quotation) => {
     const client = quotation.client || {};
     const marketerSig = quotation.marketer?.digital_signature || '';
     const approverSig = quotation.approver?.digital_signature || '';
-    
-    const html = `
+
+    return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -577,7 +607,6 @@ const MarketingDashboard = ({ user, onLogout }) => {
         <td style="text-align: center;">${quotation.pricing_type === 'per_group' ? '1 group' : quotation.num_participants}</td>
         <td style="text-align: right;">${quotation.pricing_type === 'per_group' ? (quotation.group_price || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 }) : quotation.rate_per_pax?.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
         <td style="text-align: right;">${(() => {
-          // Show the raw training fee, NOT subtotal minus addons
           const fee = quotation.pricing_type === 'per_group' 
             ? (quotation.group_price || 0) 
             : (quotation.rate_per_pax || 0) * (quotation.num_participants || 0);
@@ -650,74 +679,38 @@ const MarketingDashboard = ({ user, onLogout }) => {
 </body>
 </html>
     `;
-    
+  };
+
+  const generatePDF = (quotation) => {
+    const html = buildQuotationHtml(quotation);
     downloadPdf(html, `Quotation_${quotation.quotation_number?.replace(/\//g, '_') || 'draft'}`);
   };
 
-  // Word (DOCX) Generation for Quotations
+  // Word (DOCX) Generation — reuses the same HTML as the PDF for consistent layout
   const generateWord = async (quotation) => {
     try {
       const { asBlob } = await import('html-docx-js-typescript');
-      const client = quotation.client || {};
-      const marketerSig = quotation.marketer?.digital_signature || '';
-      const approverSig = quotation.approver?.digital_signature || '';
-      const fmtCurrency = (v) => (v || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 });
-      const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-MY', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
-
-      const html = `<html><body style="font-family:Calibri,sans-serif;font-size:11pt">
-        <h2 style="color:#1e40af;text-align:center;border-bottom:2px solid #1e40af;padding-bottom:8px">QUOTATION</h2>
-        <p><strong>Quotation No:</strong> ${quotation.quotation_number || ''}</p>
-        <p><strong>Date:</strong> ${fmtDate(quotation.created_at)}</p>
-        <p><strong>Valid Until:</strong> ${fmtDate(quotation.valid_until)}</p>
-        <br>
-        <p><strong>To:</strong> ${client.company_name || ''}</p>
-        <p>${client.company_address || ''}</p>
-        <p><strong>Attn:</strong> ${client.contact_person || ''}</p>
-        <p><strong>Tel:</strong> ${client.contact_phone || ''} | <strong>Email:</strong> ${client.contact_email || ''}</p>
-        <br>
-        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%">
-          <tr style="background:#1e40af;color:white"><th>Description</th><th>Qty</th><th>Rate (RM)</th><th>Amount (RM)</th></tr>
-          <tr><td>${quotation.programme_name || ''}</td><td style="text-align:center">${quotation.pricing_type === 'per_group' ? '1 group' : quotation.num_participants}</td><td style="text-align:right">${quotation.pricing_type === 'per_group' ? fmtCurrency(quotation.group_price) : fmtCurrency(quotation.rate_per_pax)}</td><td style="text-align:right">${(() => {
-            const fee = quotation.pricing_type === 'per_group'
-              ? (quotation.group_price || 0)
-              : (quotation.rate_per_pax || 0) * (quotation.num_participants || 0);
-            return fmtCurrency(fee);
-          })()}</td></tr>
-          ${(quotation.selected_items || []).filter(si => si.unit_price > 0).map(si => {
-            const item = descriptionItems.find(d => d.id === si.item_id);
-            return `<tr><td>${item?.name || 'Add-on'}</td><td style="text-align:center">${si.quantity||1}</td><td style="text-align:right">${fmtCurrency(si.unit_price)}</td><td style="text-align:right">${fmtCurrency((si.unit_price||0)*(si.quantity||1))}</td></tr>`;
-          }).join('')}
-          ${(() => {
-            const fee = quotation.pricing_type === 'per_group'
-              ? (quotation.group_price || 0)
-              : (quotation.rate_per_pax || 0) * (quotation.num_participants || 0);
-            const addon = (quotation.selected_items || []).filter(si => si.unit_price > 0).reduce((s, si) => s + ((si.unit_price||0)*(si.quantity||1)), 0);
-            const sub = fee + addon;
-            const sst = sub * (quotation.sst_percent || 0) / 100;
-            const total = sub + sst - (quotation.discount_amount || 0);
-            return `
-          <tr><td colspan="3" style="text-align:right"><strong>Subtotal</strong></td><td style="text-align:right">RM ${fmtCurrency(sub)}</td></tr>
-          ${quotation.sst_percent > 0 ? `<tr><td colspan="3" style="text-align:right"><strong>SST (${quotation.sst_percent}%)</strong></td><td style="text-align:right">RM ${fmtCurrency(sst)}</td></tr>` : ''}
-          <tr style="background:#f0f0f0"><td colspan="3" style="text-align:right"><strong>TOTAL</strong></td><td style="text-align:right"><strong>RM ${fmtCurrency(total)}</strong></td></tr>`;
-          })()}
-        </table>
-        <br>
-        ${quotation.terms_conditions ? `<p><strong>Terms & Conditions:</strong></p><ol>${(quotation.terms_conditions || '').split('\\n').filter(t => t.trim()).map(t => '<li>' + t.replace(/^\\d+\\.\\s*/, '') + '</li>').join('')}</ol>` : ''}
-        <br><br>
-        <table style="width:100%"><tr>
-          <td style="width:50%">${marketerSig ? `<img src="${marketerSig}" style="max-height:50px" /><br>` : ''}<strong>Prepared by:</strong> ${quotation.marketer?.full_name || quotation.marketer_name || ''}</td>
-          <td style="width:50%">${approverSig ? `<img src="${approverSig}" style="max-height:50px" /><br>` : ''}<strong>Approved by:</strong> ${quotation.approver?.full_name || ''}</td>
-        </tr></table>
-      </body></html>`;
-
+      const html = buildQuotationHtml(quotation);
       const blob = await asBlob(html);
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Quotation_${quotation.quotation_number?.replace(/\//g, '_') || 'draft'}.docx`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Word document downloaded');
+      const filename = `Quotation_${quotation.quotation_number?.replace(/\//g, '_') || 'draft'}.docx`;
+      const inIframe = (() => { try { return window.self !== window.top; } catch (_) { return true; } })();
+      if (inIframe || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        const w = window.open(url, '_blank');
+        if (!w) window.location.href = url;
+        toast.success('Word document opened. Use the browser menu to save it.');
+      } else {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast.success('Word document downloaded');
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
     } catch (err) {
       console.error(err);
       toast.error('Failed to generate Word document');

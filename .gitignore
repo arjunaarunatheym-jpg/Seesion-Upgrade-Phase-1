@@ -34,7 +34,6 @@ backups/
 # Temp
 *.tmp
 .cache/
--e 
-# Environment files
-*.env
-*.env.*
+
+# test credentials - do not deploy
+memory/test_credentials.md
