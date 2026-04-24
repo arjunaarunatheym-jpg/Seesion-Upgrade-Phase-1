@@ -100,34 +100,54 @@ class QuotationPDF(FPDF):
             self.set_font('DejaVu', style, size)
         else:
             self.set_font('Helvetica', style, size)
-    
+
+    # --- Class-level overrides so EVERY cell/multi_cell call is FPDFException-safe ---
+    def cell(self, w=0, h=0, txt="", *args, **kwargs):
+        try:
+            return super().cell(w, h, txt, *args, **kwargs)
+        except Exception as e:
+            # Most common cause: cursor too close to right margin so w=0 collapses to ~0
+            try:
+                super().ln(h or 5)
+                self.set_x(getattr(self, "l_margin", 10) or 10)
+                return super().cell(w, h, txt, *args, **kwargs)
+            except Exception as e2:
+                print(f"[cell override] dropped cell text after fallback: {e} | {e2}")
+                return None
+
+    def multi_cell(self, w=0, h=0, txt="", *args, **kwargs):
+        safe_txt = _break_long_tokens(txt or "", max_len=30)
+        # Ensure we have horizontal room for w=0 multi_cell
+        try:
+            page_w = self.w
+            r_margin = getattr(self, "r_margin", 10) or 10
+            if (w == 0 or w is None) and (page_w - r_margin - self.get_x()) < 10:
+                super().ln(h or 5)
+                self.set_x(getattr(self, "l_margin", 10) or 10)
+        except Exception:
+            pass
+        try:
+            return super().multi_cell(w, h, safe_txt, *args, **kwargs)
+        except Exception as e:
+            # Tighter break + force left margin
+            try:
+                super().ln(h or 5)
+                self.set_x(getattr(self, "l_margin", 10) or 10)
+                return super().multi_cell(w if (w and w >= 10) else 0, h, _break_long_tokens(safe_txt, max_len=15), *args, **kwargs)
+            except Exception as e2:
+                print(f"[multi_cell override] dropped text after fallback: {e} | {e2}")
+                try:
+                    super().ln(h or 5)
+                except Exception:
+                    pass
+                return None
+
     def cell_safe(self, w, h, txt, **kwargs):
-        try:
-            self.cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
-        except Exception as e:
-            # Fallback: truncate aggressively to fit
-            safe_txt = sanitize_text_for_pdf(txt)[:max(1, int((w or 180) / 2))]
-            try:
-                self.cell(w, h, safe_txt, **kwargs)
-            except Exception:
-                print(f"[cell_safe] dropped text due to: {e}")
-                self.cell(w, h, "", **kwargs)
-    
+        # Thin wrapper that also sanitizes text
+        return self.cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
+
     def multi_cell_safe(self, w, h, txt, **kwargs):
-        safe = sanitize_text_for_pdf(txt)
-        # Break long unbroken tokens (URLs / concatenated emails / no-space addresses)
-        # so fpdf2 can wrap them across lines and avoid FPDFException.
-        safe = _break_long_tokens(safe, max_len=30)
-        try:
-            self.multi_cell(w, h, safe, **kwargs)
-        except Exception as e:
-            # Last-resort: aggressively break every 20 chars
-            safe2 = _break_long_tokens(safe, max_len=20)
-            try:
-                self.multi_cell(w, h, safe2, **kwargs)
-            except Exception:
-                print(f"[multi_cell_safe] dropped text due to: {e}")
-                self.multi_cell(w, h, safe2[:80] + "...", **kwargs)
+        return self.multi_cell(w, h, sanitize_text_for_pdf(txt), **kwargs)
 
     def render_rich_text(self, text, line_height=5, default_size=10):
         """Render text with formatting tags like **bold**, *italic*, <u>, <big>, <small>, <highlight>, colors, <center>, <br>, <hr>, <pb>"""
