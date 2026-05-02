@@ -71,6 +71,16 @@ async def get_template(filename: str):
     return FileResponse(file_path)
 
 
+@router.get("/static/docs/{filename}")
+async def get_doc(filename: str):
+    from pathlib import Path
+    docs_dir = Path(__file__).parent.parent / "static" / "docs"
+    file_path = docs_dir / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Document not found")
+    return FileResponse(file_path, filename=filename)
+
+
 @router.post("/checklist-photos/upload")
 async def upload_checklist_photo(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
     if current_user.role != "trainer":
