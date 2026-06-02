@@ -571,6 +571,7 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
                 "name": trainer.get("full_name") if trainer else "Unknown",
                 "company": company_map.get(session.get("company_id"), "Unknown"),
                 "session": session.get("name", "Unknown"),
+                "training_date": session.get("start_date") or "-",
                 "amount": fee.get("fee_amount", 0),
                 "status": fee.get("status", "pending"),
                 "role": fee.get("role", "Trainer")
@@ -585,6 +586,7 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
                 "name": coord.get("full_name") if coord else "Unknown",
                 "company": company_map.get(session.get("company_id"), "Unknown"),
                 "session": session.get("name", "Unknown"),
+                "training_date": session.get("start_date") or "-",
                 "amount": fee.get("total_fee", 0),
                 "status": fee.get("status", "pending"),
                 "days": fee.get("num_days", 1)
@@ -599,6 +601,7 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
                 "name": user.get("full_name") if user else "Unknown",
                 "company": company_map.get(session.get("company_id"), comm.get("company_name", "Unknown")),
                 "session": session.get("name", "Unknown"),
+                "training_date": session.get("start_date") or comm.get("session_start_date") or "-",
                 "amount": comm.get("calculated_amount", 0),
                 "status": comm.get("status", "pending"),
                 "rate": f"{comm.get('commission_rate', 0)}%"
@@ -613,6 +616,7 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
                 "name": user.get("full_name") if user else (af.get("marketing_user_name") or "Unknown"),
                 "company": company_map.get(session.get("company_id"), af.get("company_name", "Unknown")),
                 "session": session.get("name", "Unknown"),
+                "training_date": session.get("start_date") or af.get("session_start_date") or "-",
                 "amount": af.get("calculated_amount", 0),
                 "status": af.get("status", "pending"),
                 "rate": f"{af.get('commission_rate', 0)}%"
@@ -641,99 +645,100 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
     ws_trainer = wb.active
     ws_trainer.title = "Trainer Fees"
     ws_trainer.append(["Trainer Fees - " + month_name])
-    ws_trainer.merge_cells('A1:F1')
+    ws_trainer.merge_cells('A1:G1')
     ws_trainer['A1'].font = Font(bold=True, size=14)
     ws_trainer.append([])
-    ws_trainer.append(["Name", "Company", "Session", "Role", "Amount (RM)", "Status"])
-    for col in range(1, 7):
+    ws_trainer.append(["Name", "Company", "Session", "Training Date", "Role", "Amount (RM)", "Status"])
+    for col in range(1, 8):
         ws_trainer.cell(row=3, column=col).font = header_font
         ws_trainer.cell(row=3, column=col).fill = header_fill
         ws_trainer.cell(row=3, column=col).border = border
     
     for fee in filtered_trainer:
-        ws_trainer.append([fee["name"], fee["company"], fee["session"], fee["role"], fee["amount"], fee["status"]])
+        ws_trainer.append([fee["name"], fee["company"], fee["session"], fee["training_date"], fee["role"], fee["amount"], fee["status"]])
     
     if filtered_trainer:
         total_row = ws_trainer.max_row + 1
-        ws_trainer.cell(row=total_row, column=4, value="TOTAL:")
-        ws_trainer.cell(row=total_row, column=4).font = Font(bold=True)
-        ws_trainer.cell(row=total_row, column=5, value=sum(f["amount"] for f in filtered_trainer))
+        ws_trainer.cell(row=total_row, column=5, value="TOTAL:")
         ws_trainer.cell(row=total_row, column=5).font = Font(bold=True)
+        ws_trainer.cell(row=total_row, column=6, value=sum(f["amount"] for f in filtered_trainer))
+        ws_trainer.cell(row=total_row, column=6).font = Font(bold=True)
     
     # Coordinator Fees Sheet
     ws_coord = wb.create_sheet("Coordinator Fees")
     ws_coord.append(["Coordinator Fees - " + month_name])
-    ws_coord.merge_cells('A1:F1')
+    ws_coord.merge_cells('A1:G1')
     ws_coord['A1'].font = Font(bold=True, size=14)
     ws_coord.append([])
-    ws_coord.append(["Name", "Company", "Session", "Days", "Amount (RM)", "Status"])
-    for col in range(1, 7):
+    ws_coord.append(["Name", "Company", "Session", "Training Date", "Days", "Amount (RM)", "Status"])
+    for col in range(1, 8):
         ws_coord.cell(row=3, column=col).font = header_font
         ws_coord.cell(row=3, column=col).fill = header_fill
         ws_coord.cell(row=3, column=col).border = border
     
     for fee in filtered_coordinator:
-        ws_coord.append([fee["name"], fee["company"], fee["session"], fee["days"], fee["amount"], fee["status"]])
+        ws_coord.append([fee["name"], fee["company"], fee["session"], fee["training_date"], fee["days"], fee["amount"], fee["status"]])
     
     if filtered_coordinator:
         total_row = ws_coord.max_row + 1
-        ws_coord.cell(row=total_row, column=4, value="TOTAL:")
-        ws_coord.cell(row=total_row, column=4).font = Font(bold=True)
-        ws_coord.cell(row=total_row, column=5, value=sum(f["amount"] for f in filtered_coordinator))
+        ws_coord.cell(row=total_row, column=5, value="TOTAL:")
         ws_coord.cell(row=total_row, column=5).font = Font(bold=True)
+        ws_coord.cell(row=total_row, column=6, value=sum(f["amount"] for f in filtered_coordinator))
+        ws_coord.cell(row=total_row, column=6).font = Font(bold=True)
     
     # Marketing Commission Sheet
     ws_marketing = wb.create_sheet("Marketing Commission")
     ws_marketing.append(["Marketing Commission - " + month_name])
-    ws_marketing.merge_cells('A1:F1')
+    ws_marketing.merge_cells('A1:G1')
     ws_marketing['A1'].font = Font(bold=True, size=14)
     ws_marketing.append([])
-    ws_marketing.append(["Name", "Company", "Session", "Rate", "Amount (RM)", "Status"])
-    for col in range(1, 7):
+    ws_marketing.append(["Name", "Company", "Session", "Training Date", "Rate", "Amount (RM)", "Status"])
+    for col in range(1, 8):
         ws_marketing.cell(row=3, column=col).font = header_font
         ws_marketing.cell(row=3, column=col).fill = header_fill
         ws_marketing.cell(row=3, column=col).border = border
     
     for comm in filtered_marketing:
-        ws_marketing.append([comm["name"], comm["company"], comm["session"], comm["rate"], comm["amount"], comm["status"]])
+        ws_marketing.append([comm["name"], comm["company"], comm["session"], comm["training_date"], comm["rate"], comm["amount"], comm["status"]])
     
     if filtered_marketing:
         total_row = ws_marketing.max_row + 1
-        ws_marketing.cell(row=total_row, column=4, value="TOTAL:")
-        ws_marketing.cell(row=total_row, column=4).font = Font(bold=True)
-        ws_marketing.cell(row=total_row, column=5, value=sum(f["amount"] for f in filtered_marketing))
+        ws_marketing.cell(row=total_row, column=5, value="TOTAL:")
         ws_marketing.cell(row=total_row, column=5).font = Font(bold=True)
+        ws_marketing.cell(row=total_row, column=6, value=sum(f["amount"] for f in filtered_marketing))
+        ws_marketing.cell(row=total_row, column=6).font = Font(bold=True)
 
     # Administration Fee Sheet
     ws_admin = wb.create_sheet("Administration Fees")
     ws_admin.append(["Administration Fees - " + month_name])
-    ws_admin.merge_cells('A1:F1')
+    ws_admin.merge_cells('A1:G1')
     ws_admin['A1'].font = Font(bold=True, size=14)
     ws_admin.append([])
-    ws_admin.append(["Name", "Company", "Session", "Rate", "Amount (RM)", "Status"])
-    for col in range(1, 7):
+    ws_admin.append(["Name", "Company", "Session", "Training Date", "Rate", "Amount (RM)", "Status"])
+    for col in range(1, 8):
         ws_admin.cell(row=3, column=col).font = header_font
         ws_admin.cell(row=3, column=col).fill = header_fill
         ws_admin.cell(row=3, column=col).border = border
 
     for af in filtered_admin_fee:
-        ws_admin.append([af["name"], af["company"], af["session"], af["rate"], af["amount"], af["status"]])
+        ws_admin.append([af["name"], af["company"], af["session"], af["training_date"], af["rate"], af["amount"], af["status"]])
 
     if filtered_admin_fee:
         total_row = ws_admin.max_row + 1
-        ws_admin.cell(row=total_row, column=4, value="TOTAL:")
-        ws_admin.cell(row=total_row, column=4).font = Font(bold=True)
-        ws_admin.cell(row=total_row, column=5, value=sum(f["amount"] for f in filtered_admin_fee))
+        ws_admin.cell(row=total_row, column=5, value="TOTAL:")
         ws_admin.cell(row=total_row, column=5).font = Font(bold=True)
+        ws_admin.cell(row=total_row, column=6, value=sum(f["amount"] for f in filtered_admin_fee))
+        ws_admin.cell(row=total_row, column=6).font = Font(bold=True)
 
     # Adjust column widths
     for ws in [ws_trainer, ws_coord, ws_marketing, ws_admin]:
         ws.column_dimensions['A'].width = 25
         ws.column_dimensions['B'].width = 30
         ws.column_dimensions['C'].width = 40
-        ws.column_dimensions['D'].width = 15
+        ws.column_dimensions['D'].width = 14
         ws.column_dimensions['E'].width = 15
-        ws.column_dimensions['F'].width = 12
+        ws.column_dimensions['F'].width = 15
+        ws.column_dimensions['G'].width = 12
     
     # Save to bytes and return as streaming response
     output = BytesIO()
