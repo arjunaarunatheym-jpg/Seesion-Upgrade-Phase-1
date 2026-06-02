@@ -179,9 +179,11 @@ async def apply_admin_fee_to_session(session_id: str, current_user_id: str = "sy
         amount = round(subtotal * pct / 100, 2)
 
         # --- Upsert session_expense (auto-generated) ---
+        # Single source of truth: Session Costing's actual_amount drives Payables.
+        # On UPDATE we preserve actual_amount if it was manually edited (i.e. differs from estimated_amount).
         existing_exp = await db.session_expenses.find_one(
             {"session_id": session_id, "auto_generated": True, "category": "admin_fee"},
-            {"_id": 0, "id": 1},
+            {"_id": 0, "id": 1, "actual_amount": 1, "estimated_amount": 1},
         )
         expense_doc = {
             "session_id": session_id,
@@ -190,7 +192,6 @@ async def apply_admin_fee_to_session(session_id: str, current_user_id: str = "sy
             "expense_type": "percentage",
             "percentage_rate": pct,
             "estimated_amount": amount,
-            "actual_amount": amount,
             "quantity": 1,
             "unit_price": amount,
             "remark": f"Auto-generated administration fee on subtotal RM {subtotal:,.2f}",
@@ -201,6 +202,12 @@ async def apply_admin_fee_to_session(session_id: str, current_user_id: str = "sy
             "updated_at": get_malaysia_time().isoformat(),
         }
         if existing_exp:
+            # Preserve manual edits: only set actual_amount if it was previously
+            # equal to estimated_amount (i.e. never manually edited).
+            prev_actual = float(existing_exp.get("actual_amount") or 0)
+            prev_estimated = float(existing_exp.get("estimated_amount") or 0)
+            if abs(prev_actual - prev_estimated) < 0.01:
+                expense_doc["actual_amount"] = amount
             await db.session_expenses.update_one(
                 {"id": existing_exp["id"]},
                 {"$set": expense_doc},
@@ -208,9 +215,27 @@ async def apply_admin_fee_to_session(session_id: str, current_user_id: str = "sy
         else:
             expense_doc.update({
                 "id": str(uuid.uuid4()),
+                "actual_amount": amount,
                 "created_at": get_malaysia_time().isoformat(),
             })
             await db.session_expenses.insert_one(expense_doc)
+
+        # Also purge any stale duplicates (e.g. legacy rows whose category was
+        # stored as "Administration Fee" instead of "admin_fee"). Keeps Costing tidy.
+        await db.session_expenses.delete_many({
+            "session_id": session_id,
+            "auto_generated": True,
+            "category": {"$ne": "admin_fee"},
+            "description": {"$regex": "administration fee", "$options": "i"},
+        })
+
+        # Re-read the authoritative session_expense actual_amount — this is what
+        # Costing screen shows and what Payables MUST mirror.
+        authoritative = await db.session_expenses.find_one(
+            {"session_id": session_id, "auto_generated": True, "category": "admin_fee"},
+            {"_id": 0, "actual_amount": 1},
+        )
+        final_amount = float((authoritative or {}).get("actual_amount") or amount)
 
         # --- Upsert marketing_commissions payable (type=admin_fee) ---
         if recipient_id:
@@ -226,7 +251,7 @@ async def apply_admin_fee_to_session(session_id: str, current_user_id: str = "sy
                 "commission_type": "percentage",
                 "commission_rate": pct,
                 "fixed_amount": 0.0,
-                "calculated_amount": amount,
+                "calculated_amount": final_amount,
                 "session_name": session.get("session_name") or session.get("title"),
                 "company_name": session.get("company_name"),
                 "session_start_date": session.get("start_date"),
@@ -254,7 +279,8 @@ async def apply_admin_fee_to_session(session_id: str, current_user_id: str = "sy
 
         return {
             "applied": True,
-            "amount": amount,
+            "amount": final_amount,
+            "computed_amount": amount,
             "percentage": pct,
             "subtotal": subtotal,
             "recipient_id": recipient_id,
