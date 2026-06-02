@@ -479,3 +479,62 @@ async def mark_one_paid(record_id: str, current_user: User = Depends(get_current
         }},
     )
     return {"message": "Marked as paid"}
+
+
+@router.post("/sync-all")
+async def sync_all_eligible_sessions(current_user: User = Depends(get_current_user)):
+    """Force-recompute admin fee for ALL sessions whose start_date >= effective_from.
+    This synchronises session_expenses AND marketing_commissions records so the Finance
+    payout amounts always match the Session Costing screen."""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin/Super Admin only")
+
+    cfg = await _load_config()
+    if not cfg.get("enabled"):
+        return {
+            "message": "Administration fee feature is disabled in Settings; nothing to sync",
+            "processed": 0,
+            "applied": 0,
+            "skipped": 0,
+        }
+
+    effective_from = cfg.get("effective_from", DEFAULT_EFFECTIVE_FROM)
+    sessions = await db.sessions.find(
+        {"start_date": {"$gte": effective_from}},
+        {"_id": 0, "id": 1, "start_date": 1, "name": 1},
+    ).to_list(5000)
+
+    applied = 0
+    skipped = 0
+    failures = []
+    details = []
+    for s in sessions:
+        sid = s.get("id")
+        if not sid:
+            continue
+        result = await apply_admin_fee_to_session(sid, current_user.id)
+        if result.get("applied"):
+            applied += 1
+            details.append({
+                "session_id": sid,
+                "session_name": s.get("name"),
+                "start_date": s.get("start_date"),
+                "amount": result.get("amount"),
+                "percentage": result.get("percentage"),
+            })
+        else:
+            skipped += 1
+            if result.get("reason") == "error":
+                failures.append({"session_id": sid, "detail": result.get("detail")})
+
+    return {
+        "message": f"Synced {applied} sessions ({skipped} skipped)",
+        "processed": len(sessions),
+        "applied": applied,
+        "skipped": skipped,
+        "failures": failures,
+        "applied_details": details[:50],  # cap for response size
+        "effective_from": effective_from,
+        "percentage": cfg.get("percentage"),
+        "recipient_name": cfg.get("recipient_name"),
+    }

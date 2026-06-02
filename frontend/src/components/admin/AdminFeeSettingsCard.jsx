@@ -7,13 +7,16 @@ import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
-import { Percent, Save, Loader2, Info } from 'lucide-react';
+import { Percent, Save, Loader2, Info, RefreshCw } from 'lucide-react';
 
 export default function AdminFeeSettingsCard() {
   const [config, setConfig] = useState(null);
   const [recipients, setRecipients] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -57,6 +60,22 @@ export default function AdminFeeSettingsCard() {
       toast.error(e.response?.data?.detail || 'Failed to save');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const syncAll = async () => {
+    if (!window.confirm('This will recompute and synchronise the administration fee for ALL eligible sessions (May 2026+). Continue?')) {
+      return;
+    }
+    setSyncing(true);
+    try {
+      const res = await axiosInstance.post('/admin-fee/sync-all');
+      setLastSync(res.data);
+      toast.success(`Synced ${res.data.applied} sessions (${res.data.skipped} skipped, ${res.data.processed} total processed)`);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Sync failed');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -154,12 +173,45 @@ export default function AdminFeeSettingsCard() {
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-between gap-2">
+          <Button
+            onClick={syncAll}
+            disabled={syncing}
+            variant="outline"
+            className="border-blue-300 text-blue-700 hover:bg-blue-50"
+            data-testid="sync-all-admin-fees-btn"
+          >
+            {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+            Sync All Admin Fees
+          </Button>
           <Button onClick={save} disabled={saving} className="bg-amber-600 hover:bg-amber-700" data-testid="save-admin-fee-btn">
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             Save Configuration
           </Button>
         </div>
+
+        {lastSync && (
+          <div className="mt-2 p-3 rounded-md bg-emerald-50 border border-emerald-200 text-sm" data-testid="last-sync-summary">
+            <div className="font-semibold text-emerald-800 mb-1">Last sync result</div>
+            <div className="text-emerald-700">
+              Processed <b>{lastSync.processed}</b> sessions · Applied <b>{lastSync.applied}</b> · Skipped <b>{lastSync.skipped}</b>
+              {lastSync.failures?.length > 0 && <span className="text-red-600 ml-1">· {lastSync.failures.length} errors</span>}
+            </div>
+            {lastSync.applied_details?.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-emerald-700 hover:underline text-xs">Show applied sessions ({lastSync.applied_details.length})</summary>
+                <ul className="mt-2 text-xs space-y-1 max-h-40 overflow-auto">
+                  {lastSync.applied_details.map((d) => (
+                    <li key={d.session_id} className="flex justify-between border-b border-emerald-100 py-1">
+                      <span>{d.start_date} · {d.session_name || d.session_id}</span>
+                      <span className="font-medium">RM {Number(d.amount).toLocaleString('en-MY', { minimumFractionDigits: 2 })} ({d.percentage}%)</span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
