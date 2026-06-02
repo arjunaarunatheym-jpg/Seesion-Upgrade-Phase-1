@@ -23,6 +23,7 @@ import { downloadPdf, downloadPdfLandscape } from '../utils/htmlToPdf';
 import { DigitalSignatureManager } from '../components/shared/DigitalSignatureManager';
 import { InvoicesTab } from '../components/finance/InvoicesTab';
 import { PaymentsTab } from '../components/finance/PaymentsTab';
+import AdminFeePayoutsPanel from '../components/admin/AdminFeePayoutsPanel';
 import { CreditNotesTab } from '../components/finance/CreditNotesTab';
 import { PayablesTab } from '../components/finance/PayablesTab';
 import { AuditLogTab } from '../components/finance/AuditLogTab';
@@ -1844,11 +1845,14 @@ const FinanceDashboard = ({ user, onLogout }) => {
 
           {/* Payables Tab - Pay staff fees with monthly grouping */}
           <TabsContent value="payables">
-            <PayablesTab
-              payables={payables}
-              currentYear={currentYear}
-              onRefresh={loadPayables}
-            />
+            <div className="space-y-6">
+              <AdminFeePayoutsPanel />
+              <PayablesTab
+                payables={payables}
+                currentYear={currentYear}
+                onRefresh={loadPayables}
+              />
+            </div>
           </TabsContent>
 
           {/* Invoices Tab */}

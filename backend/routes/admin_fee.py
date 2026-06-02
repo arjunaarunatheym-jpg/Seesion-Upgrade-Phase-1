@@ -300,3 +300,182 @@ async def override_for_session(session_id: str, body: AdminFeeOverride, current_
     await db.sessions.update_one({"id": session_id}, {"$set": update})
     result = await apply_admin_fee_to_session(session_id, current_user.id)
     return {"message": "Override saved and admin fee recomputed", "result": result}
+
+
+# ============ PAYOUT ENDPOINTS ============
+def _is_finance_or_admin(user: User) -> bool:
+    return user.role in ["admin", "super_admin", "finance"]
+
+
+@router.get("/payouts")
+async def list_payouts(
+    status: Optional[str] = None,
+    recipient_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+):
+    """List admin fee payouts.
+    - Finance/Admin: sees all (can filter by recipient_id).
+    - Marketing user (or any non-finance): forced to their own records only.
+    """
+    query: dict = {"type": "admin_fee"}
+    if _is_finance_or_admin(current_user):
+        if recipient_id:
+            query["marketing_user_id"] = recipient_id
+    else:
+        query["marketing_user_id"] = current_user.id
+    if status:
+        query["status"] = status
+    if start_date or end_date:
+        q = {}
+        if start_date:
+            q["$gte"] = start_date
+        if end_date:
+            q["$lte"] = end_date
+        query["session_start_date"] = q
+
+    records = await db.marketing_commissions.find(query, {"_id": 0}).sort("session_start_date", -1).to_list(2000)
+    total = sum(float(r.get("calculated_amount") or 0) for r in records)
+    pending_count = sum(1 for r in records if r.get("status") == "pending")
+    paid_count = sum(1 for r in records if r.get("status") == "paid")
+    return {
+        "records": records,
+        "summary": {
+            "total_records": len(records),
+            "total_amount": round(total, 2),
+            "pending_count": pending_count,
+            "paid_count": paid_count,
+        },
+    }
+
+
+@router.get("/payouts/summary")
+async def payout_summary(current_user: User = Depends(get_current_user)):
+    """Quick summary for dashboard widgets.
+    - Finance/Admin: across all recipients.
+    - Marketing user: for self only.
+    """
+    query: dict = {"type": "admin_fee"}
+    is_admin_view = _is_finance_or_admin(current_user)
+    if not is_admin_view:
+        query["marketing_user_id"] = current_user.id
+
+    records = await db.marketing_commissions.find(query, {"_id": 0}).to_list(5000)
+    pending = [r for r in records if r.get("status") == "pending"]
+    paid = [r for r in records if r.get("status") == "paid"]
+
+    pending_amount = round(sum(float(r.get("calculated_amount") or 0) for r in pending), 2)
+    paid_amount = round(sum(float(r.get("calculated_amount") or 0) for r in paid), 2)
+
+    # By month buckets
+    from collections import defaultdict
+    by_month: dict = defaultdict(lambda: {"count": 0, "amount": 0.0, "pending_amount": 0.0})
+    for r in records:
+        sd = r.get("session_start_date") or ""
+        key = sd[:7] if len(sd) >= 7 else "unknown"
+        amt = float(r.get("calculated_amount") or 0)
+        by_month[key]["count"] += 1
+        by_month[key]["amount"] += amt
+        if r.get("status") == "pending":
+            by_month[key]["pending_amount"] += amt
+    by_month_list = [{"month": k, **v, "amount": round(v["amount"], 2), "pending_amount": round(v["pending_amount"], 2)} for k, v in sorted(by_month.items(), reverse=True)]
+
+    # By recipient (admin view only)
+    by_recipient = []
+    if is_admin_view:
+        recs: dict = defaultdict(lambda: {"recipient_id": None, "recipient_name": None, "pending_amount": 0.0, "pending_count": 0, "total_amount": 0.0})
+        for r in records:
+            rid = r.get("marketing_user_id") or "unknown"
+            recs[rid]["recipient_id"] = rid
+            recs[rid]["recipient_name"] = r.get("marketing_user_name")
+            amt = float(r.get("calculated_amount") or 0)
+            recs[rid]["total_amount"] += amt
+            if r.get("status") == "pending":
+                recs[rid]["pending_amount"] += amt
+                recs[rid]["pending_count"] += 1
+        by_recipient = [
+            {**v, "pending_amount": round(v["pending_amount"], 2), "total_amount": round(v["total_amount"], 2)}
+            for v in recs.values()
+        ]
+        by_recipient.sort(key=lambda x: x["pending_amount"], reverse=True)
+
+    return {
+        "is_admin_view": is_admin_view,
+        "pending_amount": pending_amount,
+        "pending_count": len(pending),
+        "paid_amount": paid_amount,
+        "paid_count": len(paid),
+        "by_month": by_month_list,
+        "by_recipient": by_recipient,
+    }
+
+
+class BulkPayRequest(BaseModel):
+    record_ids: list[str]
+    payment_reference: Optional[str] = None
+    paid_date: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@router.post("/payouts/bulk-pay")
+async def bulk_mark_paid(body: BulkPayRequest, current_user: User = Depends(get_current_user)):
+    if not _is_finance_or_admin(current_user):
+        raise HTTPException(status_code=403, detail="Only Finance/Admin can pay payouts")
+    if not body.record_ids:
+        raise HTTPException(status_code=400, detail="No records selected")
+
+    paid_date = body.paid_date or get_malaysia_time().strftime("%Y-%m-%d")
+    batch_ref = body.payment_reference or f"ADMFEE-{get_malaysia_time().strftime('%Y%m%d%H%M%S')}"
+
+    # Only mark records that are currently pending admin_fee
+    records = await db.marketing_commissions.find(
+        {"id": {"$in": body.record_ids}, "type": "admin_fee", "status": "pending"},
+        {"_id": 0},
+    ).to_list(len(body.record_ids))
+
+    if not records:
+        raise HTTPException(status_code=404, detail="No matching pending records found")
+
+    result = await db.marketing_commissions.update_many(
+        {"id": {"$in": [r["id"] for r in records]}},
+        {"$set": {
+            "status": "paid",
+            "paid_date": paid_date,
+            "paid_by": current_user.id,
+            "payment_reference": batch_ref,
+            "payment_notes": body.notes,
+            "updated_at": get_malaysia_time().isoformat(),
+        }},
+    )
+    total_amount = round(sum(float(r.get("calculated_amount") or 0) for r in records), 2)
+    return {
+        "message": f"Marked {result.modified_count} payouts as paid",
+        "modified_count": result.modified_count,
+        "total_amount": total_amount,
+        "payment_reference": batch_ref,
+        "paid_date": paid_date,
+    }
+
+
+@router.post("/payouts/{record_id}/mark-paid")
+async def mark_one_paid(record_id: str, current_user: User = Depends(get_current_user)):
+    if not _is_finance_or_admin(current_user):
+        raise HTTPException(status_code=403, detail="Only Finance/Admin can pay payouts")
+    record = await db.marketing_commissions.find_one(
+        {"id": record_id, "type": "admin_fee"}, {"_id": 0}
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Payout not found")
+    if record.get("status") == "paid":
+        return {"message": "Already paid", "record": record}
+    await db.marketing_commissions.update_one(
+        {"id": record_id},
+        {"$set": {
+            "status": "paid",
+            "paid_date": get_malaysia_time().strftime("%Y-%m-%d"),
+            "paid_by": current_user.id,
+            "updated_at": get_malaysia_time().isoformat(),
+        }},
+    )
+    return {"message": "Marked as paid"}

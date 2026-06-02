@@ -26,6 +26,7 @@ import { ClientsTab } from '../components/marketing/ClientsTab';
 import { QuotationsTab } from '../components/marketing/QuotationsTab';
 import { LeadPipelineTab } from '../components/marketing/LeadPipelineTab';
 import { PipelineStatsCard } from '../components/marketing/PipelineStatsCard';
+import AdminFeePayoutsPanel from '../components/admin/AdminFeePayoutsPanel';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -929,7 +930,10 @@ const MarketingDashboard = ({ user, onLogout }) => {
 
           {/* Earnings Tab */}
           <TabsContent value="earnings">
-            <MyEarnings user={user} />
+            <div className="space-y-6">
+              <AdminFeePayoutsPanel />
+              <MyEarnings user={user} />
+            </div>
           </TabsContent>
 
           {/* My Payroll Tab */}
