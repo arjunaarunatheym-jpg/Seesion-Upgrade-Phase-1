@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { axiosInstance } from '../App';
 import { toast } from 'sonner';
+import AdminFeeSettingsCard from '../components/admin/AdminFeeSettingsCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -1619,6 +1620,8 @@ const SuperAdminPortal = () => {
 
         {/* Settings Tab */}
         <TabsContent value="settings">
+          <AdminFeeSettingsCard />
+          <div className="mt-6" />
           <Card>
             <CardHeader>
               <CardTitle>System Settings</CardTitle>

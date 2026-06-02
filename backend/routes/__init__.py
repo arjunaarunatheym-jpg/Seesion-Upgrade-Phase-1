@@ -41,6 +41,7 @@ from .reports_legacy import router as reports_legacy_router
 from .vehicle_details import router as vehicle_details_router
 from .admin_data_management import router as admin_data_management_router
 from .certificate_verify import router as certificate_verify_router
+from .admin_fee import router as admin_fee_router
 
 # Create combined router
 def get_all_routers():
@@ -82,6 +83,7 @@ def get_all_routers():
         vehicle_details_router, # /vehicle-details/*
         admin_data_management_router, # /admin-data/*
         certificate_verify_router, # /verify/* (public cert verification)
+        admin_fee_router,        # /admin-fee/* (Administration Fee config + auto-application)
     ]
 
 __all__ = [
@@ -122,5 +124,6 @@ __all__ = [
     'vehicle_details_router',
     'admin_data_management_router',
     'certificate_verify_router',
+    'admin_fee_router',
     'get_all_routers',
 ]

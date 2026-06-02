@@ -163,6 +163,12 @@ async def save_session_invoice(session_id: str, invoice_data: dict, current_user
             "updated_at": now.isoformat()
         }
         await db.invoices.update_one({"id": existing["id"]}, {"$set": update_dict})
+        # Recompute admin fee since subtotal may have changed
+        try:
+            from routes.admin_fee import apply_admin_fee_to_session
+            await apply_admin_fee_to_session(session_id, current_user.id)
+        except Exception as _e:
+            print(f"[save_session_invoice/update] admin_fee hook failed: {_e}")
         return {"message": "Invoice updated", "invoice_id": existing["id"]}
     else:
         invoice_number = await _generate_invoice_number()
@@ -396,6 +402,13 @@ async def save_session_expenses(session_id: str, expenses: List[dict], current_u
                 "updated_at": get_malaysia_time().isoformat()
             }
             await db.session_expenses.insert_one(expense_record)
+
+    # Trigger Administration Fee auto-application (idempotent; no-op for sessions predating cutoff)
+    try:
+        from routes.admin_fee import apply_admin_fee_to_session
+        await apply_admin_fee_to_session(session_id, current_user.id)
+    except Exception as _e:
+        print(f"[save_session_expenses] admin_fee hook failed: {_e}")
 
     return {"message": f"Saved {len(expenses)} expenses"}
 
@@ -655,3 +668,4 @@ async def get_pdf_layout_preview(current_user: User = Depends(get_current_user))
         media_type="application/pdf",
         headers={"Content-Disposition": "inline; filename=layout_preview.pdf"}
     )
+
