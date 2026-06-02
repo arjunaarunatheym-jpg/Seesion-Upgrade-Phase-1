@@ -110,7 +110,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
   const [pendingInvoices, setPendingInvoices] = useState([]);
   const [creditNotes, setCreditNotes] = useState([]);
   const [showCNDialog, setShowCNDialog] = useState(false);
-  const [payables, setPayables] = useState({ trainer_fees: [], coordinator_fees: [], marketing_commissions: [] });
+  const [payables, setPayables] = useState({ trainer_fees: [], coordinator_fees: [], marketing_commissions: [], admin_fees: [] });
   const [payablesPeriods, setPayablesPeriods] = useState([]);
   const [payablesYear, setPayablesYear] = useState(new Date().getFullYear());
   const [payablesMonth, setPayablesMonth] = useState(new Date().getMonth() + 1);
@@ -216,15 +216,17 @@ const FinanceDashboard = ({ user, onLogout }) => {
   const loadPayables = async () => {
     try {
       // Load all pending payables
-      const [trainerRes, coordRes, commRes] = await Promise.all([
+      const [trainerRes, coordRes, commRes, adminFeeRes] = await Promise.all([
         axiosInstance.get('/finance/payables/trainer-fees'),
         axiosInstance.get('/finance/payables/coordinator-fees'),
-        axiosInstance.get('/finance/payables/marketing-commissions')
+        axiosInstance.get('/finance/payables/marketing-commissions'),
+        axiosInstance.get('/finance/payables/admin-fees')
       ]);
       setPayables({
         trainer_fees: trainerRes.data || [],
         coordinator_fees: coordRes.data || [],
-        marketing_commissions: commRes.data || []
+        marketing_commissions: commRes.data || [],
+        admin_fees: adminFeeRes.data || []
       });
       
       // Load period status
@@ -1845,14 +1847,11 @@ const FinanceDashboard = ({ user, onLogout }) => {
 
           {/* Payables Tab - Pay staff fees with monthly grouping */}
           <TabsContent value="payables">
-            <div className="space-y-6">
-              <AdminFeePayoutsPanel />
-              <PayablesTab
-                payables={payables}
-                currentYear={currentYear}
-                onRefresh={loadPayables}
-              />
-            </div>
+            <PayablesTab
+              payables={payables}
+              currentYear={currentYear}
+              onRefresh={loadPayables}
+            />
           </TabsContent>
 
           {/* Invoices Tab */}

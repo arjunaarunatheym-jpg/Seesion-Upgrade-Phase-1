@@ -89,6 +89,7 @@ const PayablesTab = ({
   const trainerTotal = filterByPeriod(payables.trainer_fees).reduce((sum, f) => sum + (f.fee_amount || 0), 0);
   const coordinatorTotal = filterByPeriod(payables.coordinator_fees).reduce((sum, f) => sum + (f.total_fee || 0), 0);
   const marketingTotal = filterByPeriod(payables.marketing_commissions).reduce((sum, f) => sum + (f.calculated_amount || 0), 0);
+  const adminFeeTotal = filterByPeriod(payables.admin_fees || []).reduce((sum, f) => sum + (f.calculated_amount || 0), 0);
 
   // API Handlers
   const handleMarkPaid = async (type, id) => {
@@ -97,7 +98,11 @@ const PayablesTab = ({
       return;
     }
     try {
-      await axiosInstance.post(`/finance/payables/${type}/${id}/mark-paid`);
+      // Admin fee uses dedicated endpoint
+      const endpoint = type === 'admin-fee'
+        ? `/finance/payables/admin-fee/${id}/mark-paid`
+        : `/finance/payables/${type}/${id}/mark-paid`;
+      await axiosInstance.post(endpoint);
       toast.success("Marked as paid");
       onRefresh();
     } catch (error) {
@@ -114,9 +119,12 @@ const PayablesTab = ({
     if (unpaidRecords.length === 0) return;
     
     try {
-      await Promise.all(unpaidRecords.map(r => 
-        axiosInstance.post(`/finance/payables/${type}/${r.id}/mark-paid`)
-      ));
+      await Promise.all(unpaidRecords.map(r => {
+        const endpoint = type === 'admin-fee'
+          ? `/finance/payables/admin-fee/${r.id}/mark-paid`
+          : `/finance/payables/${type}/${r.id}/mark-paid`;
+        return axiosInstance.post(endpoint);
+      }));
       toast.success(`${unpaidRecords.length} items marked as paid`);
       onRefresh();
     } catch (error) {
@@ -222,11 +230,13 @@ const PayablesTab = ({
     const filteredTrainer = filterByPeriod(payables.trainer_fees);
     const filteredCoord = filterByPeriod(payables.coordinator_fees);
     const filteredMkt = filterByPeriod(payables.marketing_commissions);
-    const total = trainerTotal + coordinatorTotal + marketingTotal;
+    const filteredAdmin = filterByPeriod(payables.admin_fees || []);
+    const total = trainerTotal + coordinatorTotal + marketingTotal + adminFeeTotal;
     const rows = [
       ...filteredTrainer.map(r => `<tr><td>${r.trainer_name || '-'}</td><td>${r.invoice_number || '-'}</td><td>Trainer</td><td>RM ${fmtRM(r.fee_amount)}</td></tr>`),
       ...filteredCoord.map(r => `<tr><td>${r.coordinator_name || '-'}</td><td>${r.invoice_number || '-'}</td><td>Coordinator</td><td>RM ${fmtRM(r.total_fee)}</td></tr>`),
-      ...filteredMkt.map(r => `<tr><td>${r.marketer_name || '-'}</td><td>${r.invoice_number || '-'}</td><td>Marketing</td><td>RM ${fmtRM(r.calculated_amount)}</td></tr>`),
+      ...filteredMkt.map(r => `<tr><td>${r.marketer_name || r.marketing_user_name || '-'}</td><td>${r.invoice_number || r.session_name || '-'}</td><td>Marketing</td><td>RM ${fmtRM(r.calculated_amount)}</td></tr>`),
+      ...filteredAdmin.map(r => `<tr><td>${r.marketing_user_name || '-'}</td><td>${r.session_name || '-'}</td><td>Admin Fee (${r.commission_rate || 0}%)</td><td>RM ${fmtRM(r.calculated_amount)}</td></tr>`),
     ].join('');
     const html = `<!DOCTYPE html><html><head><title>Payables ${monthName}</title><style>
       body{font-family:Arial,sans-serif;font-size:11px;padding:20px;max-width:297mm;margin:0 auto}
@@ -324,7 +334,7 @@ const PayablesTab = ({
           )}
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Card className="bg-blue-50 border-blue-200">
               <CardContent className="p-4">
                 <p className="text-sm text-blue-700 font-medium">Trainer Fees</p>
@@ -358,6 +368,17 @@ const PayablesTab = ({
                 </p>
               </CardContent>
             </Card>
+            <Card className="bg-amber-50 border-amber-200" data-testid="admin-fee-summary-card">
+              <CardContent className="p-4">
+                <p className="text-sm text-amber-700 font-medium">Administration Fee</p>
+                <p className="text-xl font-bold text-amber-900">
+                  RM {adminFeeTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                </p>
+                <p className="text-xs text-amber-600">
+                  {filterByPeriod(payables.admin_fees || []).filter(f => f.status !== 'paid').length} pending / {filterByPeriod(payables.admin_fees || []).length} total
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           <Tabs defaultValue="trainer" className="w-full">
@@ -365,6 +386,7 @@ const PayablesTab = ({
               <TabsTrigger value="trainer">Trainers ({payables.trainer_fees.length})</TabsTrigger>
               <TabsTrigger value="coordinator">Coordinators ({payables.coordinator_fees.length})</TabsTrigger>
               <TabsTrigger value="marketing">Marketing ({payables.marketing_commissions.length})</TabsTrigger>
+              <TabsTrigger value="admin-fee">Admin Fee ({(payables.admin_fees || []).length})</TabsTrigger>
             </TabsList>
 
             {/* Trainer Fees Tab */}
@@ -572,6 +594,81 @@ const PayablesTab = ({
                                 </div>
                                 {comm.status !== 'paid' && (
                                   <Button size="sm" variant="outline" onClick={() => handleMarkPaid('marketing', comm.id)}>
+                                    <Check className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Administration Fee Tab */}
+            <TabsContent value="admin-fee">
+              {(payables.admin_fees || []).length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No administration fees</p>
+              ) : (
+                <div className="space-y-3">
+                  {groupByMonth(payables.admin_fees || []).map(group => (
+                    <Collapsible
+                      key={group.key}
+                      open={expandedGroups[`adminfee-${group.key}`] === true}
+                      onOpenChange={() => toggleGroup(`adminfee-${group.key}`)}
+                      className="border rounded-lg overflow-hidden"
+                    >
+                      <CollapsibleTrigger className="w-full">
+                        <div className="bg-amber-100 px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-amber-200 transition-colors">
+                          <div className="flex items-center gap-3">
+                            {expandedGroups[`adminfee-${group.key}`] ? (
+                              <ChevronDown className="w-5 h-5 text-amber-700" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-amber-700" />
+                            )}
+                            <Calendar className="w-5 h-5 text-amber-700" />
+                            <div className="text-left">
+                              <h4 className="font-semibold text-amber-900">{group.label}</h4>
+                              <p className="text-sm text-amber-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
+                            </div>
+                          </div>
+                          {group.records.some(r => r.status !== 'paid') && (
+                            <Button
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleBulkMarkPaid('admin-fee', group.records);
+                              }}
+                              className="bg-amber-600 hover:bg-amber-700"
+                              data-testid={`adminfee-pay-all-${group.key}`}
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Pay All ({group.records.filter(r => r.status !== 'paid').length})
+                            </Button>
+                          )}
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="divide-y bg-white">
+                          {group.records.map(comm => (
+                            <div key={comm.id} className="p-3 flex justify-between items-center hover:bg-gray-50">
+                              <div>
+                                <p className="font-medium">{comm.marketing_user_name}</p>
+                                <p className="text-sm text-gray-600">{comm.company_name || 'Unknown Company'} • {comm.session_name || ''}</p>
+                                <p className="text-xs text-gray-500">{comm.commission_rate || 0}% admin fee</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <p className="font-bold">RM {(comm.calculated_amount || 0).toLocaleString()}</p>
+                                  <Badge className={comm.status === 'paid' ? 'bg-green-500' : 'bg-amber-500'}>
+                                    {comm.status || 'pending'}
+                                  </Badge>
+                                </div>
+                                {comm.status !== 'paid' && (
+                                  <Button size="sm" variant="outline" onClick={() => handleMarkPaid('admin-fee', comm.id)} data-testid={`adminfee-pay-${comm.id}`}>
                                     <Check className="w-4 h-4" />
                                   </Button>
                                 )}

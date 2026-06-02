@@ -557,7 +557,9 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
     # Get all payables data
     trainer_fees = await db.trainer_fees.find({}, {"_id": 0}).to_list(1000)
     coordinator_fees = await db.coordinator_fees.find({}, {"_id": 0}).to_list(1000)
-    marketing_comms = await db.marketing_commissions.find({}, {"_id": 0}).to_list(1000)
+    # Marketing commissions exclude admin_fee (rendered as its own category below)
+    marketing_comms = await db.marketing_commissions.find({"type": {"$ne": "admin_fee"}}, {"_id": 0}).to_list(1000)
+    admin_fees = await db.marketing_commissions.find({"type": "admin_fee"}, {"_id": 0}).to_list(1000)
     
     # Filter by period
     filtered_trainer = []
@@ -601,9 +603,23 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
                 "status": comm.get("status", "pending"),
                 "rate": f"{comm.get('commission_rate', 0)}%"
             })
-    
+
+    filtered_admin_fee = []
+    for af in admin_fees:
+        session = session_map.get(af.get("session_id"), {})
+        if matches_period(session.get("start_date")):
+            user = await db.users.find_one({"id": af.get("marketing_user_id")}, {"_id": 0, "full_name": 1})
+            filtered_admin_fee.append({
+                "name": user.get("full_name") if user else (af.get("marketing_user_name") or "Unknown"),
+                "company": company_map.get(session.get("company_id"), af.get("company_name", "Unknown")),
+                "session": session.get("name", "Unknown"),
+                "amount": af.get("calculated_amount", 0),
+                "status": af.get("status", "pending"),
+                "rate": f"{af.get('commission_rate', 0)}%"
+            })
+
     # Check if we have any data
-    if not filtered_trainer and not filtered_coordinator and not filtered_marketing:
+    if not filtered_trainer and not filtered_coordinator and not filtered_marketing and not filtered_admin_fee:
         raise HTTPException(status_code=404, detail="No payables data for this period")
     
     # Create workbook
@@ -687,9 +703,31 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
         ws_marketing.cell(row=total_row, column=4).font = Font(bold=True)
         ws_marketing.cell(row=total_row, column=5, value=sum(f["amount"] for f in filtered_marketing))
         ws_marketing.cell(row=total_row, column=5).font = Font(bold=True)
-    
+
+    # Administration Fee Sheet
+    ws_admin = wb.create_sheet("Administration Fees")
+    ws_admin.append(["Administration Fees - " + month_name])
+    ws_admin.merge_cells('A1:F1')
+    ws_admin['A1'].font = Font(bold=True, size=14)
+    ws_admin.append([])
+    ws_admin.append(["Name", "Company", "Session", "Rate", "Amount (RM)", "Status"])
+    for col in range(1, 7):
+        ws_admin.cell(row=3, column=col).font = header_font
+        ws_admin.cell(row=3, column=col).fill = header_fill
+        ws_admin.cell(row=3, column=col).border = border
+
+    for af in filtered_admin_fee:
+        ws_admin.append([af["name"], af["company"], af["session"], af["rate"], af["amount"], af["status"]])
+
+    if filtered_admin_fee:
+        total_row = ws_admin.max_row + 1
+        ws_admin.cell(row=total_row, column=4, value="TOTAL:")
+        ws_admin.cell(row=total_row, column=4).font = Font(bold=True)
+        ws_admin.cell(row=total_row, column=5, value=sum(f["amount"] for f in filtered_admin_fee))
+        ws_admin.cell(row=total_row, column=5).font = Font(bold=True)
+
     # Adjust column widths
-    for ws in [ws_trainer, ws_coord, ws_marketing]:
+    for ws in [ws_trainer, ws_coord, ws_marketing, ws_admin]:
         ws.column_dimensions['A'].width = 25
         ws.column_dimensions['B'].width = 30
         ws.column_dimensions['C'].width = 40
@@ -789,7 +827,7 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
     companies = await db.companies.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
     company_map = {c["id"]: c["name"] for c in companies}
     
-    comms = await db.marketing_commissions.find({}, {"_id": 0}).to_list(1000)
+    comms = await db.marketing_commissions.find({"type": {"$ne": "admin_fee"}}, {"_id": 0}).to_list(1000)
     
     result = []
     for comm in comms:
@@ -844,6 +882,66 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
     return result
 
 
+@router.get("/payables/admin-fees")
+async def get_pending_admin_fees(current_user: User = Depends(get_current_user)):
+    """Get all administration fee payables - read-only (no recalculation).
+    Shape matches the marketing-commissions endpoint so the existing PayablesTab UI can render it.
+    """
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Build session + company lookup
+    sessions = await db.sessions.find({}, {"_id": 0, "id": 1, "name": 1, "start_date": 1, "company_id": 1}).to_list(1000)
+    session_map = {s["id"]: {"name": s["name"], "start_date": s.get("start_date"), "company_id": s.get("company_id")} for s in sessions}
+    companies = await db.companies.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(1000)
+    company_map = {c["id"]: c["name"] for c in companies}
+
+    records = await db.marketing_commissions.find({"type": "admin_fee"}, {"_id": 0}).to_list(2000)
+
+    result = []
+    for r in records:
+        sid = r.get("session_id")
+        # Hide orphans whose session no longer exists
+        if sid not in session_map:
+            continue
+        info = session_map.get(sid, {})
+        if not r.get("session_name"):
+            r["session_name"] = info.get("name", "Unknown Session")
+        if not r.get("session_start_date"):
+            r["session_start_date"] = info.get("start_date")
+        if not r.get("company_name"):
+            r["company_name"] = company_map.get(info.get("company_id"), "Unknown Company")
+        result.append(r)
+
+    return result
+
+
+@router.post("/payables/admin-fee/{record_id}/mark-paid")
+async def mark_admin_fee_paid(record_id: str, current_user: User = Depends(get_current_user)):
+    """Mark a single administration fee record as paid (Finance/Admin)."""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    record = await db.marketing_commissions.find_one(
+        {"id": record_id, "type": "admin_fee"}, {"_id": 0}
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Admin fee payable not found")
+    if record.get("status") == "paid":
+        return {"message": "Already paid", "record": record}
+
+    await db.marketing_commissions.update_one(
+        {"id": record_id},
+        {"$set": {
+            "status": "paid",
+            "paid_date": get_malaysia_time().strftime("%Y-%m-%d"),
+            "paid_by": current_user.id,
+            "updated_at": get_malaysia_time().isoformat(),
+        }},
+    )
+    return {"message": "Marked as paid"}
+
+
 class RecalculateCommissionsRequest(BaseModel):
     year: Optional[int] = None
     month: Optional[int] = None
@@ -862,8 +960,8 @@ async def recalculate_marketing_commissions(
     if current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Only Admin can recalculate commissions")
     
-    # Build query for commissions to recalculate
-    query = {}
+    # Build query for commissions to recalculate (exclude admin_fee — those have a different calculation base)
+    query = {"type": {"$ne": "admin_fee"}}
     if request.session_id:
         query["session_id"] = request.session_id
     
