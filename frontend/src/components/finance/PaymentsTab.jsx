@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { CreditCard, RefreshCw, Receipt } from "lucide-react";
+import { CreditCard, RefreshCw, Receipt, Paperclip, Image as ImageIcon, X } from "lucide-react";
 
 const initialPaymentForm = {
   invoice_id: '',
@@ -19,6 +19,7 @@ const initialPaymentForm = {
   payment_method: 'bank_transfer',
   reference_number: '',
   notes: '',
+  receipt_url: '',
   create_cn: false,
   cn_mode: 'percentage', // 'percentage' or 'amount'
   cn_percentage: '4',
@@ -70,6 +71,7 @@ const PaymentsTab = ({
         payment_method: paymentForm.payment_method,
         reference_number: paymentForm.reference_number,
         notes: paymentForm.notes,
+        receipt_url: paymentForm.receipt_url || null,
         create_credit_note: paymentForm.create_cn,
         deduction_percentage: paymentForm.create_cn && paymentForm.cn_mode === 'percentage' ? parseFloat(paymentForm.cn_percentage) : null,
         deduction_amount: paymentForm.create_cn && paymentForm.cn_mode === 'amount' ? parseFloat(paymentForm.cn_amount) : null,
@@ -96,6 +98,45 @@ const PaymentsTab = ({
     } catch (error) {
       console.error("Print error:", error);
       toast.error("Failed to generate receipt");
+    }
+  };
+
+  // Handle proof-of-payment file selection (base64-encode, max 5 MB)
+  const handleProofFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      toast.error("Only image or PDF files are allowed");
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File must be 5 MB or smaller");
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPaymentForm((prev) => ({ ...prev, receipt_url: reader.result }));
+    };
+    reader.onerror = () => toast.error("Failed to read file");
+    reader.readAsDataURL(file);
+  };
+
+  // View an existing payment's proof in a new tab
+  const handleViewProof = async (paymentId) => {
+    try {
+      const { data } = await axiosInstance.get(`/finance/payments/${paymentId}/proof`);
+      if (!data?.receipt_url) {
+        toast.info("No proof of payment uploaded for this payment");
+        return;
+      }
+      const w = window.open();
+      if (w) {
+        w.document.write(`<title>Proof of Payment</title><body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${data.receipt_url}" style="max-width:100%;max-height:100vh;object-fit:contain"/></body>`);
+      }
+    } catch (e) {
+      toast.error("Failed to load proof of payment");
     }
   };
 
@@ -181,6 +222,42 @@ const PaymentsTab = ({
               onChange={(e) => setPaymentForm({...paymentForm, notes: e.target.value})}
               placeholder="Additional notes"
             />
+          </div>
+
+          {/* Proof of Payment Upload (Optional) */}
+          <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2" data-testid="proof-of-payment-section">
+            <Label className="text-blue-800 font-medium flex items-center gap-2">
+              <Paperclip className="w-4 h-4" /> Proof of Payment (Optional)
+            </Label>
+            {!paymentForm.receipt_url ? (
+              <Input
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={handleProofFileChange}
+                data-testid="proof-of-payment-input"
+                className="bg-white"
+              />
+            ) : (
+              <div className="flex items-center justify-between p-2 bg-white rounded border" data-testid="proof-of-payment-preview">
+                <div className="flex items-center gap-2 text-sm text-gray-700 truncate">
+                  <ImageIcon className="w-4 h-4 text-blue-600 shrink-0" />
+                  {paymentForm.receipt_url.startsWith('data:application/pdf')
+                    ? <span>PDF attached</span>
+                    : <img src={paymentForm.receipt_url} alt="proof" className="h-12 w-12 object-cover rounded border" />}
+                  <span className="text-xs text-gray-500">Attached</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPaymentForm({ ...paymentForm, receipt_url: '' })}
+                  data-testid="remove-proof-btn"
+                >
+                  <X className="w-4 h-4 text-red-600" />
+                </Button>
+              </div>
+            )}
+            <p className="text-xs text-blue-700">Upload bank transfer receipt, cheque image, or any proof (image or PDF, max 5MB).</p>
           </div>
           
           {/* Credit Note Option */}
@@ -312,14 +389,27 @@ const PaymentsTab = ({
                         <p className="text-xs text-gray-500">{payment.payment_method}</p>
                       </div>
                       {payment.status !== 'reversed' && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handlePrintReceipt(payment)}
-                          title="Print Receipt"
-                        >
-                          <Receipt className="w-4 h-4 text-purple-600" />
-                        </Button>
+                        <>
+                          {payment.receipt_url && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewProof(payment.id)}
+                              title="View Proof of Payment"
+                              data-testid={`view-proof-btn-${payment.id}`}
+                            >
+                              <Paperclip className="w-4 h-4 text-blue-600" />
+                            </Button>
+                          )}
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handlePrintReceipt(payment)}
+                            title="Print Receipt"
+                          >
+                            <Receipt className="w-4 h-4 text-purple-600" />
+                          </Button>
+                        </>
                       )}
                     </div>
                   </div>

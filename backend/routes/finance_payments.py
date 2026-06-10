@@ -29,6 +29,7 @@ class PaymentCreate(BaseModel):
     payment_method: str
     reference_number: Optional[str] = None
     notes: Optional[str] = None
+    receipt_url: Optional[str] = None  # Optional proof-of-payment image (base64 data URL)
     create_credit_note: Optional[bool] = False
     deduction_percentage: Optional[float] = None
     deduction_amount: Optional[float] = None
@@ -176,6 +177,7 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
         "payment_method": payment_data.payment_method,
         "reference_number": payment_data.reference_number,
         "notes": payment_data.notes,
+        "receipt_url": payment_data.receipt_url,
         "receipt_number": await generate_receipt_number(),
         "recorded_by": current_user.id,
         "created_at": get_malaysia_time().isoformat()
@@ -323,6 +325,17 @@ async def get_receipt_data(payment_id: str, current_user: User = Depends(get_cur
         "invoice": invoice,
         "company_settings": settings
     }
+
+
+@router.get("/payments/{payment_id}/proof")
+async def get_payment_proof(payment_id: str, current_user: User = Depends(get_current_user)):
+    """Return the uploaded proof-of-payment image (base64 data URL) for a payment, if any."""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    payment = await db.payments.find_one({"id": payment_id}, {"_id": 0, "receipt_url": 1})
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    return {"receipt_url": payment.get("receipt_url") or ""}
 
 
 @router.get("/admin/payments")
