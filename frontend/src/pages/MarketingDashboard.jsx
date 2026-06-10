@@ -89,7 +89,10 @@ const MarketingDashboard = ({ user, onLogout }) => {
   const [showAcceptDialog, setShowAcceptDialog] = useState(false);
   const [acceptingQuotation, setAcceptingQuotation] = useState(null);
   const [acceptForm, setAcceptForm] = useState({
+    date_mode: 'single', // 'single' | 'range' | 'multiple'
     training_date: '',
+    end_date: '',
+    training_dates: [''], // for multiple non-consecutive dates
     venue: ''
   });
   
@@ -382,7 +385,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
       // Open dialog to capture training date and venue
       const quotation = quotations.find(q => q.id === quotationId);
       setAcceptingQuotation(quotation);
-      setAcceptForm({ training_date: '', venue: '' });
+      setAcceptForm({ date_mode: 'single', training_date: '', end_date: '', training_dates: [''], venue: '' });
       setShowAcceptDialog(true);
       return;
     }
@@ -398,16 +401,33 @@ const MarketingDashboard = ({ user, onLogout }) => {
   };
 
   const handleAcceptQuotation = async () => {
-    if (!acceptForm.training_date || !acceptForm.venue) {
-      toast.error('Please enter training date and venue');
+    const { date_mode, training_date, end_date, training_dates, venue } = acceptForm;
+    if (!venue) {
+      toast.error('Please enter venue');
       return;
+    }
+    // Validate dates based on mode
+    let payloadDates = {};
+    if (date_mode === 'single') {
+      if (!training_date) { toast.error('Please enter training date'); return; }
+      payloadDates = { training_date, end_date: training_date };
+    } else if (date_mode === 'range') {
+      if (!training_date || !end_date) { toast.error('Please enter start and end dates'); return; }
+      if (end_date < training_date) { toast.error('End date must be on or after start date'); return; }
+      payloadDates = { training_date, end_date };
+    } else {
+      const cleanDates = (training_dates || []).map(d => (d || '').trim()).filter(Boolean);
+      const uniq = Array.from(new Set(cleanDates));
+      if (uniq.length < 2) { toast.error('Please enter at least 2 separate training dates'); return; }
+      uniq.sort();
+      payloadDates = { training_date: uniq[0], end_date: uniq[uniq.length - 1], training_dates: uniq };
     }
     
     try {
       await axiosInstance.post(`/marketing/quotations/${acceptingQuotation.id}/client-response`, {
         response: 'accepted',
-        training_date: acceptForm.training_date,
-        venue: acceptForm.venue
+        ...payloadDates,
+        venue
       });
       toast.success('Quotation marked as accepted');
       setShowAcceptDialog(false);
@@ -1008,8 +1028,15 @@ const MarketingDashboard = ({ user, onLogout }) => {
                               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
                                 <span className="flex items-center gap-1">
                                   <Calendar className="w-3 h-3" />
-                                  {session.start_date || 'Date TBD'}
-                                  {session.end_date && session.end_date !== session.start_date && ` — ${session.end_date}`}
+                                  {session.training_dates && session.training_dates.length > 1
+                                    ? session.training_dates.join(', ')
+                                    : (
+                                      <>
+                                        {session.start_date || 'Date TBD'}
+                                        {session.end_date && session.end_date !== session.start_date && ` — ${session.end_date}`}
+                                      </>
+                                    )
+                                  }
                                 </span>
                                 <span className="flex items-center gap-1">
                                   <MapPin className="w-3 h-3" />
@@ -1593,16 +1620,135 @@ const MarketingDashboard = ({ user, onLogout }) => {
                 <p className="text-sm font-bold">{formatCurrency(acceptingQuotation.total_amount)}</p>
               </div>
             )}
+
+            {/* Date Mode Selector */}
             <div>
-              <Label htmlFor="training_date">Training Date *</Label>
-              <Input
-                id="training_date"
-                type="date"
-                value={acceptForm.training_date}
-                onChange={(e) => setAcceptForm({...acceptForm, training_date: e.target.value})}
-                required
-              />
+              <Label>Training Schedule *</Label>
+              <div className="grid grid-cols-3 gap-2 mt-1.5">
+                <Button
+                  type="button"
+                  variant={acceptForm.date_mode === 'single' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAcceptForm({ ...acceptForm, date_mode: 'single' })}
+                  data-testid="date-mode-single"
+                  className={acceptForm.date_mode === 'single' ? 'bg-green-600 hover:bg-green-700' : ''}
+                >
+                  Single Day
+                </Button>
+                <Button
+                  type="button"
+                  variant={acceptForm.date_mode === 'range' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAcceptForm({ ...acceptForm, date_mode: 'range' })}
+                  data-testid="date-mode-range"
+                  className={acceptForm.date_mode === 'range' ? 'bg-green-600 hover:bg-green-700' : ''}
+                >
+                  Date Range
+                </Button>
+                <Button
+                  type="button"
+                  variant={acceptForm.date_mode === 'multiple' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAcceptForm({ ...acceptForm, date_mode: 'multiple', training_dates: acceptForm.training_dates.length < 2 ? ['', ''] : acceptForm.training_dates })}
+                  data-testid="date-mode-multiple"
+                  className={acceptForm.date_mode === 'multiple' ? 'bg-green-600 hover:bg-green-700' : ''}
+                >
+                  Multiple Dates
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {acceptForm.date_mode === 'single' && 'Use this for a one-day programme.'}
+                {acceptForm.date_mode === 'range' && 'Use this for back-to-back multi-day programmes.'}
+                {acceptForm.date_mode === 'multiple' && 'Use this when training days are split across separate, non-consecutive dates.'}
+              </p>
             </div>
+
+            {/* Single Date */}
+            {acceptForm.date_mode === 'single' && (
+              <div>
+                <Label htmlFor="training_date">Training Date *</Label>
+                <Input
+                  id="training_date"
+                  type="date"
+                  value={acceptForm.training_date}
+                  onChange={(e) => setAcceptForm({ ...acceptForm, training_date: e.target.value })}
+                  data-testid="single-training-date-input"
+                  required
+                />
+              </div>
+            )}
+
+            {/* Date Range */}
+            {acceptForm.date_mode === 'range' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="start_date">Start Date *</Label>
+                  <Input
+                    id="start_date"
+                    type="date"
+                    value={acceptForm.training_date}
+                    onChange={(e) => setAcceptForm({ ...acceptForm, training_date: e.target.value })}
+                    data-testid="range-start-date-input"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="end_date">End Date *</Label>
+                  <Input
+                    id="end_date"
+                    type="date"
+                    value={acceptForm.end_date}
+                    onChange={(e) => setAcceptForm({ ...acceptForm, end_date: e.target.value })}
+                    data-testid="range-end-date-input"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Multiple Non-Consecutive Dates */}
+            {acceptForm.date_mode === 'multiple' && (
+              <div className="space-y-2">
+                <Label>Training Dates *</Label>
+                {acceptForm.training_dates.map((d, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500 w-12">Day {idx + 1}</span>
+                    <Input
+                      type="date"
+                      value={d}
+                      onChange={(e) => {
+                        const next = [...acceptForm.training_dates];
+                        next[idx] = e.target.value;
+                        setAcceptForm({ ...acceptForm, training_dates: next });
+                      }}
+                      data-testid={`multi-date-input-${idx}`}
+                    />
+                    {acceptForm.training_dates.length > 2 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          const next = acceptForm.training_dates.filter((_, i) => i !== idx);
+                          setAcceptForm({ ...acceptForm, training_dates: next });
+                        }}
+                        data-testid={`multi-date-remove-${idx}`}
+                      >
+                        ×
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAcceptForm({ ...acceptForm, training_dates: [...acceptForm.training_dates, ''] })}
+                  data-testid="multi-date-add-btn"
+                >
+                  + Add another date
+                </Button>
+              </div>
+            )}
+
             <div>
               <Label htmlFor="venue">Venue / Location *</Label>
               <Input

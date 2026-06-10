@@ -1140,6 +1140,7 @@ async def record_client_response(quotation_id: str, response_data: dict, current
             "client_response_at": now.isoformat(),
             "client_response_notes": response_data.get("notes"),
             "training_date": response_data.get("training_date"),
+            "training_dates": response_data.get("training_dates"),
             "venue": response_data.get("venue")
         }}
     )
@@ -1179,6 +1180,7 @@ async def record_client_response(quotation_id: str, response_data: dict, current
         # Get training date from response or quotation
         training_date = response_data.get("training_date") or quotation.get("training_date") or now.strftime("%Y-%m-%d")
         end_date = response_data.get("end_date") or training_date
+        training_dates = response_data.get("training_dates") or None  # optional list of non-consecutive dates
         venue = response_data.get("venue") or quotation.get("venue") or ""
         
         # Build addon line items from priced quotation items (e.g. vehicle rental)
@@ -1211,6 +1213,7 @@ async def record_client_response(quotation_id: str, response_data: dict, current
             "location": venue,
             "start_date": training_date,
             "end_date": end_date,
+            "training_dates": training_dates,  # null for single/range; list for non-consecutive
             "expected_participants": quotation.get("num_participants", 0),
             "status": "draft",
             "completion_status": "ongoing",
@@ -1965,6 +1968,7 @@ async def mark_lead_won_and_create_session(lead_id: str, win_data: dict, current
         # Create draft session
         session_id = str(uuid.uuid4())
         end_date = win_data.get("end_date") or training_date
+        training_dates = win_data.get("training_dates") or None
         num_participants = win_data.get("num_participants", 0)
         
         session_data = {
@@ -1975,6 +1979,7 @@ async def mark_lead_won_and_create_session(lead_id: str, win_data: dict, current
             "location": win_data.get("venue", quotation.get("venue", "") if quotation else ""),
             "start_date": training_date,
             "end_date": end_date,
+            "training_dates": training_dates,
             "expected_participants": num_participants,
             "status": "draft",  # Draft status for admin review
             "completion_status": "ongoing",
