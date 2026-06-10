@@ -83,6 +83,14 @@ const SuperAdminPortal = () => {
   const [reversalResult, setReversalResult] = useState(null);
   const [reversalSearch, setReversalSearch] = useState('');
 
+  // Quotation & Invoice Reversal (lightweight one-step flow)
+  const [reversalSubTab, setReversalSubTab] = useState('payments'); // 'payments' | 'invoices' | 'quotations'
+  const [quotationsForReversal, setQuotationsForReversal] = useState([]);
+  const [invoicesForReversal, setInvoicesForReversal] = useState([]);
+  const [quotationReversalHistory, setQuotationReversalHistory] = useState([]);
+  const [invoiceReversalHistory, setInvoiceReversalHistory] = useState([]);
+  const [genericReverseDialog, setGenericReverseDialog] = useState({ open: false, kind: null, item: null, preview: null, reason: '', loading: false });
+
   useEffect(() => {
     loadDashboard();
   }, []);
@@ -235,6 +243,65 @@ const SuperAdminPortal = () => {
       toast.error(error.response?.data?.detail || 'Reversal failed');
     } finally {
       setReversalExecuting(false);
+    }
+  };
+
+  // Quotation Reversal loaders
+  const loadQuotationReversals = async () => {
+    try {
+      const [listRes, histRes] = await Promise.all([
+        axiosInstance.get('/superadmin/quotations-for-reversal'),
+        axiosInstance.get('/superadmin/quotation-reversals')
+      ]);
+      setQuotationsForReversal(listRes.data || []);
+      setQuotationReversalHistory(histRes.data || []);
+    } catch (e) {
+      toast.error('Failed to load quotation reversals');
+    }
+  };
+
+  const loadInvoiceReversals = async () => {
+    try {
+      const [listRes, histRes] = await Promise.all([
+        axiosInstance.get('/superadmin/invoices-for-reversal'),
+        axiosInstance.get('/superadmin/invoice-reversals')
+      ]);
+      setInvoicesForReversal(listRes.data || []);
+      setInvoiceReversalHistory(histRes.data || []);
+    } catch (e) {
+      toast.error('Failed to load invoice reversals');
+    }
+  };
+
+  // Open the lightweight reverse dialog (kind: 'quotation' | 'invoice')
+  const openGenericReverse = async (kind, item) => {
+    try {
+      const url = kind === 'quotation'
+        ? `/superadmin/quotation-reversal/preview/${item.id}`
+        : `/superadmin/invoice-reversal/preview/${item.id}`;
+      const { data } = await axiosInstance.get(url);
+      setGenericReverseDialog({ open: true, kind, item, preview: data, reason: '', loading: false });
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to load preview');
+    }
+  };
+
+  const executeGenericReverse = async () => {
+    const { kind, item, reason } = genericReverseDialog;
+    if (reason.length < 10) { toast.error('Reason must be at least 10 characters'); return; }
+    setGenericReverseDialog(prev => ({ ...prev, loading: true }));
+    try {
+      const url = kind === 'quotation' ? '/superadmin/quotation-reversal/execute' : '/superadmin/invoice-reversal/execute';
+      const payload = kind === 'quotation'
+        ? { quotation_id: item.id, reason, confirm: true }
+        : { invoice_id: item.id, reason, confirm: true };
+      const { data } = await axiosInstance.post(url, payload);
+      toast.success(data.message || `${kind} reversed successfully`);
+      setGenericReverseDialog({ open: false, kind: null, item: null, preview: null, reason: '', loading: false });
+      if (kind === 'quotation') loadQuotationReversals(); else loadInvoiceReversals();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Reversal failed');
+      setGenericReverseDialog(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -1169,6 +1236,39 @@ const SuperAdminPortal = () => {
         {/* Audit Log Tab */}
         {/* Payment Reversals Tab */}
         <TabsContent value="reversals">
+          <div className="space-y-4">
+            {/* Sub-tabs: Payments | Invoices | Quotations */}
+            <div className="flex gap-2 border-b pb-2">
+              <Button
+                variant={reversalSubTab === 'payments' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setReversalSubTab('payments'); loadReversalPayments(); }}
+                data-testid="reversal-subtab-payments"
+                className={reversalSubTab === 'payments' ? 'bg-red-600 hover:bg-red-700' : ''}
+              >
+                Payments
+              </Button>
+              <Button
+                variant={reversalSubTab === 'invoices' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setReversalSubTab('invoices'); loadInvoiceReversals(); }}
+                data-testid="reversal-subtab-invoices"
+                className={reversalSubTab === 'invoices' ? 'bg-red-600 hover:bg-red-700' : ''}
+              >
+                Invoices
+              </Button>
+              <Button
+                variant={reversalSubTab === 'quotations' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setReversalSubTab('quotations'); loadQuotationReversals(); }}
+                data-testid="reversal-subtab-quotations"
+                className={reversalSubTab === 'quotations' ? 'bg-red-600 hover:bg-red-700' : ''}
+              >
+                Quotations
+              </Button>
+            </div>
+
+          {reversalSubTab === 'payments' && (
           <div className="space-y-6">
             {/* Step indicator */}
             {reversalStep > 0 && (
@@ -1576,6 +1676,197 @@ const SuperAdminPortal = () => {
               </Card>
             )}
           </div>
+          )}
+
+          {reversalSubTab === 'invoices' && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <RefreshCw className="w-5 h-5 text-red-600" /> Invoice Reversal
+                      </CardTitle>
+                      <CardDescription>Revert an issued invoice back to draft. Cannot reverse if active payments exist.</CardDescription>
+                    </div>
+                    <Button variant="outline" onClick={loadInvoiceReversals}><RefreshCw className="w-4 h-4" /></Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {invoicesForReversal.length === 0 ? (
+                    <p className="text-center py-6 text-gray-500">No invoices available for reversal.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Invoice #</TableHead>
+                            <TableHead>Company</TableHead>
+                            <TableHead className="text-right">Amount (RM)</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Active Payments</TableHead>
+                            <TableHead className="text-center">Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {invoicesForReversal.map(inv => (
+                            <TableRow key={inv.id}>
+                              <TableCell className="font-mono text-sm">{inv.invoice_number || '-'}</TableCell>
+                              <TableCell className="max-w-[200px] truncate">{inv.company_name || inv.bill_to_name || '-'}</TableCell>
+                              <TableCell className="text-right font-semibold">{(inv.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</TableCell>
+                              <TableCell><span className="px-2 py-0.5 text-xs rounded bg-gray-100">{inv.status}</span></TableCell>
+                              <TableCell>{inv.active_payment_count > 0 ? <span className="text-amber-700 font-medium">{inv.active_payment_count}</span> : <span className="text-gray-400">0</span>}</TableCell>
+                              <TableCell className="text-center">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  disabled={inv.active_payment_count > 0}
+                                  onClick={() => openGenericReverse('invoice', inv)}
+                                  data-testid={`reverse-invoice-btn-${inv.id}`}
+                                  title={inv.active_payment_count > 0 ? 'Reverse the payment(s) first' : 'Reverse invoice'}
+                                >
+                                  <AlertTriangle className="w-3 h-3 mr-1" /> Reverse
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {invoiceReversalHistory.length > 0 && (
+                <Card>
+                  <CardHeader><CardTitle className="text-base">Invoice Reversal History</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Invoice #</TableHead>
+                            <TableHead>Company</TableHead>
+                            <TableHead className="text-right">Amount (RM)</TableHead>
+                            <TableHead>Reversed By</TableHead>
+                            <TableHead>Reason</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {invoiceReversalHistory.map(r => (
+                            <TableRow key={r.id}>
+                              <TableCell className="text-sm">{(r.reversed_at || '').slice(0, 16).replace('T', ' ')}</TableCell>
+                              <TableCell className="font-mono text-sm">{r.invoice_number || '-'}</TableCell>
+                              <TableCell className="max-w-[200px] truncate">{r.company_name || '-'}</TableCell>
+                              <TableCell className="text-right">{(r.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</TableCell>
+                              <TableCell>{r.reversed_by_name || '-'}</TableCell>
+                              <TableCell className="max-w-[300px] truncate text-sm text-gray-600">{r.reason}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {reversalSubTab === 'quotations' && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <RefreshCw className="w-5 h-5 text-red-600" /> Quotation Reversal
+                      </CardTitle>
+                      <CardDescription>Undo an accepted quotation and delete its draft session. Cannot reverse if invoice or participants exist on the linked session.</CardDescription>
+                    </div>
+                    <Button variant="outline" onClick={loadQuotationReversals}><RefreshCw className="w-4 h-4" /></Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {quotationsForReversal.length === 0 ? (
+                    <p className="text-center py-6 text-gray-500">No accepted quotations available for reversal.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Quotation #</TableHead>
+                            <TableHead>Client</TableHead>
+                            <TableHead>Programme</TableHead>
+                            <TableHead className="text-right">Amount (RM)</TableHead>
+                            <TableHead>Linked Session</TableHead>
+                            <TableHead className="text-center">Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {quotationsForReversal.map(q => (
+                            <TableRow key={q.id}>
+                              <TableCell className="font-mono text-sm">{q.quotation_number || '-'}</TableCell>
+                              <TableCell className="max-w-[200px] truncate">{q.client_name || '-'}</TableCell>
+                              <TableCell className="max-w-[200px] truncate">{q.programme_name || '-'}</TableCell>
+                              <TableCell className="text-right font-semibold">{(q.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</TableCell>
+                              <TableCell className="text-sm text-gray-600">{q.linked_session ? <span className="text-xs">{q.linked_session.name} <span className="text-gray-400">({q.linked_session.status})</span></span> : <span className="text-gray-400">none</span>}</TableCell>
+                              <TableCell className="text-center">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => openGenericReverse('quotation', q)}
+                                  data-testid={`reverse-quotation-btn-${q.id}`}
+                                >
+                                  <AlertTriangle className="w-3 h-3 mr-1" /> Reverse
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {quotationReversalHistory.length > 0 && (
+                <Card>
+                  <CardHeader><CardTitle className="text-base">Quotation Reversal History</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Quotation #</TableHead>
+                            <TableHead>Client</TableHead>
+                            <TableHead className="text-right">Amount (RM)</TableHead>
+                            <TableHead>Reversed By</TableHead>
+                            <TableHead>Reason</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {quotationReversalHistory.map(r => (
+                            <TableRow key={r.id}>
+                              <TableCell className="text-sm">{(r.reversed_at || '').slice(0, 16).replace('T', ' ')}</TableCell>
+                              <TableCell className="font-mono text-sm">{r.quotation_number || '-'}</TableCell>
+                              <TableCell className="max-w-[200px] truncate">{r.client_name || '-'}</TableCell>
+                              <TableCell className="text-right">{(r.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</TableCell>
+                              <TableCell>{r.reversed_by_name || '-'}</TableCell>
+                              <TableCell className="max-w-[300px] truncate text-sm text-gray-600">{r.reason}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          </div>
         </TabsContent>
 
         {/* Audit Log Tab */}
@@ -1909,6 +2200,76 @@ const SuperAdminPortal = () => {
             <Button variant="outline" onClick={() => setEditJournalDialog({ open: false, entry: null })}>Cancel</Button>
             <Button onClick={handleFixJournalEntry} className="bg-red-600 hover:bg-red-700">
               <CheckCircle className="w-4 h-4 mr-1" /> Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generic Reverse Dialog (Quotation / Invoice) */}
+      <Dialog open={genericReverseDialog.open} onOpenChange={(open) => !genericReverseDialog.loading && setGenericReverseDialog(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <AlertTriangle className="w-5 h-5" />
+              Reverse {genericReverseDialog.kind === 'quotation' ? 'Quotation' : 'Invoice'}
+            </DialogTitle>
+            <DialogDescription>
+              This action is logged and cannot be undone automatically.
+            </DialogDescription>
+          </DialogHeader>
+          {genericReverseDialog.preview && (
+            <div className="space-y-3">
+              {genericReverseDialog.kind === 'quotation' ? (
+                <div className="bg-gray-50 p-3 rounded text-sm">
+                  <p><strong>Quotation:</strong> {genericReverseDialog.preview.quotation?.quotation_number}</p>
+                  <p><strong>Client:</strong> {genericReverseDialog.preview.quotation?.client_name}</p>
+                  <p><strong>Amount:</strong> RM {(genericReverseDialog.preview.quotation?.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+                  {genericReverseDialog.preview.linked_session && (
+                    <p className="mt-1 text-amber-700">
+                      Linked session <strong>{genericReverseDialog.preview.linked_session.name}</strong> will be <strong>{genericReverseDialog.preview.linked_session.will_be_deleted ? 'deleted' : 'kept (blocked)'}</strong>.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-gray-50 p-3 rounded text-sm">
+                  <p><strong>Invoice:</strong> {genericReverseDialog.preview.invoice?.invoice_number}</p>
+                  <p><strong>Company:</strong> {genericReverseDialog.preview.invoice?.company_name}</p>
+                  <p><strong>Amount:</strong> RM {(genericReverseDialog.preview.invoice?.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+                  <p className="text-amber-700 mt-1">{genericReverseDialog.preview.summary?.journals_to_void} journal entry(s) will be voided.</p>
+                </div>
+              )}
+              {(genericReverseDialog.preview.blockers || []).length > 0 && (
+                <div className="bg-red-50 border border-red-200 p-3 rounded text-sm text-red-700">
+                  <p className="font-semibold mb-1">Cannot reverse:</p>
+                  <ul className="list-disc pl-5">
+                    {genericReverseDialog.preview.blockers.map((b, i) => <li key={i}>{b}</li>)}
+                  </ul>
+                </div>
+              )}
+              <div>
+                <Label>Reason for reversal * <span className="text-xs text-gray-500">(min 10 chars)</span></Label>
+                <Textarea
+                  value={genericReverseDialog.reason}
+                  onChange={(e) => setGenericReverseDialog(prev => ({ ...prev, reason: e.target.value }))}
+                  rows={3}
+                  placeholder="Explain why this is being reversed (will be permanently logged)"
+                  data-testid="generic-reverse-reason"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGenericReverseDialog({ open: false, kind: null, item: null, preview: null, reason: '', loading: false })} disabled={genericReverseDialog.loading}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={executeGenericReverse}
+              disabled={genericReverseDialog.loading || !genericReverseDialog.preview?.can_reverse || genericReverseDialog.reason.length < 10}
+              data-testid="generic-reverse-confirm"
+            >
+              {genericReverseDialog.loading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <AlertTriangle className="w-4 h-4 mr-1" />}
+              Confirm Reversal
             </Button>
           </DialogFooter>
         </DialogContent>

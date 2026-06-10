@@ -1473,3 +1473,375 @@ async def get_entity_audit_trail(
     results.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
 
     return results
+
+
+# ============ QUOTATION REVERSAL ============
+# Reverses an "accepted" quotation back to "sent" (or original status). 
+# If a draft session was auto-created from this quotation, it gets deleted
+# ONLY if the session has no participants, no invoice, and no payments.
+
+class QuotationReversalRequest(BaseModel):
+    quotation_id: str
+    reason: str = Field(..., min_length=10)
+    confirm: bool = False
+
+
+@router.get("/quotations-for-reversal")
+async def get_quotations_for_reversal(current_user: User = Depends(get_current_user)):
+    """Get accepted quotations eligible for reversal (i.e. not yet invoiced/paid)."""
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+    quotations = await db.quotations.find(
+        {"status": "accepted"},
+        {"_id": 0}
+    ).sort("client_response_at", -1).to_list(500)
+    # Enrich with session linkage indicator
+    for q in quotations:
+        session = await db.sessions.find_one({"quotation_id": q["id"]}, {"_id": 0, "id": 1, "name": 1, "status": 1, "invoice_id": 1})
+        q["linked_session"] = session
+    return quotations
+
+
+@router.get("/quotation-reversal/preview/{quotation_id}")
+async def preview_quotation_reversal(quotation_id: str, current_user: User = Depends(get_current_user)):
+    """Preview what will be affected by reversing an accepted quotation."""
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+
+    quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+
+    if quotation.get("status") != "accepted":
+        raise HTTPException(status_code=400, detail=f"Only accepted quotations can be reversed (current: {quotation.get('status')})")
+
+    # Find linked session
+    session = await db.sessions.find_one({"quotation_id": quotation_id}, {"_id": 0})
+    blockers = []
+    session_info = None
+    if session:
+        invoice_for_session = await db.invoices.find_one({"session_id": session["id"]}, {"_id": 0, "id": 1, "invoice_number": 1, "status": 1})
+        if invoice_for_session and invoice_for_session.get("status") != "voided":
+            blockers.append(f"Invoice {invoice_for_session.get('invoice_number')} exists for the linked session — void/reverse the invoice first.")
+        participants = len(session.get("participant_ids") or [])
+        if participants > 0:
+            blockers.append(f"Linked session has {participants} participant(s) — remove them first.")
+        session_info = {
+            "id": session.get("id"),
+            "name": session.get("name"),
+            "status": session.get("status"),
+            "participants": participants,
+            "will_be_deleted": not bool(blockers)
+        }
+
+    return {
+        "quotation": {
+            "id": quotation["id"],
+            "quotation_number": quotation.get("quotation_number"),
+            "client_name": quotation.get("client_name"),
+            "programme_name": quotation.get("programme_name"),
+            "total_amount": quotation.get("total_amount", 0),
+            "status": quotation.get("status"),
+            "client_response_at": quotation.get("client_response_at"),
+            "training_date": quotation.get("training_date")
+        },
+        "linked_session": session_info,
+        "blockers": blockers,
+        "can_reverse": len(blockers) == 0,
+        "summary": {
+            "new_quotation_status": "sent",
+            "session_action": "delete" if (session and not blockers) else ("skip" if not session else "blocked")
+        }
+    }
+
+
+@router.post("/quotation-reversal/execute")
+async def execute_quotation_reversal(request: QuotationReversalRequest, current_user: User = Depends(get_current_user)):
+    """Reverse an accepted quotation back to 'sent' status and delete its draft session (if safe)."""
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+    if not request.confirm:
+        raise HTTPException(status_code=400, detail="Please confirm the reversal by setting confirm=true")
+
+    quotation = await db.quotations.find_one({"id": request.quotation_id}, {"_id": 0})
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    if quotation.get("status") != "accepted":
+        raise HTTPException(status_code=400, detail=f"Only accepted quotations can be reversed (current: {quotation.get('status')})")
+
+    now = get_malaysia_time()
+    reversal_id = str(uuid.uuid4())
+    actions_taken = []
+    deleted_session_id = None
+
+    # Block if linked session has invoice/participants
+    session = await db.sessions.find_one({"quotation_id": request.quotation_id}, {"_id": 0})
+    if session:
+        invoice_for_session = await db.invoices.find_one({"session_id": session["id"], "status": {"$ne": "voided"}}, {"_id": 0, "invoice_number": 1})
+        if invoice_for_session:
+            raise HTTPException(status_code=400, detail=f"Invoice {invoice_for_session.get('invoice_number')} exists for the linked session — void/reverse the invoice first.")
+        if (session.get("participant_ids") or []):
+            raise HTTPException(status_code=400, detail="Linked session has participants — remove them first.")
+
+    # 1. Revert quotation status to "sent"
+    old_status = quotation.get("status")
+    await db.quotations.update_one(
+        {"id": request.quotation_id},
+        {"$set": {
+            "status": "sent",
+            "reversed_by": current_user.id,
+            "reversed_by_name": current_user.full_name,
+            "reversed_at": now.isoformat(),
+            "reversal_reason": request.reason,
+            "reversal_id": reversal_id,
+            "client_response_at": None,
+            "training_date": None,
+            "training_dates": None,
+            "updated_at": now.isoformat()
+        }}
+    )
+    actions_taken.append(f"Quotation {quotation.get('quotation_number')} status: {old_status} → sent")
+
+    # 2. Delete draft session (if exists and safe)
+    if session:
+        await db.sessions.delete_one({"id": session["id"]})
+        deleted_session_id = session["id"]
+        actions_taken.append(f"Draft session '{session.get('name')}' deleted")
+
+    # 3. Sync lead stage (if linked)
+    try:
+        lead = await db.marketing_leads.find_one({"quotation_id": request.quotation_id}, {"_id": 0, "id": 1, "stage": 1})
+        if lead and lead.get("stage") == "won":
+            await db.marketing_leads.update_one({"id": lead["id"]}, {"$set": {"stage": "quotation_sent", "updated_at": now.isoformat()}})
+            actions_taken.append("Lead reverted to 'quotation_sent'")
+    except Exception as e:
+        print(f"[quotation_reversal] lead sync warning: {e}")
+
+    # 4. Audit log
+    await log_super_admin_action(
+        action="quotation_reversed",
+        entity_type="quotation",
+        entity_id=request.quotation_id,
+        performed_by=current_user,
+        before_value={"status": old_status},
+        after_value={"status": "sent"},
+        reason=request.reason
+    )
+
+    # 5. Store reversal record
+    reversal_record = {
+        "id": reversal_id,
+        "quotation_id": request.quotation_id,
+        "quotation_number": quotation.get("quotation_number"),
+        "client_name": quotation.get("client_name"),
+        "total_amount": quotation.get("total_amount", 0),
+        "deleted_session_id": deleted_session_id,
+        "actions_taken": actions_taken,
+        "reason": request.reason,
+        "reversed_by": current_user.id,
+        "reversed_by_name": current_user.full_name,
+        "reversed_at": now.isoformat()
+    }
+    await db.quotation_reversals.insert_one(reversal_record)
+    reversal_record.pop("_id", None)
+
+    return {
+        "message": "Quotation reversed successfully",
+        "reversal_id": reversal_id,
+        "actions_taken": actions_taken
+    }
+
+
+@router.get("/quotation-reversals")
+async def get_quotation_reversals(current_user: User = Depends(get_current_user)):
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+    reversals = await db.quotation_reversals.find({}, {"_id": 0}).sort("reversed_at", -1).to_list(500)
+    return reversals
+
+
+# ============ INVOICE REVERSAL ============
+# Reverts an issued invoice back to "draft" status.
+# Cannot reverse if there are active (non-reversed) payments against it.
+# Voids the journal entry created at issuance.
+
+class InvoiceReversalRequest(BaseModel):
+    invoice_id: str
+    reason: str = Field(..., min_length=10)
+    confirm: bool = False
+
+
+@router.get("/invoices-for-reversal")
+async def get_invoices_for_reversal(current_user: User = Depends(get_current_user)):
+    """Get issued invoices eligible for reversal (i.e. no active payments)."""
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+    invoices = await db.invoices.find(
+        {"status": {"$in": ["issued", "paid"]}},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    # Enrich with active-payment count
+    for inv in invoices:
+        active_payments = await db.payments.count_documents({"invoice_id": inv["id"], "status": {"$ne": "reversed"}})
+        inv["active_payment_count"] = active_payments
+    return invoices
+
+
+@router.get("/invoice-reversal/preview/{invoice_id}")
+async def preview_invoice_reversal(invoice_id: str, current_user: User = Depends(get_current_user)):
+    """Preview what will be affected by reversing an issued invoice."""
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.get("status") not in ["issued", "paid"]:
+        raise HTTPException(status_code=400, detail=f"Only issued/paid invoices can be reversed (current: {invoice.get('status')})")
+
+    # Find active payments
+    active_payments = await db.payments.find(
+        {"invoice_id": invoice_id, "status": {"$ne": "reversed"}},
+        {"_id": 0, "id": 1, "receipt_number": 1, "amount": 1, "payment_date": 1}
+    ).to_list(100)
+
+    # Find journal entries to void
+    linked_journals = await db.journal_entries.find(
+        {"source_id": invoice_id, "source_module": "invoice", "status": {"$ne": "voided"}},
+        {"_id": 0, "id": 1, "journal_no": 1, "description": 1, "total_debit": 1}
+    ).to_list(20)
+
+    blockers = []
+    if active_payments:
+        blockers.append(f"{len(active_payments)} active payment(s) exist against this invoice. Reverse the payments first.")
+
+    return {
+        "invoice": {
+            "id": invoice["id"],
+            "invoice_number": invoice.get("invoice_number"),
+            "company_name": invoice.get("company_name") or invoice.get("bill_to_name"),
+            "total_amount": invoice.get("total_amount", 0),
+            "status": invoice.get("status"),
+            "invoice_date": invoice.get("invoice_date") or invoice.get("created_at")
+        },
+        "active_payments": active_payments,
+        "linked_journals": linked_journals,
+        "blockers": blockers,
+        "can_reverse": len(blockers) == 0,
+        "summary": {
+            "new_invoice_status": "draft",
+            "journals_to_void": len(linked_journals)
+        }
+    }
+
+
+@router.post("/invoice-reversal/execute")
+async def execute_invoice_reversal(request: InvoiceReversalRequest, current_user: User = Depends(get_current_user)):
+    """Reverse an issued invoice back to 'draft' (voids journals; blocked if active payments exist)."""
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+    if not request.confirm:
+        raise HTTPException(status_code=400, detail="Please confirm the reversal by setting confirm=true")
+
+    invoice = await db.invoices.find_one({"id": request.invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if invoice.get("status") not in ["issued", "paid"]:
+        raise HTTPException(status_code=400, detail=f"Only issued/paid invoices can be reversed (current: {invoice.get('status')})")
+
+    # Block if active payments exist
+    active_payments = await db.payments.count_documents({"invoice_id": request.invoice_id, "status": {"$ne": "reversed"}})
+    if active_payments > 0:
+        raise HTTPException(status_code=400, detail=f"{active_payments} active payment(s) exist for this invoice. Reverse the payments first.")
+
+    now = get_malaysia_time()
+    reversal_id = str(uuid.uuid4())
+    actions_taken = []
+
+    # 1. Revert invoice status to draft
+    old_status = invoice.get("status")
+    await db.invoices.update_one(
+        {"id": request.invoice_id},
+        {"$set": {
+            "status": "draft",
+            "reversed_by": current_user.id,
+            "reversed_by_name": current_user.full_name,
+            "reversed_at": now.isoformat(),
+            "reversal_reason": request.reason,
+            "reversal_id": reversal_id,
+            "updated_at": now.isoformat()
+        }}
+    )
+    actions_taken.append(f"Invoice {invoice.get('invoice_number')} status: {old_status} → draft")
+
+    # 2. Sync linked session.invoice_status
+    if invoice.get("session_id"):
+        await db.sessions.update_one(
+            {"id": invoice["session_id"]},
+            {"$set": {"invoice_status": "draft"}}
+        )
+
+    # 3. Void linked journal entries
+    linked_journals = await db.journal_entries.find(
+        {"source_id": request.invoice_id, "source_module": "invoice", "status": {"$ne": "voided"}},
+        {"_id": 0}
+    ).to_list(20)
+    voided_journals = []
+    for je in linked_journals:
+        await db.journal_entries.update_one(
+            {"id": je["id"]},
+            {"$set": {
+                "status": "voided",
+                "voided_by": current_user.id,
+                "voided_by_name": current_user.full_name,
+                "voided_at": now.isoformat(),
+                "void_reason": f"Invoice reversal: {request.reason}",
+                "reversal_id": reversal_id,
+                "updated_at": now.isoformat()
+            }}
+        )
+        voided_journals.append(je["id"])
+        actions_taken.append(f"Journal {je.get('journal_no')} voided")
+
+    # 4. Audit log
+    await log_super_admin_action(
+        action="invoice_reversed",
+        entity_type="invoice",
+        entity_id=request.invoice_id,
+        performed_by=current_user,
+        before_value={"status": old_status},
+        after_value={"status": "draft"},
+        reason=request.reason
+    )
+
+    # 5. Store reversal record
+    reversal_record = {
+        "id": reversal_id,
+        "invoice_id": request.invoice_id,
+        "invoice_number": invoice.get("invoice_number"),
+        "company_name": invoice.get("company_name") or invoice.get("bill_to_name"),
+        "total_amount": invoice.get("total_amount", 0),
+        "previous_status": old_status,
+        "voided_journal_entries": voided_journals,
+        "actions_taken": actions_taken,
+        "reason": request.reason,
+        "reversed_by": current_user.id,
+        "reversed_by_name": current_user.full_name,
+        "reversed_at": now.isoformat()
+    }
+    await db.invoice_reversals.insert_one(reversal_record)
+    reversal_record.pop("_id", None)
+
+    return {
+        "message": "Invoice reversed successfully",
+        "reversal_id": reversal_id,
+        "actions_taken": actions_taken
+    }
+
+
+@router.get("/invoice-reversals")
+async def get_invoice_reversals(current_user: User = Depends(get_current_user)):
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+    reversals = await db.invoice_reversals.find({}, {"_id": 0}).sort("reversed_at", -1).to_list(500)
+    return reversals
