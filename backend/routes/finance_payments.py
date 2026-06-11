@@ -30,6 +30,13 @@ class PaymentCreate(BaseModel):
     reference_number: Optional[str] = None
     notes: Optional[str] = None
     receipt_url: Optional[str] = None  # Optional proof-of-payment image (base64 data URL)
+    # NEW: Payment type & HRDCorp fields
+    payment_type: Optional[str] = "self_pay"  # "self_pay" | "hrdcorp" | "partial" | "other"
+    hrdcorp_service_fee: Optional[float] = None
+    hrdcorp_invoice_number: Optional[str] = None
+    hrdcorp_invoice_date: Optional[str] = None
+    hrdcorp_invoice_url: Optional[str] = None  # base64 data URL
+    # Legacy CN flow (kept for backward compatibility)
     create_credit_note: Optional[bool] = False
     deduction_percentage: Optional[float] = None
     deduction_amount: Optional[float] = None
@@ -140,18 +147,44 @@ async def create_audit_trail_entry(
 # ============ PAYMENT ENDPOINTS ============
 @router.get("/payments")
 async def get_payments(current_user: User = Depends(get_current_user)):
-    """Get all payments"""
+    """Get all payments. Strips multi-MB base64 fields from list response — clients
+    must call /payments/{id}/proof or /payments/{id}/hrdcorp-invoice to view them."""
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    payments = await db.payments.find({}, {"_id": 0}).sort("payment_date", -1).to_list(100)
+    # Project away the heavy base64 blobs from list responses
+    payments = await db.payments.find(
+        {},
+        {"_id": 0, "receipt_url": 0, "hrdcorp_invoice_url": 0}
+    ).sort("payment_date", -1).to_list(100)
     
     for payment in payments:
+        # Add boolean indicators so the UI can show "view proof" / "view HRDCorp invoice" buttons
+        # We need a separate exists-check because find() with projection 0 means we never saw the field.
+        payment["has_receipt"] = False
+        payment["has_hrdcorp_invoice"] = False
         if payment.get("invoice_id"):
             invoice = await db.invoices.find_one({"id": payment["invoice_id"]}, {"_id": 0, "invoice_number": 1, "company_name": 1})
             if invoice:
                 payment["invoice_number"] = invoice.get("invoice_number")
                 payment["company_name"] = invoice.get("company_name")
+
+    # Single bulk query for which payments have which attachments
+    payment_ids = [p["id"] for p in payments if p.get("id")]
+    if payment_ids:
+        with_receipt = await db.payments.find(
+            {"id": {"$in": payment_ids}, "receipt_url": {"$exists": True, "$nin": [None, ""]}},
+            {"_id": 0, "id": 1}
+        ).to_list(len(payment_ids))
+        with_hrd_inv = await db.payments.find(
+            {"id": {"$in": payment_ids}, "hrdcorp_invoice_url": {"$exists": True, "$nin": [None, ""]}},
+            {"_id": 0, "id": 1}
+        ).to_list(len(payment_ids))
+        receipt_set = {p["id"] for p in with_receipt}
+        hrd_set = {p["id"] for p in with_hrd_inv}
+        for p in payments:
+            p["has_receipt"] = p["id"] in receipt_set
+            p["has_hrdcorp_invoice"] = p["id"] in hrd_set
     
     return payments
 
@@ -168,6 +201,29 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     
     if invoice.get("status") not in ["issued", "paid"]:
         raise HTTPException(status_code=400, detail="Can only record payments for issued invoices")
+
+    # ============ PAYMENT TYPE VALIDATION ============
+    payment_type = (payment_data.payment_type or "self_pay").lower()
+    if payment_type not in ["self_pay", "hrdcorp", "partial", "other"]:
+        raise HTTPException(status_code=400, detail=f"Invalid payment_type: {payment_type}")
+
+    hrdcorp_fee = float(payment_data.hrdcorp_service_fee or 0)
+    if payment_type == "hrdcorp":
+        if hrdcorp_fee <= 0:
+            raise HTTPException(status_code=400, detail="HRDCorp service fee is required for HRDCorp payments")
+        invoice_total = float(invoice.get("total_amount", 0))
+        expected_sum = round(payment_data.amount + hrdcorp_fee, 2)
+        if abs(expected_sum - invoice_total) > 0.01:
+            raise HTTPException(
+                status_code=400,
+                detail=f"HRDCorp: Received ({payment_data.amount}) + Fee ({hrdcorp_fee}) = {expected_sum} must equal Invoice Amount ({invoice_total})"
+            )
+        if not payment_data.hrdcorp_invoice_number:
+            raise HTTPException(status_code=400, detail="HRDCorp invoice number is required")
+        # HRDCorp flow MUST NOT also create a credit note (mutually exclusive)
+        if payment_data.create_credit_note:
+            raise HTTPException(status_code=400, detail="HRDCorp payments must not include a credit note. The HRDCorp fee is booked as an expense instead.")
+    # ============ END VALIDATION ============
     
     payment = {
         "id": str(uuid.uuid4()),
@@ -178,6 +234,11 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
         "reference_number": payment_data.reference_number,
         "notes": payment_data.notes,
         "receipt_url": payment_data.receipt_url,
+        "payment_type": payment_type,
+        "hrdcorp_service_fee": hrdcorp_fee if payment_type == "hrdcorp" else None,
+        "hrdcorp_invoice_number": payment_data.hrdcorp_invoice_number if payment_type == "hrdcorp" else None,
+        "hrdcorp_invoice_date": payment_data.hrdcorp_invoice_date if payment_type == "hrdcorp" else None,
+        "hrdcorp_invoice_url": payment_data.hrdcorp_invoice_url if payment_type == "hrdcorp" else None,
         "receipt_number": await generate_receipt_number(),
         "recorded_by": current_user.id,
         "created_at": get_malaysia_time().isoformat()
@@ -257,7 +318,12 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     # ============ END CREDIT NOTE ============
     
     all_payments = await db.payments.find({"invoice_id": payment_data.invoice_id}, {"_id": 0}).to_list(100)
-    total_paid = sum(p.get("amount", 0) for p in all_payments)
+    # Status calculation: sum cash received + HRDCorp service fees absorbed (treat as settled)
+    total_paid = sum(
+        (p.get("amount", 0) or 0) + (p.get("hrdcorp_service_fee", 0) or 0)
+        for p in all_payments
+        if p.get("status") != "reversed"
+    )
     
     if total_paid >= invoice.get("total_amount", 0):
         await db.invoices.update_one({"id": payment_data.invoice_id}, {"$set": {"status": "paid", "updated_at": get_malaysia_time().isoformat()}})
@@ -272,7 +338,8 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
             payment=payment,
             invoice=invoice,
             user_id=current_user.id,
-            user_name=current_user.full_name
+            user_name=current_user.full_name,
+            hrdcorp_fee_amount=(hrdcorp_fee if payment_type == "hrdcorp" else 0)
         )
         if accounting_result.get("error"):
             print(f"Accounting auto-post warning: {accounting_result.get('error')}")
@@ -336,6 +403,93 @@ async def get_payment_proof(payment_id: str, current_user: User = Depends(get_cu
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
     return {"receipt_url": payment.get("receipt_url") or ""}
+
+
+@router.get("/payments/{payment_id}/hrdcorp-invoice")
+async def get_payment_hrdcorp_invoice(payment_id: str, current_user: User = Depends(get_current_user)):
+    """Return the uploaded HRDCorp invoice document for a payment, if any."""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    payment = await db.payments.find_one({"id": payment_id}, {"_id": 0, "hrdcorp_invoice_url": 1, "hrdcorp_invoice_number": 1, "hrdcorp_invoice_date": 1})
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    return {
+        "hrdcorp_invoice_url": payment.get("hrdcorp_invoice_url") or "",
+        "hrdcorp_invoice_number": payment.get("hrdcorp_invoice_number") or "",
+        "hrdcorp_invoice_date": payment.get("hrdcorp_invoice_date") or ""
+    }
+
+
+@router.get("/reports/hrdcorp-deductions")
+async def hrdcorp_deductions_report(
+    year: Optional[int] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Combined historical + new HRDCorp deductions report.
+    - Pre-cutover era: Credit Notes whose reason mentions HRDCorp/Levy
+    - Post-cutover era: Payments with payment_type=hrdcorp
+    No data is migrated — this is a read-only join."""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    legacy_query = {"reason": {"$regex": "hrdcorp|levy", "$options": "i"}}
+    new_query = {"payment_type": "hrdcorp"}
+    if year:
+        date_prefix = f"{year}-"
+        legacy_query["cn_date"] = {"$regex": f"^{date_prefix}"}
+        new_query["payment_date"] = {"$regex": f"^{date_prefix}"}
+    
+    legacy_cns = await db.credit_notes.find(legacy_query, {"_id": 0}).to_list(2000)
+    new_payments = await db.payments.find(new_query, {"_id": 0, "receipt_url": 0, "hrdcorp_invoice_url": 0}).to_list(2000)
+    
+    legacy_rows = []
+    for cn in legacy_cns:
+        legacy_rows.append({
+            "source": "credit_note",
+            "date": cn.get("cn_date") or (cn.get("created_at") or "")[:10],
+            "reference": cn.get("cn_number"),
+            "invoice_number": cn.get("invoice_number"),
+            "company_name": cn.get("company_name") or cn.get("bill_to_name"),
+            "amount": cn.get("amount", 0),
+            "description": cn.get("reason"),
+            "mechanism": "Legacy CN-based deduction"
+        })
+    
+    new_rows = []
+    for p in new_payments:
+        invoice = None
+        if p.get("invoice_id"):
+            invoice = await db.invoices.find_one({"id": p["invoice_id"]}, {"_id": 0, "invoice_number": 1, "company_name": 1, "bill_to_name": 1})
+        new_rows.append({
+            "source": "payment",
+            "date": p.get("payment_date"),
+            "reference": p.get("receipt_number"),
+            "invoice_number": invoice.get("invoice_number") if invoice else None,
+            "company_name": (invoice.get("company_name") or invoice.get("bill_to_name")) if invoice else None,
+            "amount": p.get("hrdcorp_service_fee", 0),
+            "hrdcorp_invoice_number": p.get("hrdcorp_invoice_number"),
+            "hrdcorp_invoice_date": p.get("hrdcorp_invoice_date"),
+            "description": "HRDCorp Service Charge (Expense)",
+            "mechanism": "Post-cutover expense booking"
+        })
+    
+    legacy_total = round(sum(r["amount"] for r in legacy_rows), 2)
+    new_total = round(sum(r["amount"] for r in new_rows), 2)
+    
+    return {
+        "year": year,
+        "legacy_cn_based": {
+            "rows": legacy_rows,
+            "count": len(legacy_rows),
+            "total": legacy_total
+        },
+        "new_expense_based": {
+            "rows": new_rows,
+            "count": len(new_rows),
+            "total": new_total
+        },
+        "grand_total": round(legacy_total + new_total, 2)
+    }
 
 
 @router.get("/admin/payments")

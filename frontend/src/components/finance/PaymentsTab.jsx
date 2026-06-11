@@ -20,6 +20,13 @@ const initialPaymentForm = {
   reference_number: '',
   notes: '',
   receipt_url: '',
+  // NEW: Payment type selector + HRDCorp fields
+  payment_type: 'self_pay', // 'self_pay' | 'hrdcorp' | 'partial' | 'other'
+  hrdcorp_service_fee: '',
+  hrdcorp_invoice_number: '',
+  hrdcorp_invoice_date: '',
+  hrdcorp_invoice_url: '',
+  // Legacy CN flow (kept for backward compatibility)
   create_cn: false,
   cn_mode: 'percentage', // 'percentage' or 'amount'
   cn_percentage: '4',
@@ -72,10 +79,16 @@ const PaymentsTab = ({
         reference_number: paymentForm.reference_number,
         notes: paymentForm.notes,
         receipt_url: paymentForm.receipt_url || null,
-        create_credit_note: paymentForm.create_cn,
-        deduction_percentage: paymentForm.create_cn && paymentForm.cn_mode === 'percentage' ? parseFloat(paymentForm.cn_percentage) : null,
-        deduction_amount: paymentForm.create_cn && paymentForm.cn_mode === 'amount' ? parseFloat(paymentForm.cn_amount) : null,
-        deduction_reason: paymentForm.create_cn ? paymentForm.cn_reason : null
+        payment_type: paymentForm.payment_type,
+        hrdcorp_service_fee: paymentForm.payment_type === 'hrdcorp' ? parseFloat(paymentForm.hrdcorp_service_fee || 0) : null,
+        hrdcorp_invoice_number: paymentForm.payment_type === 'hrdcorp' ? paymentForm.hrdcorp_invoice_number : null,
+        hrdcorp_invoice_date: paymentForm.payment_type === 'hrdcorp' ? paymentForm.hrdcorp_invoice_date : null,
+        hrdcorp_invoice_url: paymentForm.payment_type === 'hrdcorp' ? (paymentForm.hrdcorp_invoice_url || null) : null,
+        // CN flow only allowed for non-HRDCorp payments (HRDCorp uses expense account instead)
+        create_credit_note: paymentForm.payment_type === 'hrdcorp' ? false : paymentForm.create_cn,
+        deduction_percentage: paymentForm.payment_type !== 'hrdcorp' && paymentForm.create_cn && paymentForm.cn_mode === 'percentage' ? parseFloat(paymentForm.cn_percentage) : null,
+        deduction_amount: paymentForm.payment_type !== 'hrdcorp' && paymentForm.create_cn && paymentForm.cn_mode === 'amount' ? parseFloat(paymentForm.cn_amount) : null,
+        deduction_reason: paymentForm.payment_type !== 'hrdcorp' && paymentForm.create_cn ? paymentForm.cn_reason : null
       });
       
       if (response.data.credit_note) {
@@ -123,6 +136,41 @@ const PaymentsTab = ({
     reader.readAsDataURL(file);
   };
 
+  // Handle HRDCorp invoice file selection (same constraints)
+  const handleHrdInvoiceFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      toast.error("Only image or PDF files are allowed");
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File must be 5 MB or smaller");
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPaymentForm((prev) => ({ ...prev, hrdcorp_invoice_url: reader.result }));
+    };
+    reader.onerror = () => toast.error("Failed to read file");
+    reader.readAsDataURL(file);
+  };
+
+  // Open data URL in new tab — handles both images and PDFs correctly
+  const openDataUrl = (dataUrl, label = 'Attachment') => {
+    if (!dataUrl) return;
+    const w = window.open();
+    if (!w) { toast.error("Popup blocked — please allow popups"); return; }
+    const isPdf = dataUrl.startsWith('data:application/pdf');
+    if (isPdf) {
+      w.document.write(`<title>${label}</title><body style="margin:0"><iframe src="${dataUrl}" style="border:0;width:100vw;height:100vh"></iframe></body>`);
+    } else {
+      w.document.write(`<title>${label}</title><body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh"><img src="${dataUrl}" style="max-width:100%;max-height:100vh;object-fit:contain"/></body>`);
+    }
+  };
+
   // View an existing payment's proof in a new tab
   const handleViewProof = async (paymentId) => {
     try {
@@ -131,12 +179,23 @@ const PaymentsTab = ({
         toast.info("No proof of payment uploaded for this payment");
         return;
       }
-      const w = window.open();
-      if (w) {
-        w.document.write(`<title>Proof of Payment</title><body style="margin:0;background:#222;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="${data.receipt_url}" style="max-width:100%;max-height:100vh;object-fit:contain"/></body>`);
-      }
+      openDataUrl(data.receipt_url, 'Proof of Payment');
     } catch (e) {
       toast.error("Failed to load proof of payment");
+    }
+  };
+
+  // View the linked HRDCorp invoice
+  const handleViewHrdInvoice = async (paymentId) => {
+    try {
+      const { data } = await axiosInstance.get(`/finance/payments/${paymentId}/hrdcorp-invoice`);
+      if (!data?.hrdcorp_invoice_url) {
+        toast.info("No HRDCorp invoice uploaded for this payment");
+        return;
+      }
+      openDataUrl(data.hrdcorp_invoice_url, `HRDCorp Invoice ${data.hrdcorp_invoice_number || ''}`);
+    } catch (e) {
+      toast.error("Failed to load HRDCorp invoice");
     }
   };
 
@@ -172,6 +231,38 @@ const PaymentsTab = ({
             </Select>
           </div>
           
+          {/* Payment Type Selector */}
+          <div data-testid="payment-type-selector">
+            <Label>Payment Type *</Label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1.5">
+              {[
+                { v: 'self_pay', label: 'Self Pay' },
+                { v: 'hrdcorp', label: 'HRDCorp Grant' },
+                { v: 'partial', label: 'Partial' },
+                { v: 'other', label: 'Other' }
+              ].map(opt => (
+                <Button
+                  key={opt.v}
+                  type="button"
+                  size="sm"
+                  variant={paymentForm.payment_type === opt.v ? 'default' : 'outline'}
+                  className={paymentForm.payment_type === opt.v ? 'bg-green-600 hover:bg-green-700' : ''}
+                  onClick={() => setPaymentForm({ ...paymentForm, payment_type: opt.v })}
+                  data-testid={`payment-type-${opt.v}`}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+            {paymentForm.payment_type === 'hrdcorp' && (
+              <p className="text-xs text-blue-700 mt-1">
+                HRDCorp service fee will be booked as an expense to <strong>6650 HRDCorp Service Charges</strong>. No credit note is needed.
+              </p>
+            )}
+            {paymentForm.payment_type === 'partial' && (
+              <p className="text-xs text-amber-700 mt-1">Invoice will remain partially paid until the balance is received.</p>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Payment Amount (RM)</Label>
@@ -224,6 +315,83 @@ const PaymentsTab = ({
             />
           </div>
 
+          {/* HRDCorp-specific fields (shown only when payment_type=hrdcorp) */}
+          {paymentForm.payment_type === 'hrdcorp' && (() => {
+            const selectedInvoice = invoices.find(inv => inv.id === paymentForm.invoice_id);
+            const invoiceTotal = selectedInvoice?.total_amount || 0;
+            const received = parseFloat(paymentForm.amount || 0);
+            const fee = parseFloat(paymentForm.hrdcorp_service_fee || 0);
+            const sum = received + fee;
+            const matches = Math.abs(sum - invoiceTotal) < 0.01;
+            return (
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3" data-testid="hrdcorp-fields">
+                <h4 className="text-sm font-semibold text-blue-800">HRDCorp Grant Payment Details</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Invoice Amount (RM)</Label>
+                    <Input value={invoiceTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })} disabled className="bg-white" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">HRDCorp Service Fee (RM) *</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={paymentForm.hrdcorp_service_fee}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, hrdcorp_service_fee: e.target.value })}
+                      placeholder="e.g. 400.00"
+                      data-testid="hrdcorp-service-fee-input"
+                    />
+                  </div>
+                </div>
+                <div className={`text-xs p-2 rounded ${matches ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                  Received RM {received.toLocaleString('en-MY', { minimumFractionDigits: 2 })} + Fee RM {fee.toLocaleString('en-MY', { minimumFractionDigits: 2 })} = RM {sum.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                  {invoiceTotal > 0 && (matches ? ' ✓ matches invoice' : ` ✗ must equal RM ${invoiceTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}`)}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">HRDCorp Invoice Number *</Label>
+                    <Input
+                      value={paymentForm.hrdcorp_invoice_number}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, hrdcorp_invoice_number: e.target.value })}
+                      placeholder="e.g. HRD-INV-2026-001"
+                      data-testid="hrdcorp-invoice-number-input"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">HRDCorp Invoice Date</Label>
+                    <Input
+                      type="date"
+                      value={paymentForm.hrdcorp_invoice_date}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, hrdcorp_invoice_date: e.target.value })}
+                      data-testid="hrdcorp-invoice-date-input"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">HRDCorp Invoice Attachment</Label>
+                  {!paymentForm.hrdcorp_invoice_url ? (
+                    <Input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={handleHrdInvoiceFileChange}
+                      className="bg-white"
+                      data-testid="hrdcorp-invoice-file-input"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-between p-2 bg-white rounded border">
+                      <span className="text-xs text-gray-700 flex items-center gap-2">
+                        <ImageIcon className="w-4 h-4 text-blue-600" /> HRDCorp invoice attached
+                      </span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setPaymentForm({ ...paymentForm, hrdcorp_invoice_url: '' })}>
+                        <X className="w-4 h-4 text-red-600" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Proof of Payment Upload (Optional) */}
           <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 space-y-2" data-testid="proof-of-payment-section">
             <Label className="text-blue-800 font-medium flex items-center gap-2">
@@ -260,7 +428,8 @@ const PaymentsTab = ({
             <p className="text-xs text-blue-700">Upload bank transfer receipt, cheque image, or any proof (image or PDF, max 5MB).</p>
           </div>
           
-          {/* Credit Note Option */}
+          {/* Credit Note Option — hidden for HRDCorp (uses expense account instead) */}
+          {paymentForm.payment_type !== 'hrdcorp' && (
           <div className="p-4 bg-red-50 rounded-lg border border-red-200 space-y-3">
             <div className="flex items-center gap-2">
               <input 
@@ -334,6 +503,7 @@ const PaymentsTab = ({
               );
             })()}
           </div>
+          )}
           
           <div className="flex gap-2">
             <Button onClick={handleRecordPayment} className="bg-green-600 hover:bg-green-700 flex-1">
@@ -390,7 +560,21 @@ const PaymentsTab = ({
                       </div>
                       {payment.status !== 'reversed' && (
                         <>
-                          {payment.receipt_url && (
+                          {payment.payment_type === 'hrdcorp' && (
+                            <span className="px-2 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 rounded" data-testid={`hrdcorp-badge-${payment.id}`}>HRDCORP</span>
+                          )}
+                          {payment.has_hrdcorp_invoice && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewHrdInvoice(payment.id)}
+                              title="View HRDCorp Invoice"
+                              data-testid={`view-hrd-invoice-btn-${payment.id}`}
+                            >
+                              <Paperclip className="w-4 h-4 text-blue-600" />
+                            </Button>
+                          )}
+                          {payment.has_receipt && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -398,7 +582,7 @@ const PaymentsTab = ({
                               title="View Proof of Payment"
                               data-testid={`view-proof-btn-${payment.id}`}
                             >
-                              <Paperclip className="w-4 h-4 text-blue-600" />
+                              <Paperclip className="w-4 h-4 text-green-600" />
                             </Button>
                           )}
                           <Button 

@@ -654,14 +654,20 @@ async def post_payment_received(
     invoice: dict = None,
     user_id: str = "system",
     user_name: str = "System",
-    skip_date_check: bool = False
+    skip_date_check: bool = False,
+    hrdcorp_fee_amount: float = 0
 ) -> dict:
     """
     Create journal entry when payment is received.
     
-    Journal Entry:
-    DR 1000 Cash at Bank            [amount]
-    CR 1100 Accounts Receivable     [amount]
+    Standard (self pay, partial, other):
+      DR 1000 Cash at Bank            [amount]
+      CR 1100 Accounts Receivable     [amount]
+    
+    HRDCorp (when hrdcorp_fee_amount > 0):
+      DR 1000 Cash at Bank                  [amount]
+      DR 6700 HRDCorp Service Charges       [hrdcorp_fee_amount]
+      CR 1100 Accounts Receivable           [amount + hrdcorp_fee_amount]
     """
     settings = await get_accounting_settings()
     if not settings.get("auto_post_payments", True):
@@ -670,6 +676,7 @@ async def post_payment_received(
     payment_id = payment.get("id")
     payment_reference = payment.get("reference_number") or payment.get("id", "")[:8]
     amount = round_money(float(payment.get("amount", 0)))
+    fee = round_money(float(hrdcorp_fee_amount or 0))
     
     # Get payment date
     payment_date = payment.get("payment_date") or payment.get("created_at", "")[:10]
@@ -683,24 +690,49 @@ async def post_payment_received(
     invoice_number = invoice.get("invoice_number", "Unknown") if invoice else "Unknown"
     company_name = invoice.get("bill_to_name", "Unknown") if invoice else "Unknown"
     
+    ar_total = round_money(amount + fee)
     lines = [
         {
             "account_code": settings.get("default_bank_account", "1000"),
             "debit": amount,
             "credit": 0,
             "memo": f"Payment received - {payment_reference}"
-        },
-        {
-            "account_code": settings.get("default_ar_account", "1100"),
-            "debit": 0,
-            "credit": amount,
-            "memo": f"AR reduction - {invoice_number}"
         }
     ]
+    if fee > 0:
+        # Ensure HRDCorp expense account exists (idempotent — handles deployed DBs seeded before this feature)
+        existing_acct = await db.chart_of_accounts.find_one({"account_code": "6650"}, {"_id": 0, "id": 1})
+        if not existing_acct:
+            await db.chart_of_accounts.insert_one({
+                "id": str(uuid.uuid4()),
+                "account_code": "6650",
+                "account_name": "HRDCorp Service Charges",
+                "account_type": "Expense",
+                "account_category": "Operating Expense",
+                "normal_balance": "debit",
+                "is_system": False,
+                "is_active": True,
+                "statement_type": "profit_and_loss",
+                "pnl_section": "operating_expense",
+                "created_at": get_malaysia_time().isoformat()
+            })
+        lines.append({
+            "account_code": "6650",
+            "debit": fee,
+            "credit": 0,
+            "memo": f"HRDCorp service charge - {invoice_number}"
+        })
+    lines.append({
+        "account_code": settings.get("default_ar_account", "1100"),
+        "debit": 0,
+        "credit": ar_total,
+        "memo": f"AR reduction - {invoice_number}"
+    })
     
+    description_suffix = f" (HRDCorp fee RM {fee:,.2f})" if fee > 0 else ""
     result = await create_auto_journal_entry(
         entry_date=payment_date,
-        description=f"Payment received for {invoice_number} from {company_name}",
+        description=f"Payment received for {invoice_number} from {company_name}{description_suffix}",
         source_module="payment",
         source_id=payment_id,
         source_reference=f"PMT-{payment_reference}",
@@ -1988,6 +2020,7 @@ async def initialize_accounting_system():
         {"account_code": "6500", "account_name": "Utilities", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
         {"account_code": "6510", "account_name": "Internet and Phone", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
         {"account_code": "6600", "account_name": "Petty Cash Expenses", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
+        {"account_code": "6650", "account_name": "HRDCorp Service Charges", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
         {"account_code": "6700", "account_name": "Marketing Expenses", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
         {"account_code": "6800", "account_name": "Software Subscription", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
         {"account_code": "6900", "account_name": "Bank Charges", "account_type": "Expense", "account_category": "Operating Expense", "normal_balance": "debit", "is_system": False, "statement_type": "profit_and_loss", "pnl_section": "operating_expense"},
