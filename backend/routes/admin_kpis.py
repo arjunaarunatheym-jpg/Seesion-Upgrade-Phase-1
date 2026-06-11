@@ -118,8 +118,38 @@ async def get_dashboard_kpis(current_user: User = Depends(get_current_user)):
     # --- Pending quotations ---
     pending_quotes = await db.quotations.count_documents({"status": "pending_approval"})
 
+    # --- All-time stats (new) ---
+    sessions_to_date = await db.sessions.count_documents({})
+
+    # Credit notes — count and total amount, all-time (exclude voided)
+    cn_docs = await db.credit_notes.find(
+        {"status": {"$ne": "voided"}},
+        {"_id": 0, "amount": 1}
+    ).to_list(None)
+    credit_notes_count = len(cn_docs)
+    credit_notes_total = round(sum(c.get("amount", 0) or 0 for c in cn_docs), 2)
+
+    # Money received — sum of active payments + hrdcorp service fees (matches invoice settlement logic)
+    pmt_docs = await db.payments.find(
+        {"status": {"$ne": "reversed"}},
+        {"_id": 0, "amount": 1, "hrdcorp_service_fee": 1, "payment_date": 1}
+    ).to_list(None)
+    payments_received_total = round(
+        sum((p.get("amount", 0) or 0) for p in pmt_docs), 2
+    )
+    payments_count = len(pmt_docs)
+    # Cash actually banked (excludes HRDCorp service fee absorbed as expense)
+    cash_received_total = payments_received_total  # same as amount sum
+    # Payments YTD
+    payments_ytd_total = round(
+        sum((p.get("amount", 0) or 0) for p in pmt_docs
+            if isinstance(p.get("payment_date"), str) and p.get("payment_date", "")[:4] == str(current_year)),
+        2,
+    )
+
     return {
         "sessions_this_month": sessions_this_month,
+        "sessions_to_date": sessions_to_date,
         "active_sessions": active_sessions,
         "completed_sessions_ytd": completed_sessions_ytd,
         "total_trainees_ytd": total_trainees_ytd,
@@ -133,6 +163,13 @@ async def get_dashboard_kpis(current_user: User = Depends(get_current_user)):
         "trainers_assigned": trainers_assigned,
         "staff_count": staff_count,
         "pending_quotations": pending_quotes,
+        # New all-time finance metrics
+        "credit_notes_count": credit_notes_count,
+        "credit_notes_total": credit_notes_total,
+        "payments_received_total": payments_received_total,
+        "payments_count": payments_count,
+        "cash_received_total": cash_received_total,
+        "payments_ytd_total": payments_ytd_total,
         "year": current_year,
         "month": current_month,
     }
