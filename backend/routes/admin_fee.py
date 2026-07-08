@@ -564,3 +564,182 @@ async def sync_all_eligible_sessions(current_user: User = Depends(get_current_us
         "percentage": cfg.get("percentage"),
         "recipient_name": cfg.get("recipient_name"),
     }
+
+
+# ============ DIAGNOSTIC & REPAIR (June/July 2026) ============
+
+@router.get("/diagnose-june-july")
+async def diagnose_june_july(current_user: User = Depends(get_current_user)):
+    """READ-ONLY diagnostic. Shows exactly what's currently stored in marketing_commissions
+    for June & July 2026, and flags rows that look mis-tagged.
+    Nothing is changed."""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin/Super Admin only")
+
+    cfg = await _load_config()
+    cfg_recipient_id = cfg.get("recipient_id")
+    cfg_percentage = float(cfg.get("percentage") or DEFAULT_PERCENTAGE)
+
+    # Which sessions started in June/July 2026?
+    sessions = await db.sessions.find(
+        {"start_date": {"$gte": "2026-06-01", "$lte": "2026-07-31"}},
+        {"_id": 0, "id": 1, "name": 1, "start_date": 1, "marketing_user_id": 1}
+    ).to_list(500)
+    session_ids = [s["id"] for s in sessions if s.get("id")]
+    session_map = {s["id"]: s for s in sessions}
+
+    # All marketing_commissions rows for those sessions
+    comms = await db.marketing_commissions.find(
+        {"session_id": {"$in": session_ids}},
+        {"_id": 0}
+    ).to_list(2000)
+
+    # User lookup
+    user_ids = list({c.get("marketing_user_id") for c in comms if c.get("marketing_user_id")})
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "full_name": 1}).to_list(200)
+    user_map = {u["id"]: u["full_name"] for u in users}
+
+    by_type = {"admin_fee": [], "marketing_or_untyped": []}
+    mistagged = []  # rows flagged as suspect
+    for c in comms:
+        row = {
+            "id": c.get("id"),
+            "session_id": c.get("session_id"),
+            "session_name": session_map.get(c.get("session_id"), {}).get("name"),
+            "session_start_date": session_map.get(c.get("session_id"), {}).get("start_date"),
+            "type": c.get("type"),
+            "marketing_user_id": c.get("marketing_user_id"),
+            "marketing_user_name": user_map.get(c.get("marketing_user_id")) or c.get("marketing_user_name"),
+            "commission_rate": c.get("commission_rate"),
+            "calculated_amount": c.get("calculated_amount"),
+            "status": c.get("status"),
+            "created_at": c.get("created_at"),
+        }
+        if c.get("type") == "admin_fee":
+            by_type["admin_fee"].append(row)
+            # A row is suspect if the user OR the rate doesn't match the current admin fee config
+            rate_ok = abs(float(c.get("commission_rate") or 0) - cfg_percentage) < 0.01
+            recipient_ok = (c.get("marketing_user_id") == cfg_recipient_id)
+            if not rate_ok or not recipient_ok:
+                row["suspect_reason"] = []
+                if not recipient_ok:
+                    row["suspect_reason"].append(
+                        f"user is {row['marketing_user_name']} but admin fee recipient config = {cfg.get('recipient_name')}"
+                    )
+                if not rate_ok:
+                    row["suspect_reason"].append(
+                        f"rate is {row['commission_rate']}% but admin fee config = {cfg_percentage}%"
+                    )
+                mistagged.append(row)
+        else:
+            by_type["marketing_or_untyped"].append(row)
+
+    return {
+        "current_config": {
+            "recipient_id": cfg_recipient_id,
+            "recipient_name": cfg.get("recipient_name"),
+            "percentage": cfg_percentage,
+            "effective_from": cfg.get("effective_from"),
+            "enabled": cfg.get("enabled"),
+        },
+        "june_july_sessions_count": len(sessions),
+        "commissions_count": len(comms),
+        "by_type": {
+            "admin_fee_rows": len(by_type["admin_fee"]),
+            "marketing_or_untyped_rows": len(by_type["marketing_or_untyped"]),
+        },
+        "admin_fee_rows_full": by_type["admin_fee"],
+        "marketing_rows_full": by_type["marketing_or_untyped"],
+        "mistagged_suspects": mistagged,
+        "mistagged_count": len(mistagged),
+        "recommendation": (
+            f"{len(mistagged)} row(s) look mis-tagged as admin_fee. "
+            "If this matches your observation on the UI, POST /api/admin-fee/repair-june-july "
+            "with {\"confirm\": true} to (a) flip these back to marketing type and "
+            "(b) recreate proper admin fee rows for Vighnesh via sync."
+        )
+    }
+
+
+class RepairRequest(BaseModel):
+    confirm: bool = False
+
+
+@router.post("/repair-june-july")
+async def repair_june_july(body: RepairRequest, current_user: User = Depends(get_current_user)):
+    """Fix mis-tagged marketing_commissions for June & July 2026.
+    Step 1: rows with type=admin_fee AND (user != config.recipient OR rate != config.percentage) -> flip type to 'marketing'.
+    Step 2: re-run apply_admin_fee_to_session for every June/July session so Vighnesh's proper admin fees are created.
+    Blast radius: June & July 2026 only. Idempotent — safe to call twice."""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin/Super Admin only")
+    if not body.confirm:
+        raise HTTPException(status_code=400, detail="Set confirm=true to run the repair")
+
+    cfg = await _load_config()
+    cfg_recipient_id = cfg.get("recipient_id")
+    cfg_percentage = float(cfg.get("percentage") or DEFAULT_PERCENTAGE)
+
+    sessions = await db.sessions.find(
+        {"start_date": {"$gte": "2026-06-01", "$lte": "2026-07-31"}},
+        {"_id": 0, "id": 1, "name": 1, "start_date": 1}
+    ).to_list(500)
+    session_ids = [s["id"] for s in sessions if s.get("id")]
+
+    # Step 1: identify + flip mis-tagged rows
+    candidates = await db.marketing_commissions.find(
+        {"session_id": {"$in": session_ids}, "type": "admin_fee"},
+        {"_id": 0}
+    ).to_list(2000)
+
+    flipped = []
+    for c in candidates:
+        rate_ok = abs(float(c.get("commission_rate") or 0) - cfg_percentage) < 0.01
+        recipient_ok = (c.get("marketing_user_id") == cfg_recipient_id)
+        if not rate_ok or not recipient_ok:
+            await db.marketing_commissions.update_one(
+                {"id": c["id"]},
+                {"$set": {
+                    "type": "marketing",
+                    "repaired_by": current_user.id,
+                    "repaired_at": get_malaysia_time().isoformat(),
+                    "repair_note": (
+                        f"Auto-repair: was type=admin_fee but user={c.get('marketing_user_id')} "
+                        f"rate={c.get('commission_rate')}%; expected user={cfg_recipient_id} rate={cfg_percentage}%"
+                    ),
+                }}
+            )
+            flipped.append({
+                "id": c["id"],
+                "session_id": c["session_id"],
+                "marketing_user_id": c.get("marketing_user_id"),
+                "commission_rate": c.get("commission_rate"),
+                "calculated_amount": c.get("calculated_amount"),
+            })
+
+    # Step 2: re-apply admin fee for each June/July session (creates proper Vighnesh rows)
+    reapplied = []
+    for s in sessions:
+        r = await apply_admin_fee_to_session(s["id"], current_user.id)
+        reapplied.append({
+            "session_id": s["id"],
+            "session_name": s.get("name"),
+            "start_date": s.get("start_date"),
+            "applied": r.get("applied"),
+            "amount": r.get("amount"),
+            "recipient_name": r.get("recipient_name"),
+            "reason": r.get("reason"),
+        })
+
+    return {
+        "message": (
+            f"Repaired {len(flipped)} mis-tagged row(s); "
+            f"re-applied admin fee to {sum(1 for r in reapplied if r['applied'])} of {len(sessions)} sessions."
+        ),
+        "flipped_rows": flipped,
+        "reapplied": reapplied,
+        "config": {
+            "recipient_name": cfg.get("recipient_name"),
+            "percentage": cfg_percentage,
+        }
+    }
