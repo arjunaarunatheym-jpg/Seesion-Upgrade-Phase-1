@@ -87,7 +87,7 @@ async def get_session_costing(session_id: str, current_user: User = Depends(get_
     cash_expenses_estimated = sum(e.get("estimated_amount", 0) for e in expenses)
     cash_expenses_actual = sum(e.get("actual_amount", 0) for e in expenses)
 
-    marketing = await db.marketing_commissions.find_one({"session_id": session_id}, {"_id": 0})
+    marketing = await db.marketing_commissions.find_one({"session_id": session_id, "type": {"$ne": "admin_fee"}}, {"_id": 0})
 
     gross_revenue = invoice_total - tax_amount
     cash_expenses_used = cash_expenses_actual
@@ -512,9 +512,10 @@ async def save_marketing_commission(session_id: str, marketing_data: dict, curre
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0, "start_date": 1, "invoice_id": 1})
 
     await db.marketing_commissions.update_one(
-        {"session_id": session_id},
+        {"session_id": session_id, "type": {"$ne": "admin_fee"}},
         {"$set": {
             "id": str(uuid.uuid4()),
+            "type": "marketing",
             "marketing_user_id": marketing_user_id,
             "marketing_user_name": marketing_user.get("full_name") if marketing_user else None,
             "commission_type": commission_type,
@@ -553,10 +554,10 @@ async def calculate_and_save_profit(session_id: str, current_user: User = Depend
 
     costing = await get_session_costing(session_id, current_user)
 
-    marketing = await db.marketing_commissions.find_one({"session_id": session_id}, {"_id": 0})
+    marketing = await db.marketing_commissions.find_one({"session_id": session_id, "type": {"$ne": "admin_fee"}}, {"_id": 0})
     if marketing:
         await db.marketing_commissions.update_one(
-            {"session_id": session_id},
+            {"session_id": session_id, "type": {"$ne": "admin_fee"}},
             {"$set": {
                 "calculated_amount": costing["marketing_commission"],
                 "status": "approved",

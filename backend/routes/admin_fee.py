@@ -686,7 +686,8 @@ async def repair_june_july(body: RepairRequest, current_user: User = Depends(get
     ).to_list(500)
     session_ids = [s["id"] for s in sessions if s.get("id")]
 
-    # Step 1: identify + flip mis-tagged rows
+    # Step 1: identify + SPLIT mis-tagged rows into 2 separate rows
+    # (cannot just flip because a proper admin_fee row for the same session may need to co-exist)
     candidates = await db.marketing_commissions.find(
         {"session_id": {"$in": session_ids}, "type": "admin_fee"},
         {"_id": 0}
@@ -697,20 +698,23 @@ async def repair_june_july(body: RepairRequest, current_user: User = Depends(get
         rate_ok = abs(float(c.get("commission_rate") or 0) - cfg_percentage) < 0.01
         recipient_ok = (c.get("marketing_user_id") == cfg_recipient_id)
         if not rate_ok or not recipient_ok:
-            await db.marketing_commissions.update_one(
-                {"id": c["id"]},
-                {"$set": {
-                    "type": "marketing",
-                    "repaired_by": current_user.id,
-                    "repaired_at": get_malaysia_time().isoformat(),
-                    "repair_note": (
-                        f"Auto-repair: was type=admin_fee but user={c.get('marketing_user_id')} "
-                        f"rate={c.get('commission_rate')}%; expected user={cfg_recipient_id} rate={cfg_percentage}%"
-                    ),
-                }}
+            # Create a NEW marketing_commissions row with the original data as type='marketing'
+            new_marketing_row = {**c}
+            new_marketing_row["id"] = str(uuid.uuid4())
+            new_marketing_row["type"] = "marketing"
+            new_marketing_row["status"] = c.get("status", "pending")
+            new_marketing_row["repaired_by"] = current_user.id
+            new_marketing_row["repaired_at"] = get_malaysia_time().isoformat()
+            new_marketing_row["repair_note"] = (
+                f"Split from mis-tagged admin_fee row (original id {c.get('id')}). "
+                f"Preserves marketing commission for user {c.get('marketing_user_id')} at rate {c.get('commission_rate')}%."
             )
+            await db.marketing_commissions.insert_one(new_marketing_row)
+            # Delete the original mis-tagged row — the session will get a fresh admin_fee row in Step 2
+            await db.marketing_commissions.delete_one({"id": c["id"]})
             flipped.append({
-                "id": c["id"],
+                "original_id": c["id"],
+                "new_marketing_id": new_marketing_row["id"],
                 "session_id": c["session_id"],
                 "marketing_user_id": c.get("marketing_user_id"),
                 "commission_rate": c.get("commission_rate"),
@@ -731,13 +735,61 @@ async def repair_june_july(body: RepairRequest, current_user: User = Depends(get
             "reason": r.get("reason"),
         })
 
+    # Step 3: seed proper marketing_commissions rows (type=marketing) for June/July sessions
+    # where a marketing user is configured on the session. This ensures the Marketing Commission
+    # tab shows entries for June/July after the split/repair.
+    session_full = await db.sessions.find(
+        {"id": {"$in": session_ids}},
+        {"_id": 0, "id": 1, "name": 1, "start_date": 1, "marketing_user_id": 1,
+         "commission_type": 1, "commission_rate": 1, "commission_fixed_amount": 1, "invoice_id": 1}
+    ).to_list(len(session_ids))
+    marketing_seeded = []
+    for s in session_full:
+        mkt_uid = s.get("marketing_user_id")
+        if not mkt_uid:
+            continue
+        # Skip if a proper marketing row already exists
+        existing_mkt = await db.marketing_commissions.find_one(
+            {"session_id": s["id"], "type": "marketing"},
+            {"_id": 0, "id": 1}
+        )
+        if existing_mkt:
+            continue
+        mkt_user = await db.users.find_one({"id": mkt_uid}, {"_id": 0, "full_name": 1})
+        row = {
+            "id": str(uuid.uuid4()),
+            "type": "marketing",
+            "session_id": s["id"],
+            "session_name": s.get("name"),
+            "session_start_date": s.get("start_date"),
+            "invoice_id": s.get("invoice_id"),
+            "marketing_user_id": mkt_uid,
+            "marketing_user_name": mkt_user.get("full_name") if mkt_user else None,
+            "commission_type": s.get("commission_type") or "percentage",
+            "commission_rate": float(s.get("commission_rate") or 0),
+            "fixed_amount": float(s.get("commission_fixed_amount") or 0),
+            "calculated_amount": 0,  # recomputed on next /payables/marketing-commissions fetch
+            "status": "pending",
+            "created_at": get_malaysia_time().isoformat(),
+            "updated_at": get_malaysia_time().isoformat(),
+            "seeded_by_repair": True,
+        }
+        await db.marketing_commissions.insert_one(row)
+        marketing_seeded.append({
+            "session_id": s["id"],
+            "marketing_user_id": mkt_uid,
+            "commission_rate": row["commission_rate"],
+        })
+
     return {
         "message": (
             f"Repaired {len(flipped)} mis-tagged row(s); "
-            f"re-applied admin fee to {sum(1 for r in reapplied if r['applied'])} of {len(sessions)} sessions."
+            f"re-applied admin fee to {sum(1 for r in reapplied if r['applied'])} of {len(sessions)} sessions; "
+            f"seeded {len(marketing_seeded)} marketing commission row(s)."
         ),
         "flipped_rows": flipped,
         "reapplied": reapplied,
+        "marketing_seeded": marketing_seeded,
         "config": {
             "recipient_name": cfg.get("recipient_name"),
             "percentage": cfg_percentage,
