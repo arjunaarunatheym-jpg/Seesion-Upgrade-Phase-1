@@ -17,6 +17,7 @@ export default function AdminFeeSettingsCard() {
 
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
+  const [repairing, setRepairing] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -76,6 +77,27 @@ export default function AdminFeeSettingsCard() {
       toast.error(e.response?.data?.detail || 'Sync failed');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const repairJuneJuly = async () => {
+    if (!window.confirm(
+      'Repair mis-tagged Admin Fee records for JUNE & JULY 2026 only.\n\n' +
+      'This will:\n' +
+      '  1. Find rows wrongly tagged as admin fee (e.g. showing marketing personnel names)\n' +
+      '  2. Flip them back to regular marketing commissions\n' +
+      '  3. Create proper 4% admin fee rows payable to ' + (config?.recipient_name || 'the configured recipient') + '\n\n' +
+      'Blast radius: June & July 2026 only. Older records untouched. Continue?'
+    )) return;
+    setRepairing(true);
+    try {
+      const res = await axiosInstance.post('/admin-fee/repair-june-july', { confirm: true });
+      toast.success(res.data.message || 'Repair completed');
+      setLastSync(res.data);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Repair failed');
+    } finally {
+      setRepairing(false);
     }
   };
 
@@ -174,16 +196,28 @@ export default function AdminFeeSettingsCard() {
         </div>
 
         <div className="flex flex-wrap justify-between gap-2">
-          <Button
-            onClick={syncAll}
-            disabled={syncing}
-            variant="outline"
-            className="border-blue-300 text-blue-700 hover:bg-blue-50"
-            data-testid="sync-all-admin-fees-btn"
-          >
-            {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            Sync All Admin Fees
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={syncAll}
+              disabled={syncing}
+              variant="outline"
+              className="border-blue-300 text-blue-700 hover:bg-blue-50"
+              data-testid="sync-all-admin-fees-btn"
+            >
+              {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+              Sync All Admin Fees
+            </Button>
+            <Button
+              onClick={repairJuneJuly}
+              disabled={repairing}
+              variant="outline"
+              className="border-red-300 text-red-700 hover:bg-red-50"
+              data-testid="repair-june-july-btn"
+            >
+              {repairing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+              Repair Jun/Jul Admin Fee
+            </Button>
+          </div>
           <Button onClick={save} disabled={saving} className="bg-amber-600 hover:bg-amber-700" data-testid="save-admin-fee-btn">
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             Save Configuration
