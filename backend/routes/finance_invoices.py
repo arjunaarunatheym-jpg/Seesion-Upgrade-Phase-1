@@ -170,6 +170,49 @@ async def get_invoices(
     
     invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     
+    # Enrich each invoice with programme_name / training_dates / venue from the linked session.
+    # This makes old invoices (created before these fields were stored) print correctly on PDF.
+    session_ids = list({inv.get("session_id") for inv in invoices if inv.get("session_id")})
+    session_map = {}
+    program_map = {}
+    if session_ids:
+        sessions = await db.sessions.find(
+            {"id": {"$in": session_ids}},
+            {"_id": 0, "id": 1, "program_id": 1, "location": 1, "start_date": 1, "end_date": 1, "training_dates": 1, "quotation_id": 1}
+        ).to_list(len(session_ids))
+        session_map = {s["id"]: s for s in sessions}
+        program_ids = list({s.get("program_id") for s in sessions if s.get("program_id")})
+        if program_ids:
+            programs = await db.programs.find(
+                {"id": {"$in": program_ids}},
+                {"_id": 0, "id": 1, "name": 1}
+            ).to_list(len(program_ids))
+            program_map = {p["id"]: p.get("name") for p in programs}
+
+    for inv in invoices:
+        sess = session_map.get(inv.get("session_id")) if inv.get("session_id") else None
+        # Programme name — prefer stored, fall back to programme joined via session
+        if not inv.get("programme_name") and sess:
+            inv["programme_name"] = program_map.get(sess.get("program_id"))
+        # Training dates — prefer stored; else derive from session.training_dates OR start/end
+        if not inv.get("training_dates") and sess:
+            td = sess.get("training_dates")
+            if td and isinstance(td, list) and len(td) > 1:
+                inv["training_dates"] = ", ".join(td)
+            elif sess.get("start_date"):
+                if sess.get("end_date") and sess.get("end_date") != sess.get("start_date"):
+                    inv["training_dates"] = f"{sess['start_date']} — {sess['end_date']}"
+                else:
+                    inv["training_dates"] = sess["start_date"]
+        # Venue — prefer stored; else session.location; else fall back to quotation.venue
+        if not inv.get("venue") and sess:
+            venue = sess.get("location")
+            if not venue and sess.get("quotation_id"):
+                quo = await db.quotations.find_one({"id": sess["quotation_id"]}, {"_id": 0, "venue": 1})
+                venue = quo.get("venue") if quo else None
+            if venue:
+                inv["venue"] = venue
+
     if year:
         def get_invoice_year(inv):
             date_val = inv.get("invoice_date") or inv.get("created_at")

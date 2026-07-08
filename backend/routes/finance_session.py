@@ -174,6 +174,27 @@ async def save_session_invoice(session_id: str, invoice_data: dict, current_user
         invoice_number = await _generate_invoice_number()
         company = await db.companies.find_one({"id": session.get("company_id")}, {"_id": 0, "name": 1})
 
+        # Enrich with programme / training dates / venue so PDF prints them
+        programme_name = None
+        if session.get("program_id"):
+            prog = await db.programs.find_one({"id": session["program_id"]}, {"_id": 0, "name": 1})
+            programme_name = prog.get("name") if prog else None
+
+        training_dates_str = None
+        td = session.get("training_dates")
+        if td and isinstance(td, list) and len(td) > 1:
+            training_dates_str = ", ".join(td)
+        elif session.get("start_date"):
+            if session.get("end_date") and session.get("end_date") != session.get("start_date"):
+                training_dates_str = f"{session['start_date']} — {session['end_date']}"
+            else:
+                training_dates_str = session["start_date"]
+
+        venue = session.get("location")
+        if not venue and session.get("quotation_id"):
+            quo = await db.quotations.find_one({"id": session["quotation_id"]}, {"_id": 0, "venue": 1})
+            venue = quo.get("venue") if quo else None
+
         invoice = {
             "id": str(uuid.uuid4()),
             "invoice_number": invoice_number,
@@ -181,6 +202,9 @@ async def save_session_invoice(session_id: str, invoice_data: dict, current_user
             "company_id": session.get("company_id"),
             "company_name": company.get("name") if company else None,
             "session_name": session.get("name"),
+            "programme_name": programme_name,
+            "training_dates": training_dates_str,
+            "venue": venue,
             "pricing_type": invoice_data.get("pricing_type", "lumpsum"),
             "line_items": invoice_data.get("line_items", []),
             "subtotal": invoice_data.get("subtotal", 0),
