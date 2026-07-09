@@ -53,6 +53,10 @@ const PayablesTab = ({
     }));
   };
 
+  // Format money strictly to 2 decimals (banker's rounding via toFixed → toLocaleString parse)
+  const fmt2 = (v) => (Math.round(((v || 0) + Number.EPSILON) * 100) / 100)
+    .toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   // Group payables by month
   const groupByMonth = (records) => {
     const groups = {};
@@ -413,7 +417,7 @@ const PayablesTab = ({
                             <Calendar className="w-5 h-5 text-blue-600" />
                             <div className="text-left">
                               <h4 className="font-semibold text-blue-900">{group.label}</h4>
-                              <p className="text-sm text-blue-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
+                              <p className="text-sm text-blue-700">Total: RM {fmt2(group.total)} | {group.records.length} item(s)</p>
                             </div>
                           </div>
                           {group.records.some(r => r.status !== 'paid') && (
@@ -441,7 +445,7 @@ const PayablesTab = ({
                               </div>
                               <div className="flex items-center gap-3">
                                 <div className="text-right">
-                                  <p className="font-bold">RM {(fee.fee_amount || 0).toLocaleString()}</p>
+                                  <p className="font-bold">RM {fmt2(fee.fee_amount)}</p>
                                   <Badge className={fee.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>
                                     {fee.status || 'pending'}
                                   </Badge>
@@ -486,7 +490,7 @@ const PayablesTab = ({
                             <Calendar className="w-5 h-5 text-green-600" />
                             <div className="text-left">
                               <h4 className="font-semibold text-green-900">{group.label}</h4>
-                              <p className="text-sm text-green-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
+                              <p className="text-sm text-green-700">Total: RM {fmt2(group.total)} | {group.records.length} item(s)</p>
                             </div>
                           </div>
                           {group.records.some(r => r.status !== 'paid') && (
@@ -514,7 +518,7 @@ const PayablesTab = ({
                               </div>
                               <div className="flex items-center gap-3">
                                 <div className="text-right">
-                                  <p className="font-bold">RM {(fee.total_fee || 0).toLocaleString()}</p>
+                                  <p className="font-bold">RM {fmt2(fee.total_fee)}</p>
                                   <Badge className={fee.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>
                                     {fee.status || 'pending'}
                                   </Badge>
@@ -559,7 +563,7 @@ const PayablesTab = ({
                             <Calendar className="w-5 h-5 text-purple-600" />
                             <div className="text-left">
                               <h4 className="font-semibold text-purple-900">{group.label}</h4>
-                              <p className="text-sm text-purple-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
+                              <p className="text-sm text-purple-700">Total: RM {fmt2(group.total)} | {group.records.length} item(s)</p>
                             </div>
                           </div>
                           {group.records.some(r => r.status !== 'paid') && (
@@ -587,7 +591,7 @@ const PayablesTab = ({
                               </div>
                               <div className="flex items-center gap-3">
                                 <div className="text-right">
-                                  <p className="font-bold">RM {(comm.calculated_amount || 0).toLocaleString()}</p>
+                                  <p className="font-bold">RM {fmt2(comm.calculated_amount)}</p>
                                   <Badge className={comm.status === 'paid' ? 'bg-green-500' : 'bg-yellow-500'}>
                                     {comm.status || 'pending'}
                                   </Badge>
@@ -632,7 +636,7 @@ const PayablesTab = ({
                             <Calendar className="w-5 h-5 text-amber-700" />
                             <div className="text-left">
                               <h4 className="font-semibold text-amber-900">{group.label}</h4>
-                              <p className="text-sm text-amber-700">Total: RM {group.total.toLocaleString()} | {group.records.length} item(s)</p>
+                              <p className="text-sm text-amber-700">Total: RM {fmt2(group.total)} | {group.records.length} item(s)</p>
                             </div>
                           </div>
                           {group.records.some(r => r.status !== 'paid') && (
@@ -662,7 +666,7 @@ const PayablesTab = ({
                               </div>
                               <div className="flex items-center gap-3">
                                 <div className="text-right">
-                                  <p className="font-bold">RM {(comm.calculated_amount || 0).toLocaleString()}</p>
+                                  <p className="font-bold">RM {fmt2(comm.calculated_amount)}</p>
                                   <Badge className={comm.status === 'paid' ? 'bg-green-500' : 'bg-amber-500'}>
                                     {comm.status || 'pending'}
                                   </Badge>

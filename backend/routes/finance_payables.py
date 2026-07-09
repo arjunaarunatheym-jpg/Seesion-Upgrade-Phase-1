@@ -865,9 +865,9 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
         profit_before_marketing = gross_revenue - total_expenses_before_marketing
         
         if comm.get("commission_type") == "percentage":
-            calculated_amount = profit_before_marketing * (comm.get("commission_rate", 0) / 100)
+            calculated_amount = round(profit_before_marketing * (comm.get("commission_rate", 0) / 100), 2)
         else:
-            calculated_amount = comm.get("fixed_amount") or 0.0
+            calculated_amount = round(float(comm.get("fixed_amount") or 0.0), 2)
         
         # Always update if there's a discrepancy
         if abs(calculated_amount - (comm.get("calculated_amount") or 0)) > 0.01:
