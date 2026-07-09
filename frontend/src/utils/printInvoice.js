@@ -203,7 +203,8 @@ export const printInvoice = async (invoice, companySettings, logoUrl) => {
         </div>
       </div>
       
-      <div class="invoice-title">INVOICE</div>
+      <div class="invoice-title">${invoice.document_type === 'proforma' ? 'PROFORMA INVOICE' : 'INVOICE'}</div>
+      ${invoice.document_type === 'proforma' ? '<div style="text-align:center;color:#7c3aed;font-size:12px;font-weight:bold;margin-top:-8px;margin-bottom:12px;letter-spacing:1px;">NOT A TAX INVOICE — FOR REFERENCE / PO PURPOSES ONLY</div>' : ''}
       
       <div class="details-grid">
         <div class="detail-box">
@@ -263,6 +264,7 @@ export const printInvoice = async (invoice, companySettings, logoUrl) => {
       </div>
       
       <div class="footer">
+        ${invoice.document_type === 'proforma' ? '<p style="color:#7c3aed;font-weight:bold;border:1px solid #a78bfa;padding:6px;background:#f5f3ff;">This is a Proforma Invoice — a preliminary bill for planning purposes only. A tax invoice will be issued upon payment or purchase order confirmation.</p>' : ''}
         <p><strong>Payment Terms:</strong> ${settings.invoice_terms || 'Upon receipt of invoice'}</p>
         <p><strong>Bank:</strong> ${settings.bank_name || '-'} | <strong>Account:</strong> ${settings.bank_account_name || settings.company_name || '-'} | <strong>No:</strong> ${settings.bank_account_number || '-'}</p>
         <p>${settings.invoice_footer_note || 'Thank you for your business!'}</p>
@@ -273,5 +275,6 @@ export const printInvoice = async (invoice, companySettings, logoUrl) => {
     </body>
     </html>
   `;
-  downloadPdf(html, `Invoice_${invoice.invoice_number || 'draft'}`);
+  const filePrefix = invoice.document_type === 'proforma' ? 'Proforma' : 'Invoice';
+  downloadPdf(html, `${filePrefix}_${invoice.invoice_number || 'draft'}`);
 };

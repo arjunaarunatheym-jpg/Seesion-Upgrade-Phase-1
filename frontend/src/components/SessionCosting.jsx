@@ -34,6 +34,7 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
     lumpsum_amount: '',
     per_pax_rate: '',
     tax_rate: '', // Default blank - user can add if needed
+    document_type: 'invoice', // 'invoice' or 'proforma' — user chooses when saving a NEW invoice
   });
   
   // Additional invoices for multi-company sessions
@@ -355,7 +356,8 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
         subtotal: invoiceAmount,
         tax_rate: taxRate,
         tax_amount: taxAmount,
-        total_amount: invoiceAmount
+        total_amount: invoiceAmount,
+        document_type: invoiceData.document_type || 'invoice'
       };
       
       // Use the new session-specific invoice endpoint that handles create/update
@@ -553,6 +555,39 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Document Type toggle — only when creating a new invoice */}
+              {!invoiceId && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-2" data-testid="document-type-selector">
+                  <Label className="text-sm font-semibold text-blue-800">Document Type</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={invoiceData.document_type === 'invoice' ? 'default' : 'outline'}
+                      onClick={() => setInvoiceData({ ...invoiceData, document_type: 'invoice' })}
+                      className={invoiceData.document_type === 'invoice' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                      data-testid="doc-type-invoice"
+                    >
+                      Tax Invoice
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={invoiceData.document_type === 'proforma' ? 'default' : 'outline'}
+                      onClick={() => setInvoiceData({ ...invoiceData, document_type: 'proforma' })}
+                      className={invoiceData.document_type === 'proforma' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                      data-testid="doc-type-proforma"
+                    >
+                      Proforma Invoice
+                    </Button>
+                  </div>
+                  <p className="text-xs text-blue-700">
+                    {invoiceData.document_type === 'proforma'
+                      ? 'Proforma is a preliminary bill — no journal posting, no payments. Convert to a Tax Invoice when ready.'
+                      : 'Tax invoice posts to accounting on issuance and is payable by the client.'}
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>Pricing Type</Label>

@@ -171,7 +171,15 @@ async def save_session_invoice(session_id: str, invoice_data: dict, current_user
             print(f"[save_session_invoice/update] admin_fee hook failed: {_e}")
         return {"message": "Invoice updated", "invoice_id": existing["id"]}
     else:
-        invoice_number = await _generate_invoice_number()
+        # Determine document type: "invoice" (default) or "proforma"
+        document_type = (invoice_data.get("document_type") or "invoice").lower()
+        if document_type not in ("invoice", "proforma"):
+            raise HTTPException(status_code=400, detail="document_type must be 'invoice' or 'proforma'")
+        if document_type == "proforma":
+            from routes.finance_invoices import generate_proforma_number
+            invoice_number = await generate_proforma_number()
+        else:
+            invoice_number = await _generate_invoice_number()
         company = await db.companies.find_one({"id": session.get("company_id")}, {"_id": 0, "name": 1})
 
         # Enrich with programme / training dates / venue so PDF prints them
@@ -198,6 +206,7 @@ async def save_session_invoice(session_id: str, invoice_data: dict, current_user
         invoice = {
             "id": str(uuid.uuid4()),
             "invoice_number": invoice_number,
+            "document_type": document_type,
             "session_id": session_id,
             "company_id": session.get("company_id"),
             "company_name": company.get("name") if company else None,
@@ -217,7 +226,7 @@ async def save_session_invoice(session_id: str, invoice_data: dict, current_user
             "created_by": current_user.id
         }
         await db.invoices.insert_one(invoice)
-        return {"message": "Invoice created", "invoice_id": invoice["id"], "invoice_number": invoice_number}
+        return {"message": f"{'Proforma i' if document_type == 'proforma' else 'I'}nvoice created", "invoice_id": invoice["id"], "invoice_number": invoice_number, "document_type": document_type}
 
 
 @router.post("/session/{session_id}/additional-invoice")

@@ -202,6 +202,13 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     if invoice.get("status") not in ["issued", "paid"]:
         raise HTTPException(status_code=400, detail="Can only record payments for issued invoices")
 
+    # Proformas cannot receive payments — must be converted to a real invoice first
+    if invoice.get("document_type") == "proforma":
+        raise HTTPException(
+            status_code=400,
+            detail="Payments cannot be recorded against a Proforma Invoice. Convert it to a real tax invoice first."
+        )
+
     # ============ PAYMENT TYPE VALIDATION ============
     payment_type = (payment_data.payment_type or "self_pay").lower()
     if payment_type not in ["self_pay", "hrdcorp", "partial", "other"]:

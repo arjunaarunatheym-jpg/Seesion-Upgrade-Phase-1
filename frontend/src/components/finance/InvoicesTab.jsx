@@ -215,6 +215,21 @@ const InvoicesTab = ({
     }
   };
 
+  const handleConvertProforma = async (invoice) => {
+    if (!confirm(
+      `Convert proforma ${invoice.invoice_number} to a real Tax Invoice?\n\n` +
+      `A new invoice will be created with a fresh INV/... number. ` +
+      `The proforma will be marked as 'converted' and locked. Continue?`
+    )) return;
+    try {
+      const res = await axiosInstance.post(`/finance/invoices/${invoice.id}/convert-to-invoice`);
+      toast.success(`Converted to ${res.data.new_invoice_number}`);
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to convert proforma");
+    }
+  };
+
   const handleCreateReplacementInvoice = async (invoiceId) => {
     try {
       const response = await axiosInstance.post(`/finance/invoices/${invoiceId}/create-replacement`);
@@ -370,6 +385,12 @@ const InvoicesTab = ({
                               {invoice.invoice_type === 'adhoc' && (
                                 <Badge className="ml-2 bg-indigo-100 text-indigo-700 text-[10px] px-1 py-0">Ad-Hoc</Badge>
                               )}
+                              {invoice.document_type === 'proforma' && (
+                                <Badge className="ml-2 bg-purple-100 text-purple-700 text-[10px] px-1 py-0" data-testid={`proforma-badge-${invoice.id}`}>PROFORMA</Badge>
+                              )}
+                              {invoice.converted_from_proforma_number && (
+                                <span className="ml-2 text-[10px] text-gray-500">(from {invoice.converted_from_proforma_number})</span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('en-MY') : '-'}
@@ -410,8 +431,22 @@ const InvoicesTab = ({
                                   </Button>
                                 )}
                                 
+                                {/* Convert Proforma → Tax Invoice */}
+                                {invoice.document_type === 'proforma' && invoice.status !== 'converted' && invoice.status !== 'cancelled' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-purple-700"
+                                    onClick={() => handleConvertProforma(invoice)}
+                                    title="Convert to Tax Invoice"
+                                    data-testid={`convert-proforma-${invoice.id}`}
+                                  >
+                                    <FileText className="w-4 h-4" />→
+                                  </Button>
+                                )}
+
                                 {/* Issue Button */}
-                                {invoice.status === 'approved' && (
+                                {invoice.status === 'approved' && invoice.document_type !== 'proforma' && (
                                   <Button 
                                     variant="ghost" 
                                     size="sm"

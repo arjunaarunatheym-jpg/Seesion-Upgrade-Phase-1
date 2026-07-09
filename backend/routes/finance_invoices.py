@@ -109,6 +109,23 @@ async def generate_invoice_number():
     return f"{prefix}{new_num:04d}"
 
 
+async def generate_proforma_number():
+    """Generate unique proforma invoice number: PI/MDDRC/YYYY/MM/0001. Separate sequence from real invoices."""
+    now = get_malaysia_time()
+    year = now.year
+    month = now.month
+    prefix = f"PI/MDDRC/{year}/{month:02d}/"
+    last = await db.invoices.find_one(
+        {"invoice_number": {"$regex": f"^PI/MDDRC/{year}/{month:02d}/"}},
+        sort=[("invoice_number", -1)]
+    )
+    if last:
+        new_num = int(last["invoice_number"].split("/")[-1]) + 1
+    else:
+        new_num = 1
+    return f"{prefix}{new_num:04d}"
+
+
 async def log_finance_action(entity_type: str, entity_id: str, action: str, 
                              changed_by: str, before_value: dict = None, 
                              after_value: dict = None, reason: str = None):
@@ -422,6 +439,13 @@ async def issue_invoice(invoice_id: str, current_user: User = Depends(get_curren
     
     if invoice.get("status") != "approved":
         raise HTTPException(status_code=400, detail="Only approved invoices can be issued")
+
+    # Proformas cannot be issued as tax invoices — must be converted first
+    if invoice.get("document_type") == "proforma":
+        raise HTTPException(
+            status_code=400,
+            detail="This is a Proforma Invoice — it cannot be issued directly. Use 'Convert to Invoice' to create a real tax invoice from it."
+        )
     
     await db.invoices.update_one(
         {"id": invoice_id},
@@ -482,6 +506,76 @@ async def issue_invoice(invoice_id: str, current_user: User = Depends(get_curren
     # ============ END EMAIL NOTIFICATION ============
     
     return {"message": "Invoice issued successfully"}
+
+
+@router.post("/invoices/{invoice_id}/convert-to-invoice")
+async def convert_proforma_to_invoice(invoice_id: str, current_user: User = Depends(get_current_user)):
+    """Convert a proforma invoice into a real tax invoice.
+    Creates a NEW invoice with a fresh INV/... sequence number and marks the proforma as 'converted'.
+    Journal posting happens on the new invoice when it's issued (not here)."""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    proforma = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not proforma:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if proforma.get("document_type") != "proforma":
+        raise HTTPException(status_code=400, detail="This is already a tax invoice, not a proforma")
+    if proforma.get("status") in ("converted", "cancelled"):
+        raise HTTPException(status_code=400, detail=f"Proforma already {proforma.get('status')}")
+
+    now = get_malaysia_time()
+    new_number = await generate_invoice_number()
+    new_invoice_id = str(uuid.uuid4())
+    new_invoice = {**proforma}
+    new_invoice.pop("_id", None)
+    new_invoice.update({
+        "id": new_invoice_id,
+        "invoice_number": new_number,
+        "document_type": "invoice",
+        "status": "draft",
+        "converted_from_proforma_id": proforma["id"],
+        "converted_from_proforma_number": proforma.get("invoice_number"),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "created_by": current_user.id,
+    })
+    # Clean fields that shouldn't carry over
+    for k in ("issued_by", "issued_at", "cancelled_by", "cancelled_at", "voided_by", "voided_at",
+             "reversed_by", "reversed_by_name", "reversed_at", "reversal_reason", "reversal_id"):
+        new_invoice.pop(k, None)
+    await db.invoices.insert_one(new_invoice)
+
+    # Mark the proforma as converted (locks it — no further edits/conversions)
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {
+            "status": "converted",
+            "converted_to_invoice_id": new_invoice_id,
+            "converted_to_invoice_number": new_number,
+            "converted_by": current_user.id,
+            "converted_by_name": current_user.full_name,
+            "converted_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }}
+    )
+
+    # Update session invoice linkage to the new real invoice
+    if proforma.get("session_id"):
+        await db.sessions.update_one(
+            {"id": proforma["session_id"]},
+            {"$set": {"invoice_id": new_invoice_id, "invoice_status": "draft"}}
+        )
+
+    await log_finance_action("invoice", invoice_id, "converted_to_invoice", current_user.id,
+                             {"invoice_number": proforma.get("invoice_number")},
+                             {"invoice_number": new_number, "new_invoice_id": new_invoice_id})
+
+    return {
+        "message": "Proforma converted to invoice successfully",
+        "new_invoice_id": new_invoice_id,
+        "new_invoice_number": new_number
+    }
 
 
 @router.post("/invoices/{invoice_id}/cancel")
