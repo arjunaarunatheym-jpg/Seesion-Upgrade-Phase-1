@@ -445,6 +445,20 @@ const InvoicesTab = ({
                                   </Button>
                                 )}
 
+                                {/* Download button for Proforma (any status) */}
+                                {invoice.document_type === 'proforma' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-purple-600"
+                                    onClick={() => handlePrintInvoice(invoice)}
+                                    title="Download Proforma"
+                                    data-testid={`download-proforma-${invoice.id}`}
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </Button>
+                                )}
+
                                 {/* Issue Button */}
                                 {invoice.status === 'approved' && invoice.document_type !== 'proforma' && (
                                   <Button 
