@@ -53,8 +53,8 @@ export const printQuotation = async (quotation, companySettings, logoUrl, templa
   };
   
   const signatureHtml = signatureData
-    ? `<img src="${signatureData}" style="max-height:60px; max-width:180px; margin-bottom:4px;" /><br>`
-    : '';
+    ? `<div style="display:flex; justify-content:center; align-items:flex-end; height:70px; width:220px; margin:0 auto 4px;"><img src="${signatureData}" style="max-height:70px; max-width:220px; object-fit:contain; display:block;" /></div>`
+    : '<div style="height:70px;"></div>';
 
   const html = `
     <!DOCTYPE html>
@@ -363,7 +363,7 @@ export const getQuotationHtml = (quotation, companySettings, logoUrl, templates 
       .replace(/\{\{venue\}\}/g, quotation.venue || '-')
       .replace(/\n/g, '<br>');
   };
-  const signatureHtml = signatureData ? `<img src="${signatureData}" style="max-height:60px;max-width:180px;margin-bottom:4px;" /><br>` : '';
+  const signatureHtml = signatureData ? `<div style="display:flex; justify-content:center; align-items:flex-end; height:70px; width:220px; margin:0 auto 4px;"><img src="${signatureData}" style="max-height:70px; max-width:220px; object-fit:contain; display:block;" /></div>` : '<div style="height:70px;"></div>';
   const processedContent = pageContent ? processContent(pageContent) : '';
   const processedTerms = termsConditions ? processContent(termsConditions) : '';
 

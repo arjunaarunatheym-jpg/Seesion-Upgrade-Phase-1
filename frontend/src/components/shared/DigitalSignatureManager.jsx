@@ -13,15 +13,74 @@ export const DigitalSignatureManager = ({ user, onUpdate }) => {
   const handleUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 500000) {
-      toast.error('Signature image must be under 500KB');
+    if (file.size > 2_000_000) {
+      toast.error('Signature image must be under 2MB');
       return;
     }
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setSignature(ev.target.result);
+      // Auto-trim whitespace so the signature strokes fill the frame in printouts
+      trimSignature(ev.target.result)
+        .then((trimmed) => {
+          setSignature(trimmed);
+          toast.success('Signature loaded (whitespace auto-cropped)');
+        })
+        .catch(() => {
+          // Fallback: use raw
+          setSignature(ev.target.result);
+        });
     };
     reader.readAsDataURL(file);
+  };
+
+  // Crop non-content whitespace (transparent or near-white pixels) from the outer edges of a signature image.
+  const trimSignature = (dataUrl) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const { data, width, height } = ctx.getImageData(0, 0, img.width, img.height);
+          // Consider a pixel "content" if it's opaque enough AND not near-white
+          const isContent = (r, g, b, a) => a > 30 && !(r > 235 && g > 235 && b > 235);
+          let minX = width, minY = height, maxX = 0, maxY = 0, found = false;
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const i = (y * width + x) * 4;
+              if (isContent(data[i], data[i + 1], data[i + 2], data[i + 3])) {
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+                found = true;
+              }
+            }
+          }
+          if (!found) return resolve(dataUrl); // Blank image — return as-is
+          // Add tiny padding so strokes aren't glued to the edge
+          const pad = 4;
+          minX = Math.max(0, minX - pad);
+          minY = Math.max(0, minY - pad);
+          maxX = Math.min(width - 1, maxX + pad);
+          maxY = Math.min(height - 1, maxY + pad);
+          const cw = maxX - minX + 1;
+          const ch = maxY - minY + 1;
+          const out = document.createElement('canvas');
+          out.width = cw;
+          out.height = ch;
+          out.getContext('2d').drawImage(canvas, minX, minY, cw, ch, 0, 0, cw, ch);
+          resolve(out.toDataURL('image/png'));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = reject;
+      img.src = dataUrl;
+    });
   };
 
   const handleSave = async () => {
