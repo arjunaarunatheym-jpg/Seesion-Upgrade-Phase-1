@@ -192,6 +192,7 @@ class Session(BaseModel):
     cert_show_validity: bool = False
     cert_validity_months: int = 24
     schedule: Optional[list] = None
+    funding_source: Optional[str] = None  # "self_pay" | "hrdcorp" | None
 
 class ParticipantData(BaseModel):
     email: Optional[str] = ""

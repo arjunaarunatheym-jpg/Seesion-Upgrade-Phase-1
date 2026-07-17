@@ -195,7 +195,7 @@ async def get_invoices(
     if session_ids:
         sessions = await db.sessions.find(
             {"id": {"$in": session_ids}},
-            {"_id": 0, "id": 1, "program_id": 1, "location": 1, "start_date": 1, "end_date": 1, "training_dates": 1, "quotation_id": 1}
+            {"_id": 0, "id": 1, "program_id": 1, "location": 1, "start_date": 1, "end_date": 1, "training_dates": 1, "quotation_id": 1, "funding_source": 1}
         ).to_list(len(session_ids))
         session_map = {s["id"]: s for s in sessions}
         program_ids = list({s.get("program_id") for s in sessions if s.get("program_id")})
@@ -229,6 +229,9 @@ async def get_invoices(
                 venue = quo.get("venue") if quo else None
             if venue:
                 inv["venue"] = venue
+        # Funding source — propagate from session so Invoice Management can show badge
+        if sess and sess.get("funding_source"):
+            inv["funding_source"] = sess.get("funding_source")
 
     if year:
         def get_invoice_year(inv):

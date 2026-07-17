@@ -27,6 +27,7 @@ class Session(BaseModel):
     archived_date: Optional[datetime] = None
     completed_by_coordinator: bool = False
     completed_date: Optional[datetime] = None
+    funding_source: Optional[str] = None  # "self_pay" | "hrdcorp" | None
     created_at: datetime = Field(default_factory=lambda: datetime.now())
     # Enriched fields (populated at runtime)
     company_name: Optional[str] = None

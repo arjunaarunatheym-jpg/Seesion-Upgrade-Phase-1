@@ -512,8 +512,36 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
             <h2 className="text-xl font-bold flex items-center gap-2">
               <DollarSign className="w-6 h-6 text-green-600" />
               Session Costing
+              {session.funding_source === 'hrdcorp' && (
+                <span className="ml-2 px-2 py-0.5 text-[10px] font-bold bg-blue-100 text-blue-700 rounded" data-testid="funding-badge-hrdcorp">HRDCORP</span>
+              )}
+              {session.funding_source === 'self_pay' && (
+                <span className="ml-2 px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-700 rounded" data-testid="funding-badge-self-pay">SELF PAY</span>
+              )}
             </h2>
             <p className="text-sm text-gray-500">{session.name}</p>
+            <div className="mt-1 flex items-center gap-2 text-xs">
+              <label className="text-gray-600">Funding:</label>
+              <select
+                className="border rounded px-2 py-0.5 text-xs bg-white"
+                value={session.funding_source || ''}
+                onChange={async (e) => {
+                  const val = e.target.value;
+                  try {
+                    await axiosInstance.put(`/sessions/${session.id}`, { funding_source: val || null });
+                    session.funding_source = val || null;
+                    toast.success('Funding source updated');
+                  } catch (err) {
+                    toast.error(err.response?.data?.detail || 'Failed to update funding source');
+                  }
+                }}
+                data-testid="funding-source-select"
+              >
+                <option value="">— Not set —</option>
+                <option value="self_pay">Self Pay / Direct Client</option>
+                <option value="hrdcorp">HRDCorp Grant</option>
+              </select>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button 

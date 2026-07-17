@@ -407,7 +407,15 @@ const InvoicesTab = ({
                             <td className="px-4 py-3 text-sm text-gray-600">
                               {invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('en-MY') : '-'}
                             </td>
-                            <td className="px-4 py-3 text-sm">{invoice.company_name || '-'}</td>
+                            <td className="px-4 py-3 text-sm">
+                              {invoice.company_name || '-'}
+                              {invoice.funding_source === 'hrdcorp' && (
+                                <Badge className="ml-2 bg-blue-100 text-blue-700 text-[10px] px-1 py-0" data-testid={`funding-badge-${invoice.id}`}>HRDCORP</Badge>
+                              )}
+                              {invoice.funding_source === 'self_pay' && (
+                                <Badge className="ml-2 bg-emerald-100 text-emerald-700 text-[10px] px-1 py-0" data-testid={`funding-badge-${invoice.id}`}>SELF PAY</Badge>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-sm">
                               {invoice.session_name || (invoice.reference_info?.text) || (invoice.invoice_type === 'adhoc' ? 'Ad-Hoc' : '-')}
                             </td>
