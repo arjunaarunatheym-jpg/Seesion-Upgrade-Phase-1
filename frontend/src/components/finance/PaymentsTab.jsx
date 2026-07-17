@@ -85,10 +85,10 @@ const PaymentsTab = ({
         hrdcorp_invoice_date: paymentForm.payment_type === 'hrdcorp' ? paymentForm.hrdcorp_invoice_date : null,
         hrdcorp_invoice_url: paymentForm.payment_type === 'hrdcorp' ? (paymentForm.hrdcorp_invoice_url || null) : null,
         // CN flow only allowed for non-HRDCorp payments (HRDCorp uses expense account instead)
-        create_credit_note: paymentForm.payment_type === 'hrdcorp' ? false : paymentForm.create_cn,
-        deduction_percentage: paymentForm.payment_type !== 'hrdcorp' && paymentForm.create_cn && paymentForm.cn_mode === 'percentage' ? parseFloat(paymentForm.cn_percentage) : null,
-        deduction_amount: paymentForm.payment_type !== 'hrdcorp' && paymentForm.create_cn && paymentForm.cn_mode === 'amount' ? parseFloat(paymentForm.cn_amount) : null,
-        deduction_reason: paymentForm.payment_type !== 'hrdcorp' && paymentForm.create_cn ? paymentForm.cn_reason : null
+        create_credit_note: paymentForm.create_cn,
+        deduction_percentage: paymentForm.create_cn && paymentForm.cn_mode === 'percentage' ? parseFloat(paymentForm.cn_percentage) : null,
+        deduction_amount: paymentForm.create_cn && paymentForm.cn_mode === 'amount' ? parseFloat(paymentForm.cn_amount) : null,
+        deduction_reason: paymentForm.create_cn ? paymentForm.cn_reason : null
       });
       
       if (response.data.credit_note) {
@@ -256,7 +256,7 @@ const PaymentsTab = ({
             </div>
             {paymentForm.payment_type === 'hrdcorp' && (
               <p className="text-xs text-blue-700 mt-1">
-                HRDCorp service fee will be booked as an expense to <strong>6650 HRDCorp Service Charges</strong>. No credit note is needed.
+                HRDCorp service fee will be booked as an expense to <strong>6650 HRDCorp Service Charges</strong>. If HRDCorp only approved a partial amount, tick &ldquo;Create Credit Note&rdquo; below to write off the shortfall.
               </p>
             )}
             {paymentForm.payment_type === 'partial' && (
@@ -321,7 +321,14 @@ const PaymentsTab = ({
             const invoiceTotal = selectedInvoice?.total_amount || 0;
             const received = parseFloat(paymentForm.amount || 0);
             const fee = parseFloat(paymentForm.hrdcorp_service_fee || 0);
-            const sum = received + fee;
+            let cnAmount = 0;
+            if (paymentForm.create_cn) {
+              cnAmount = paymentForm.cn_mode === 'amount'
+                ? parseFloat(paymentForm.cn_amount || 0)
+                : (invoiceTotal * parseFloat(paymentForm.cn_percentage || 0) / 100);
+            }
+            const sum = received + fee + cnAmount;
+            const shortfall = Math.round((invoiceTotal - received - fee) * 100) / 100;
             const matches = Math.abs(sum - invoiceTotal) < 0.01;
             return (
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3" data-testid="hrdcorp-fields">
@@ -344,9 +351,17 @@ const PaymentsTab = ({
                   </div>
                 </div>
                 <div className={`text-xs p-2 rounded ${matches ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
-                  Received RM {received.toLocaleString('en-MY', { minimumFractionDigits: 2 })} + Fee RM {fee.toLocaleString('en-MY', { minimumFractionDigits: 2 })} = RM {sum.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                  Received RM {received.toLocaleString('en-MY', { minimumFractionDigits: 2 })} + Fee RM {fee.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                  {cnAmount > 0 && (<> + CN RM {cnAmount.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</>)}
+                  {' = '}RM {sum.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
                   {invoiceTotal > 0 && (matches ? ' ✓ matches invoice' : ` ✗ must equal RM ${invoiceTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}`)}
                 </div>
+                {shortfall > 0.01 && !paymentForm.create_cn && (
+                  <div className="text-xs p-2 rounded bg-purple-50 border border-purple-200 text-purple-800">
+                    <strong>Partial grant detected.</strong> HRDCorp is covering RM {(received + fee).toLocaleString('en-MY', { minimumFractionDigits: 2 })} of RM {invoiceTotal.toLocaleString('en-MY', { minimumFractionDigits: 2 })}.
+                    Shortfall of <strong>RM {shortfall.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</strong> — tick the &ldquo;Create Credit Note&rdquo; box below and enter this amount as write-off, or collect it from the client separately.
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs">HRDCorp Invoice Number *</Label>
@@ -428,8 +443,8 @@ const PaymentsTab = ({
             <p className="text-xs text-blue-700">Upload bank transfer receipt, cheque image, or any proof (image or PDF, max 5MB).</p>
           </div>
           
-          {/* Credit Note Option — hidden for HRDCorp (uses expense account instead) */}
-          {paymentForm.payment_type !== 'hrdcorp' && (
+          {/* Credit Note Option — always available. For HRDCorp partial grants, use this to write off the shortfall. */}
+          {(
           <div className="p-4 bg-red-50 rounded-lg border border-red-200 space-y-3">
             <div className="flex items-center gap-2">
               <input 

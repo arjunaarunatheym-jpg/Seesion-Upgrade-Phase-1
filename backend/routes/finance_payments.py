@@ -219,17 +219,34 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
         if hrdcorp_fee <= 0:
             raise HTTPException(status_code=400, detail="HRDCorp service fee is required for HRDCorp payments")
         invoice_total = float(invoice.get("total_amount", 0))
-        expected_sum = round(payment_data.amount + hrdcorp_fee, 2)
+        cn_deduction = 0.0
+        if payment_data.create_credit_note:
+            if payment_data.deduction_amount is not None:
+                cn_deduction = float(payment_data.deduction_amount or 0)
+            elif payment_data.deduction_percentage is not None:
+                cn_deduction = round(invoice_total * float(payment_data.deduction_percentage or 0) / 100, 2)
+        expected_sum = round(payment_data.amount + hrdcorp_fee + cn_deduction, 2)
         if abs(expected_sum - invoice_total) > 0.01:
+            # Provide guidance based on scenario
+            gap = round(invoice_total - payment_data.amount - hrdcorp_fee, 2)
+            if gap > 0.01 and not payment_data.create_credit_note:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"HRDCorp partial grant detected: Received ({payment_data.amount}) + Fee ({hrdcorp_fee}) = {round(payment_data.amount + hrdcorp_fee, 2)} "
+                        f"is RM {gap:.2f} short of Invoice ({invoice_total}). "
+                        f"Please tick 'Create Credit Note' with amount RM {gap:.2f} to write off the shortfall."
+                    )
+                )
             raise HTTPException(
                 status_code=400,
-                detail=f"HRDCorp: Received ({payment_data.amount}) + Fee ({hrdcorp_fee}) = {expected_sum} must equal Invoice Amount ({invoice_total})"
+                detail=(
+                    f"HRDCorp: Received ({payment_data.amount}) + Fee ({hrdcorp_fee}) + CN ({cn_deduction}) = {expected_sum} "
+                    f"must equal Invoice Amount ({invoice_total})"
+                )
             )
         if not payment_data.hrdcorp_invoice_number:
             raise HTTPException(status_code=400, detail="HRDCorp invoice number is required")
-        # HRDCorp flow MUST NOT also create a credit note (mutually exclusive)
-        if payment_data.create_credit_note:
-            raise HTTPException(status_code=400, detail="HRDCorp payments must not include a credit note. The HRDCorp fee is booked as an expense instead.")
     # ============ END VALIDATION ============
     
     payment = {

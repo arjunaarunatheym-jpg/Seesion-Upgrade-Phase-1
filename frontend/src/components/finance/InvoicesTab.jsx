@@ -277,6 +277,22 @@ const InvoicesTab = ({
     }
   };
 
+  const handleDownloadSessionCosting = async (invoice) => {
+    if (!invoice.session_id) {
+      toast.error("This invoice isn't linked to a session (e.g. Ad-Hoc invoice) — no costing report available.");
+      return;
+    }
+    try {
+      toast.info("Preparing costing report...");
+      const { data } = await axiosInstance.get(`/finance/session/${invoice.session_id}/costing`);
+      const { printSessionCosting } = await import('../../utils/printSessionCosting');
+      printSessionCosting(data, companySettings || {});
+    } catch (error) {
+      console.error("Costing print error:", error);
+      toast.error(error.response?.data?.detail || "Failed to generate costing report");
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -512,6 +528,20 @@ const InvoicesTab = ({
                                   </Button>
                                 )}
                                 
+                                {/* Session Costing Download — always available for session-linked invoices */}
+                                {invoice.session_id && (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    className="text-teal-600"
+                                    onClick={() => handleDownloadSessionCosting(invoice)}
+                                    title="Download Session Costing Report"
+                                    data-testid={`download-costing-${invoice.id}`}
+                                  >
+                                    <FileText className="w-4 h-4" />
+                                  </Button>
+                                )}
+
                                 {/* Cancel Button */}
                                 {!['paid', 'cancelled', 'voided'].includes(invoice.status) && (
                                   <Button 
