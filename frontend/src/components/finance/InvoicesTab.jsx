@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { FileSpreadsheet, RefreshCw, Edit, Check, FileText, Download, CreditCard, X, RotateCcw, Plus, ChevronDown, ChevronRight, Calendar, Trash2 } from "lucide-react";
+import ClaimFormPrint from "../ClaimFormPrint";
 
 const InvoicesTab = ({
   invoices,
@@ -30,6 +31,7 @@ const InvoicesTab = ({
   
   // Collapsible state for month groups
   const [expandedMonths, setExpandedMonths] = useState({});
+  const [claimFormSession, setClaimFormSession] = useState(null);
 
   // Ad-Hoc Invoice state
   const [showAdhocDialog, setShowAdhocDialog] = useState(false);
@@ -277,23 +279,17 @@ const InvoicesTab = ({
     }
   };
 
-  const handleDownloadSessionCosting = async (invoice) => {
+  const handleDownloadSessionCosting = (invoice) => {
     if (!invoice.session_id) {
       toast.error("This invoice isn't linked to a session (e.g. Ad-Hoc invoice) — no costing report available.");
       return;
     }
-    try {
-      toast.info("Preparing costing report...");
-      const { data } = await axiosInstance.get(`/finance/session/${invoice.session_id}/costing`);
-      const { printSessionCosting } = await import('../../utils/printSessionCosting');
-      printSessionCosting(data, companySettings || {});
-    } catch (error) {
-      console.error("Costing print error:", error);
-      toast.error(error.response?.data?.detail || "Failed to generate costing report");
-    }
+    // Open the same ClaimFormPrint used in Admin Sessions tab so the layout is identical
+    setClaimFormSession({ id: invoice.session_id, name: invoice.session_name || invoice.company_name || 'Session' });
   };
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex justify-between items-center flex-wrap gap-4">
@@ -528,17 +524,17 @@ const InvoicesTab = ({
                                   </Button>
                                 )}
                                 
-                                {/* Session Costing Download — always available for session-linked invoices */}
+                                {/* Session Costing / Claim Form — same layout as Admin Sessions tab */}
                                 {invoice.session_id && (
                                   <Button 
                                     variant="ghost" 
                                     size="sm"
                                     className="text-teal-600"
                                     onClick={() => handleDownloadSessionCosting(invoice)}
-                                    title="Download Session Costing Report"
+                                    title="Download / Print Claim Form (Session Costing)"
                                     data-testid={`download-costing-${invoice.id}`}
                                   >
-                                    <FileText className="w-4 h-4" />
+                                    <FileSpreadsheet className="w-4 h-4" />
                                   </Button>
                                 )}
 
@@ -830,6 +826,15 @@ const InvoicesTab = ({
         </DialogContent>
       </Dialog>
     </Card>
+
+    {/* Session Costing / Claim Form modal — reuses the exact same component as Admin Sessions tab */}
+    {claimFormSession && (
+      <ClaimFormPrint
+        session={claimFormSession}
+        onClose={() => setClaimFormSession(null)}
+      />
+    )}
+    </>
   );
 };
 
