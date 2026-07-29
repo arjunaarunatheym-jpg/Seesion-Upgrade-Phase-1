@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend-only test of Finance → Invoices status filter dropdown. Verified the two new filter options 'Voided' and 'Converted (Proforma)' are present, selectable, filter the list correctly, and 'All Invoices' restores the full list. GET /api/finance/invoices was called properly (all 200s). No console errors related to the feature.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "InvoicesTab.jsx is 852 lines — consider splitting for maintainability (guideline: >700 lines).",
+    "Empty-state message uses raw status value (e.g. 'No invoices with status \"voided\"'). Consider using the human label ('Voided', 'Converted (Proforma)') for slightly nicer UX. Non-blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "100%"},
+  "test_credentials": "arjuna@mddrc.com.my / Dana102229 (Super Admin) — worked correctly",
+  "seed_data_creation": "None. Per instructions, no voided/converted invoices were created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Path to reach Invoices tab: login → auto-redirects to /calendar → click 'Dashboard' → lands on /admin (Admin Dashboard) → click 'Finance' pill tab → click 'Open Finance Portal' button OR navigate directly to /finance. Then click the 'Invoices' tab. Status filter is a Radix Select combobox. All 9 options confirmed: All Invoices, Pending, Draft, Approved, Issued, Paid, Cancelled, Voided, Converted (Proforma).",
+  "verification_evidence": {
+    "dropdown_options_observed": ["All Invoices", "Pending", "Draft", "Approved", "Issued", "Paid", "Cancelled", "Voided", "Converted (Proforma)"],
+    "voided_filter_empty_state": "No invoices with status \"voided\". Try changing the filter.",
+    "converted_filter_empty_state": "No invoices with status \"converted\". Try changing the filter.",
+    "all_invoices_view": "Shows 4 invoices in April 2026 (Draft, Paid, Issued, Issued) — total RM 16,440.00",
+    "api_calls": [
+      "GET /api/finance/invoices?year=2026 → 200",
+      "GET /api/finance/invoices → 200 (client fetches all invoices then filters client-side)"
+    ],
+    "console_errors_related_to_feature": "None (only unrelated 404/403 for other static resources)"
+  }
+}

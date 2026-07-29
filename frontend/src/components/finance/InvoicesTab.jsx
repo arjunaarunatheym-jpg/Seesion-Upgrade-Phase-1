@@ -315,6 +315,8 @@ const InvoicesTab = ({
                 <SelectItem value="issued">Issued</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
+                <SelectItem value="voided">Voided</SelectItem>
+                <SelectItem value="converted">Converted (Proforma)</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={onRefresh}>
