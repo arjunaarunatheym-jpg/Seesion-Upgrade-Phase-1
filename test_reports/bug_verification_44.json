@@ -1,0 +1,63 @@
+{
+  "verdict": "not_fixed",
+  "user_reported_bug": "User wants a UI button (instead of DevTools console) to renumber an invoice — filling audit gaps caused by pre-soft-delete hard-deletions. Also wants safety checks so it doesn't recur with proforma conversions.",
+  "summary": "No relevant testing skill found. Focused UI verification logged in as arjuna@mddrc.com.my, opened Finance > Invoices, and confirmed invoices render but zero [data-testid^='renumber-invoice-'] buttons are visible in the normal login flow. localStorage after login contains token only and no user key, while InvoicesTab gates the button from localStorage.user.role, so the dialog/submission flow is unreachable.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "InvoicesTab",
+        "issue": "Admin-only renumber '#' buttons are not visible for the logged-in admin user because InvoicesTab reads role from localStorage.getItem('user'), but login/App only stores localStorage token and never stores user.",
+        "selector": "[data-testid^='renumber-invoice-']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Login as admin -> Finance -> Invoices -> Renumber Invoice",
+        "issue": "After successful login, localStorage was {'token': 'present', 'user': null}; Finance invoices loaded, but renumber buttons count was 0, so dialog fields, submit enablement, success refresh, and duplicate-number toast could not be exercised through the user-visible UI.",
+        "affected_selectors": [
+          "renumber-invoice-{id}",
+          "renumber-invoice-dialog",
+          "renumber-new-number-input",
+          "renumber-reason-input",
+          "renumber-confirm-checkbox",
+          "renumber-submit-btn"
+        ]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/invoice_renumber_api_probe.py",
+    "/app/test_reports/invoice_renumber_ui_check.py"
+  ],
+  "action_items": [
+    "Fix admin role detection for InvoicesTab: pass the authenticated user/role as a prop or persist/refresh localStorage.user consistently on login and auth/me, and clear it on logout.",
+    "Add super_admin to the /finance ProtectedRoute allowedRoles if Super Admins must access Finance directly as required.",
+    "Retest the full renumber UI after the button is visible: dialog fields, disabled/enabled submit, successful renumber list refresh, duplicate-number error toast, and proforma exclusion."
+  ],
+  "critical_code_review_comments": [
+    "frontend/src/App.js handleLogin stores only localStorage.setItem('token', token); it does not store localStorage.user. InvoicesTab.jsx lines 29-31 depend on localStorage.user.role, making isAdmin false after normal login.",
+    "frontend/src/App.js /finance route allows only ['finance', 'admin']; the requirement says Admin/Super Admin, so a true super_admin user would be redirected away from Finance before reaching the Invoices tab.",
+    "The current test DB had 11 finance invoices and document_type_counts={'<missing>': 11}; no live proforma row was available to verify proforma exclusion through the UI."
+  ],
+  "updated_files": [
+    "/app/test_reports/invoice_renumber_api_probe.py",
+    "/app/test_reports/invoice_renumber_ui_check.py",
+    "/app/test_reports/bug_verification_44.json",
+    "/app/test_reports/iteration_44.json"
+  ],
+  "success_rate": {
+    "backend": "not tested in this frontend-only iteration; supporting API login/invoice fetch worked for admin and coordinator invoice fetch correctly returned 403",
+    "frontend": "0% for the requested renumber UI because the required button is absent in normal user flow"
+  },
+  "seed_data_creation": "None. Reused existing QA invoice records; no invoice was renumbered during this verification.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Start with a clean localStorage login as arjuna@mddrc.com.my / Dana102229, navigate to /finance, click Invoices, and verify [data-testid^='renumber-invoice-'] appears without manually injecting localStorage.user. Existing test invoices include INV/MDDRC/2026/07/0004, INV/MDDRC/2026/07/0003, and INV/MDDRC/2099/12/8313.",
+  "rca_of_the_issue": "Reproduction: clear localStorage, login as arjuna, navigate to /finance, open Invoices. Finance invoices render, but no orange '#' renumber buttons appear. Root cause from code review: InvoicesTab computes isAdmin from localStorage.user.role, but App.js never writes a user key to localStorage after login or auth/me, so isAdmin is false even for the authenticated admin."
+}

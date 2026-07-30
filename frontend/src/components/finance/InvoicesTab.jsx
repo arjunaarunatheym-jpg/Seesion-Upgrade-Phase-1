@@ -26,12 +26,17 @@ const InvoicesTab = ({
   onRecordPayment,
   setActiveTab,
 }) => {
+  // Get current user role for admin-only actions
+  const currentRole = (JSON.parse(localStorage.getItem('user') || '{}')?.role) || '';
+  const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
   // Filter state
   const [statusFilter, setStatusFilter] = useState("all");
   
   // Collapsible state for month groups
   const [expandedMonths, setExpandedMonths] = useState({});
   const [claimFormSession, setClaimFormSession] = useState(null);
+  // Renumber dialog state (Admin/Super Admin only)
+  const [renumberDialog, setRenumberDialog] = useState({ open: false, invoice: null, newNumber: '', reason: '', confirmed: false, loading: false });
 
   // Ad-Hoc Invoice state
   const [showAdhocDialog, setShowAdhocDialog] = useState(false);
@@ -245,6 +250,30 @@ const InvoicesTab = ({
       onRefresh();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to convert proforma");
+    }
+  };
+
+  const openRenumberDialog = (invoice) => {
+    setRenumberDialog({ open: true, invoice, newNumber: '', reason: '', confirmed: false, loading: false });
+  };
+
+  const submitRenumber = async () => {
+    const { invoice, newNumber, reason, confirmed } = renumberDialog;
+    if (!confirmed) { toast.error('Please tick the confirmation checkbox'); return; }
+    if (!newNumber || newNumber.trim().length < 5) { toast.error('Enter a valid new invoice number'); return; }
+    if (!reason || reason.length < 10) { toast.error('Reason must be at least 10 characters'); return; }
+    setRenumberDialog(prev => ({ ...prev, loading: true }));
+    try {
+      const res = await axiosInstance.post(`/finance/invoices/${invoice.id}/renumber`, {
+        new_invoice_number: newNumber.trim(),
+        reason
+      });
+      toast.success(res.data.message || 'Invoice renumbered');
+      setRenumberDialog({ open: false, invoice: null, newNumber: '', reason: '', confirmed: false, loading: false });
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Renumber failed');
+      setRenumberDialog(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -481,6 +510,20 @@ const InvoicesTab = ({
                                     data-testid={`convert-proforma-${invoice.id}`}
                                   >
                                     <FileText className="w-4 h-4" />→
+                                  </Button>
+                                )}
+
+                                {/* Admin-only: Renumber invoice (fill audit gaps) */}
+                                {isAdmin && invoice.document_type !== 'proforma' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-orange-600"
+                                    onClick={() => openRenumberDialog(invoice)}
+                                    title="Renumber Invoice (Admin only — fill audit gap)"
+                                    data-testid={`renumber-invoice-${invoice.id}`}
+                                  >
+                                    #
                                   </Button>
                                 )}
 
@@ -861,6 +904,76 @@ const InvoicesTab = ({
         onClose={() => setClaimFormSession(null)}
       />
     )}
+
+    {/* Renumber Invoice Dialog (admin only) */}
+    <Dialog open={renumberDialog.open} onOpenChange={(open) => !renumberDialog.loading && setRenumberDialog(prev => ({ ...prev, open }))}>
+      <DialogContent className="max-w-lg" data-testid="renumber-invoice-dialog">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-orange-700">
+            Renumber Invoice
+          </DialogTitle>
+          <DialogDescription>
+            Rename an invoice number to fill an audit gap. Payments &amp; journals reference by internal ID so nothing else breaks. The old number becomes available for the next generated invoice.
+          </DialogDescription>
+        </DialogHeader>
+        {renumberDialog.invoice && (
+          <div className="space-y-3">
+            <div className="bg-gray-50 p-3 rounded text-sm">
+              <p><strong>Current Number:</strong> {renumberDialog.invoice.invoice_number}</p>
+              <p><strong>Company:</strong> {renumberDialog.invoice.company_name}</p>
+              <p><strong>Status:</strong> {renumberDialog.invoice.status}</p>
+              <p><strong>Total:</strong> RM {(renumberDialog.invoice.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div>
+              <Label>New Invoice Number *</Label>
+              <Input
+                placeholder="e.g. INV/MDDRC/2026/07/0001"
+                value={renumberDialog.newNumber}
+                onChange={(e) => setRenumberDialog(prev => ({ ...prev, newNumber: e.target.value }))}
+                data-testid="renumber-new-number-input"
+              />
+              <p className="text-xs text-gray-500 mt-1">Format: INV/MDDRC/YYYY/MM/NNNN</p>
+            </div>
+            <div>
+              <Label>Reason * <span className="text-xs text-gray-500">(min 10 chars, permanently logged)</span></Label>
+              <Textarea
+                rows={2}
+                placeholder="e.g. Filling audit gap left by pre-soft-delete hard-deletion of INV/2026/07/0001"
+                value={renumberDialog.reason}
+                onChange={(e) => setRenumberDialog(prev => ({ ...prev, reason: e.target.value }))}
+                data-testid="renumber-reason-input"
+              />
+            </div>
+            <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded">
+              <input
+                type="checkbox"
+                id="renumber-confirm"
+                checked={renumberDialog.confirmed}
+                onChange={(e) => setRenumberDialog(prev => ({ ...prev, confirmed: e.target.checked }))}
+                className="mt-1"
+                data-testid="renumber-confirm-checkbox"
+              />
+              <label htmlFor="renumber-confirm" className="text-xs text-amber-900 cursor-pointer">
+                I confirm that no external customer copy of the current invoice number ({renumberDialog.invoice.invoice_number}) has been distributed, and that renumbering is safe.
+              </label>
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setRenumberDialog({ open: false, invoice: null, newNumber: '', reason: '', confirmed: false, loading: false })} disabled={renumberDialog.loading}>
+            Cancel
+          </Button>
+          <Button
+            className="bg-orange-600 hover:bg-orange-700 text-white"
+            onClick={submitRenumber}
+            disabled={renumberDialog.loading || !renumberDialog.confirmed || !renumberDialog.newNumber || renumberDialog.reason.length < 10}
+            data-testid="renumber-submit-btn"
+          >
+            {renumberDialog.loading ? 'Renumbering...' : 'Renumber Invoice'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </>
   );
 };
