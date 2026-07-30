@@ -2,7 +2,7 @@
  * InvoicesTab Component - Extracted from FinanceDashboard
  * Manages invoice listing, approval, issuance, cancellation, and PDF generation
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { axiosInstance } from "../../App";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,11 +121,25 @@ const InvoicesTab = ({
     }
   };
 
+  // Deleted invoices are hidden from the parent-provided list — fetch on demand
+  const [deletedInvoices, setDeletedInvoices] = useState([]);
+  const [loadingDeleted, setLoadingDeleted] = useState(false);
+  useEffect(() => {
+    if (statusFilter === 'deleted') {
+      setLoadingDeleted(true);
+      axiosInstance.get('/finance/invoices?status=deleted')
+        .then(res => setDeletedInvoices(res.data || []))
+        .catch(() => setDeletedInvoices([]))
+        .finally(() => setLoadingDeleted(false));
+    }
+  }, [statusFilter]);
+
   // Filter invoices by status
   const filteredInvoices = useMemo(() => {
+    if (statusFilter === "deleted") return deletedInvoices;
     if (statusFilter === "all") return invoices;
     return invoices.filter(inv => inv.status === statusFilter);
-  }, [invoices, statusFilter]);
+  }, [invoices, statusFilter, deletedInvoices]);
 
   // Group invoices by month
   const groupedByMonth = useMemo(() => {
@@ -169,6 +183,8 @@ const InvoicesTab = ({
       paid: { label: 'Paid', className: 'bg-emerald-100 text-emerald-800' },
       cancelled: { label: 'Cancelled', className: 'bg-red-100 text-red-800' },
       voided: { label: 'Voided', className: 'bg-purple-100 text-purple-800' },
+      converted: { label: 'Converted', className: 'bg-fuchsia-100 text-fuchsia-800' },
+      deleted: { label: 'Deleted', className: 'bg-red-100 text-red-800' },
     };
     const config = statusConfig[status] || { label: status, className: 'bg-gray-100 text-gray-800' };
     return <Badge className={config.className}>{config.label}</Badge>;
@@ -317,6 +333,7 @@ const InvoicesTab = ({
                 <SelectItem value="cancelled">Cancelled</SelectItem>
                 <SelectItem value="voided">Voided</SelectItem>
                 <SelectItem value="converted">Converted (Proforma)</SelectItem>
+                <SelectItem value="deleted">Deleted</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={onRefresh}>

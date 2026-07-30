@@ -182,6 +182,9 @@ async def get_invoices(
     query = {}
     if status:
         query["status"] = status
+    else:
+        # Hide soft-deleted invoices from the default view (still visible via explicit filter)
+        query["status"] = {"$ne": "deleted"}
     if company_id:
         query["company_id"] = company_id
     
@@ -1393,8 +1396,21 @@ async def delete_invoice(
     # Delete related credit notes if any
     credit_notes_deleted = await db.credit_notes.delete_many({"invoice_id": invoice_id})
     
-    # Delete the invoice
-    await db.invoices.delete_one({"id": invoice_id})
+    # Soft-delete the invoice — preserves audit trail (no untraceable number gaps)
+    # Row stays in DB with status="deleted"; hidden from all normal filters.
+    now_iso = get_malaysia_time().isoformat()
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {
+            "status": "deleted",
+            "deleted_at": now_iso,
+            "deleted_by": current_user.id,
+            "deleted_by_name": current_user.full_name,
+            "deletion_reason": request.reason,
+            "previous_status": status,
+            "updated_at": now_iso,
+        }}
+    )
     
     # Log finance action
     await log_finance_action(
