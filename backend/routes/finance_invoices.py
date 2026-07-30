@@ -828,6 +828,64 @@ async def reverse_voided_invoice(
         "new_status": "auto_draft"
     }
 
+class RenumberInvoiceRequest(BaseModel):
+    new_invoice_number: str = Field(..., min_length=5)
+    reason: str = Field(..., min_length=10)
+
+
+@router.post("/invoices/{invoice_id}/renumber")
+async def renumber_invoice(invoice_id: str, request: RenumberInvoiceRequest, current_user: User = Depends(get_current_user)):
+    """Rename an invoice's invoice_number (admin/super_admin only).
+    Use case: fill an audit gap left by a pre-soft-delete hard-deleted invoice.
+    Payments and journal entries reference by internal UUID, so no downstream data breaks.
+    The old number becomes available for the next generated invoice."""
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin/Super Admin only")
+
+    inv = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    old_number = inv.get("invoice_number")
+    new_number = request.new_invoice_number.strip()
+    if old_number == new_number:
+        raise HTTPException(status_code=400, detail="New number is the same as current")
+
+    conflict = await db.invoices.find_one({"invoice_number": new_number}, {"_id": 0, "id": 1})
+    if conflict:
+        raise HTTPException(status_code=400, detail=f"Number {new_number} is already used by another invoice")
+
+    # Also clear the deleted-numbers pool if the target is there
+    await db.deleted_invoice_numbers.delete_one({"invoice_number": new_number})
+
+    now_iso = get_malaysia_time().isoformat()
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {
+            "invoice_number": new_number,
+            "renumbered_from": old_number,
+            "renumbered_by": current_user.id,
+            "renumbered_by_name": current_user.full_name,
+            "renumbered_at": now_iso,
+            "renumber_reason": request.reason,
+            "updated_at": now_iso,
+        }}
+    )
+
+    await log_finance_action(
+        "invoice", invoice_id, "renumbered", current_user.id,
+        {"invoice_number": old_number},
+        {"invoice_number": new_number, "reason": request.reason}
+    )
+
+    return {
+        "message": f"Invoice renumbered from {old_number} to {new_number}. The old number is now available for reuse.",
+        "old_number": old_number,
+        "new_number": new_number,
+        "invoice_id": invoice_id,
+    }
+
+
 
 # ============ ADMIN INVOICE ENDPOINTS ============
 @router.get("/admin/invoices")

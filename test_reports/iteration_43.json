@@ -1,0 +1,40 @@
+{
+  "verdict": "fixed",
+  "user_reported_bug": "User has invoice INV/MDDRC/2026/07/0008 (Keretapi Tanah Melayu, converted from PI/0001, status=paid) which they want to renumber to INV/MDDRC/2026/07/0001 to fill the pre-existing audit gap. Number 0001 is unused (nothing voided/cancelled/deleted with that number). Number 0008 should be freed for the next new invoice.",
+  "summary": "No relevant testing skill found. Backend-only API/Mongo verification passed on fresh QA invoices: admin renumber of a paid invoice returned 200 with old/new numbers, MongoDB showed invoice_number and renumber audit fields populated, validation/authorization edge cases returned expected errors, GET paid invoices showed the new number, payment/receipt and journal source-id references remained usable, and the next new invoice reused the freed old number.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/test_invoice_renumber_endpoint.py",
+    "/app/test_reports/invoice_renumber_endpoint_output.json",
+    "/app/test_reports/bug_verification_43.json",
+    "/app/test_reports/iteration_43.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "RenumberInvoiceRequest currently enforces only min_length for new_invoice_number; all executed positive tests used the required INV/MDDRC/YYYY/MM/NNNN format. If strict format enforcement is required, add regex validation.",
+    "Existing invoice journal entries remain linked by source_id; their human-readable source_reference/description still contain the old invoice number, while payment receipt lookup resolves the new invoice number by invoice_id. This was not functionally broken in the tested flow."
+  ],
+  "updated_files": [
+    "/app/test_reports/test_invoice_renumber_endpoint.py",
+    "/app/test_reports/invoice_renumber_endpoint_output.json",
+    "/app/test_reports/bug_verification_43.json",
+    "/app/test_reports/iteration_43.json"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A"
+  },
+  "seed_data_creation": "Created QA-only data via API: non-admin user qa.renumber.20260730134511@example.com; gap-holder invoice 31cc99fb-ac2e-4555-9ca8-b1a3fcd54dd9 moved from INV/MDDRC/2026/07/0003 to INV/MDDRC/2099/12/8313; paid target invoice c53b85da-1479-4e9a-b4a2-f228424fd1d7 renumbered from INV/MDDRC/2026/07/0004 to INV/MDDRC/2026/07/0003; payment b8e0bf26-2b55-4f09-be1a-fc28367ceb36; next invoice 984368e2-c989-408f-ba2d-45060f6f004c created as INV/MDDRC/2026/07/0004. Did not touch the real INV/MDDRC/2026/07/0008 invoice.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Focused test plan covered the exact user flow with fresh QA data: inspect finance_invoices.py renumber endpoint and generate_invoice_number, authenticate as admin, create two consecutive ad-hoc invoices, verify conflict/same/short-reason/non-admin cases, approve/issue/pay target invoice, free a gap, renumber paid target into the gap, verify MongoDB audit fields and GET paid invoice list, verify payment receipt and journal source ids, then create the next invoice and assert it reused the freed old number. No relevant testing skill found.",
+  "rca_of_the_issue": "The fix adds POST /api/finance/invoices/{invoice_id}/renumber and updates only the invoice document's invoice_number plus audit fields. Runtime verification confirmed generate_invoice_number uses the current max invoice_number after renumber, so when the paid invoice that was the max is moved into a lower unused gap, its old number is generated for the next new invoice."
+}

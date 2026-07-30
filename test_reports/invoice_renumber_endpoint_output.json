@@ -1,0 +1,151 @@
+{
+  "run_id": "20260730134511",
+  "base_url": "http://localhost:8001/api",
+  "steps": [
+    {
+      "name": "authenticated admin/super_admin",
+      "details": {
+        "email": "arjuna@mddrc.com.my",
+        "role": "admin"
+      }
+    },
+    {
+      "name": "created/logged-in non-admin test user",
+      "details": {
+        "email": "qa.renumber.20260730134511@example.com",
+        "role": "participant"
+      }
+    },
+    {
+      "name": "created two consecutive ad-hoc invoices",
+      "details": {
+        "gap_number": "INV/MDDRC/2026/07/0003",
+        "target_old_number": "INV/MDDRC/2026/07/0004"
+      }
+    },
+    {
+      "name": "renumber to already-used invoice number returns clear 400",
+      "details": {
+        "detail": "Number INV/MDDRC/2026/07/0003 is already used by another invoice"
+      }
+    },
+    {
+      "name": "renumber to same number returns 400",
+      "details": {
+        "detail": "New number is the same as current"
+      }
+    },
+    {
+      "name": "renumber reason shorter than 10 chars returns 422",
+      "details": {
+        "detail": [
+          {
+            "type": "string_too_short",
+            "loc": [
+              "body",
+              "reason"
+            ],
+            "msg": "String should have at least 10 characters",
+            "input": "short",
+            "ctx": {
+              "min_length": 10
+            },
+            "url": "https://errors.pydantic.dev/2.12/v/string_too_short"
+          }
+        ]
+      }
+    },
+    {
+      "name": "non-admin renumber attempt returns 403",
+      "details": {
+        "detail": "Admin/Super Admin only"
+      }
+    },
+    {
+      "name": "target invoice approved, issued, and paid",
+      "details": {
+        "invoice_id": "c53b85da-1479-4e9a-b4a2-f228424fd1d7",
+        "payment_id": "b8e0bf26-2b55-4f09-be1a-fc28367ceb36"
+      }
+    },
+    {
+      "name": "freed current-month gap number",
+      "details": {
+        "freed_number": "INV/MDDRC/2026/07/0003",
+        "gap_holder_new_number": "INV/MDDRC/2099/12/8313"
+      }
+    },
+    {
+      "name": "paid invoice renumber endpoint returned expected 200 payload",
+      "details": {
+        "message": "Invoice renumbered from INV/MDDRC/2026/07/0004 to INV/MDDRC/2026/07/0003. The old number is now available for reuse.",
+        "old_number": "INV/MDDRC/2026/07/0004",
+        "new_number": "INV/MDDRC/2026/07/0003",
+        "invoice_id": "c53b85da-1479-4e9a-b4a2-f228424fd1d7"
+      }
+    },
+    {
+      "name": "MongoDB invoice state and audit fields updated",
+      "details": {
+        "renumbered_from": "INV/MDDRC/2026/07/0004",
+        "renumbered_by": "9336d1e5-1173-493e-825b-fd8926d9d3ab",
+        "renumbered_at": "2026-07-30T13:45:16.342088+08:00"
+      }
+    },
+    {
+      "name": "GET /finance/invoices?status=paid returns renamed invoice",
+      "details": {
+        "invoice_number": "INV/MDDRC/2026/07/0003"
+      }
+    },
+    {
+      "name": "downstream payment/receipt and journal source ids remain usable",
+      "details": {
+        "payment_invoice_id": "c53b85da-1479-4e9a-b4a2-f228424fd1d7",
+        "receipt_invoice_number": "INV/MDDRC/2026/07/0003",
+        "invoice_journal_source_reference": "INV/MDDRC/2026/07/0004",
+        "payment_journal_source_reference": "PMT-QA-REN-PAY-20260730134511"
+      }
+    },
+    {
+      "name": "new invoice used the freed old number",
+      "details": {
+        "new_invoice_id": "984368e2-c989-408f-ba2d-45060f6f004c",
+        "invoice_number": "INV/MDDRC/2026/07/0004"
+      }
+    }
+  ],
+  "created": {
+    "gap_holder_invoice": {
+      "message": "Ad-hoc invoice created successfully",
+      "id": "31cc99fb-ac2e-4555-9ca8-b1a3fcd54dd9",
+      "invoice_number": "INV/MDDRC/2026/07/0003",
+      "total_amount": 10.0
+    },
+    "paid_target_invoice": {
+      "message": "Ad-hoc invoice created successfully",
+      "id": "c53b85da-1479-4e9a-b4a2-f228424fd1d7",
+      "invoice_number": "INV/MDDRC/2026/07/0004",
+      "total_amount": 25.0
+    },
+    "payment": {
+      "id": "b8e0bf26-2b55-4f09-be1a-fc28367ceb36",
+      "receipt_number": "RCP/2026/07/0001"
+    },
+    "next_invoice": {
+      "message": "Ad-hoc invoice created successfully",
+      "id": "984368e2-c989-408f-ba2d-45060f6f004c",
+      "invoice_number": "INV/MDDRC/2026/07/0004",
+      "total_amount": 15.0
+    }
+  },
+  "credential_attempts": [
+    {
+      "label": "requested",
+      "email": "arjuna@mddrc.com.my",
+      "status": 200,
+      "role": "admin"
+    }
+  ],
+  "result": "passed"
+}
