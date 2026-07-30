@@ -18,6 +18,7 @@ import { FileSpreadsheet, RefreshCw, Edit, Check, FileText, Download, CreditCard
 import ClaimFormPrint from "../ClaimFormPrint";
 
 const InvoicesTab = ({
+  user,
   invoices,
   loading,
   companySettings,
@@ -26,8 +27,8 @@ const InvoicesTab = ({
   onRecordPayment,
   setActiveTab,
 }) => {
-  // Get current user role for admin-only actions
-  const currentRole = (JSON.parse(localStorage.getItem('user') || '{}')?.role) || '';
+  // Admin-only actions gating
+  const currentRole = user?.role || '';
   const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
   // Filter state
   const [statusFilter, setStatusFilter] = useState("all");

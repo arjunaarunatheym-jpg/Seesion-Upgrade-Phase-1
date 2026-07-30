@@ -252,7 +252,7 @@ function App() {
           <Route
             path="/finance"
             element={
-              <ProtectedRoute user={user} allowedRoles={["finance", "admin"]}>
+              <ProtectedRoute user={user} allowedRoles={["finance", "admin", "super_admin"]}>
                 <FinanceDashboard user={user} onLogout={handleLogout} />
               </ProtectedRoute>
             }

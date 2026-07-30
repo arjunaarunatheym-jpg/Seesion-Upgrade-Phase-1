@@ -1,0 +1,47 @@
+{
+  "verdict": "fixed",
+  "user_reported_bug": "Frontend UI Renumber button not appearing because previous version used localStorage.getItem('user') which is null. Fixed by passing user prop from FinanceDashboard into InvoicesTab, and also allowed super_admin in the /finance route ProtectedRoute.",
+  "summary": "No relevant testing skill found. Code review confirmed InvoicesTab now uses user prop and /finance allows super_admin. Runtime UI test logged in as a temporary super_admin, confirmed localStorage.user was null, /finance loaded, all 2026 non-proforma rows had orange # renumber buttons, proforma rows had none, the modal/form validation worked, successful renumber closed/refreshed the list, and duplicate renumber showed an error toast. Note: provided arjuna@mddrc.com.my credentials currently return role=admin in preview, so a temporary super_admin user was created to exercise the exact super_admin path.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/bug_verify_renumber_seed.py",
+    "/app/tests/bug_verify_renumber_setup_superadmin.py",
+    "/app/tests/bug_verify_renumber_ui_playwright.py",
+    "/app/test_reports/bug_renumber_seed_data.json",
+    "/root/.emergent/automation_output/20260730_060913/console_20260730_060913.log"
+  ],
+  "action_items": [
+    "Optional test-data cleanup: arjuna@mddrc.com.my is role=admin in preview, not super_admin as the request stated; update seed/test credentials if that account must represent super_admin."
+  ],
+  "critical_code_review_comments": [
+    "InvoicesTab admin gating is now prop-based: user?.role === admin/super_admin, so it no longer depends on localStorage.user.",
+    "/finance ProtectedRoute now includes super_admin.",
+    "Preview credential mismatch observed: arjuna@mddrc.com.my / Dana102229 logs in as role=admin, not super_admin."
+  ],
+  "updated_files": [
+    "/app/auth_testing.md",
+    "/app/tests/bug_verify_renumber_seed.py",
+    "/app/tests/bug_verify_renumber_setup_superadmin.py",
+    "/app/tests/bug_verify_renumber_ui_playwright.py",
+    "/app/test_reports/bug_renumber_seed_data.json",
+    "/app/test_reports/bug_verification_45.json",
+    "/app/test_reports/iteration_45.json"
+  ],
+  "success_rate": {
+    "backend": "100% for auth/invoice/renumber endpoints exercised during UI flow",
+    "frontend": "100% for focused renumber UI scenarios"
+  },
+  "seed_data_creation": "Created isolated QA data: target invoice 9f0921c1-58e6-4218-8cf8-8aeb18367ce2, duplicate invoice 47656f43-e660-42c3-a252-a5b6dad5ec66, proforma invoice 7d7ae7c6-2c35-4b5c-afeb-c58481f29924, plus temporary super_admin qa.superadmin.renumber.1785391684@mddrc.test. Target was successfully renumbered from INV/MDDRC/2026/01/9137 to INV/MDDRC/2026/01/9139.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Focused browser test passed on https://finance-flow-pro.preview.emergentagent.com. localStorage.user was null during the test, proving the button rendered from the passed user prop. Duplicate renumber intentionally produced a 400 and visible toast. External rrweb/Cloudflare console failures were unrelated; the 400 console entry was the expected duplicate test.",
+  "rca_of_the_issue": "Previous UI attempted to compute role from localStorage.user, but login only stores token, leaving localStorage.user null; the fixed code passes the authenticated user prop from FinanceDashboard to InvoicesTab and includes super_admin in /finance ProtectedRoute. Runtime evidence confirms the UI now renders and submits renumber actions for a super_admin even with localStorage.user null. No mocked APIs were used."
+}

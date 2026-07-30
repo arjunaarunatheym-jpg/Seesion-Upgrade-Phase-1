@@ -1858,6 +1858,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
           {/* Invoices Tab */}
           <TabsContent value="invoices">
             <InvoicesTab
+              user={user}
               invoices={invoices}
               loading={loading}
               companySettings={companySettings}
