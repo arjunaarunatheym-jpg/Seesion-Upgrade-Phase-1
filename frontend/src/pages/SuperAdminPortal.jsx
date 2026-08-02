@@ -90,6 +90,43 @@ const SuperAdminPortal = () => {
   const [quotationReversalHistory, setQuotationReversalHistory] = useState([]);
   const [invoiceReversalHistory, setInvoiceReversalHistory] = useState([]);
   const [genericReverseDialog, setGenericReverseDialog] = useState({ open: false, kind: null, item: null, preview: null, reason: '', loading: false });
+  // Duplicate journal audit & repair
+  const [dupAudit, setDupAudit] = useState(null);
+  const [dupAuditLoading, setDupAuditLoading] = useState(false);
+  const [dupRepairLoading, setDupRepairLoading] = useState(false);
+
+  const runDupAudit = async () => {
+    setDupAuditLoading(true);
+    try {
+      const { data } = await axiosInstance.get('/superadmin/audit/duplicate-invoice-journals');
+      setDupAudit(data);
+      if (data.invoices_with_duplicate_journals === 0 && data.payments_with_duplicate_journals === 0) {
+        toast.success('No duplicate journals found — books are clean.');
+      } else {
+        toast.warning(`Found ${data.invoices_with_duplicate_journals} invoice(s) and ${data.payments_with_duplicate_journals} payment(s) with duplicate journals`);
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Audit failed');
+    } finally {
+      setDupAuditLoading(false);
+    }
+  };
+
+  const runDupRepair = async () => {
+    const reason = prompt('Enter repair reason (min 10 chars):', 'Cleanup of duplicate journals from God Mode paid->draft->reissue flow');
+    if (!reason || reason.length < 10) { toast.error('Reason required (10+ chars)'); return; }
+    if (!confirm('This will VOID all duplicate journal entries, keeping the earliest one per invoice/payment. Proceed?')) return;
+    setDupRepairLoading(true);
+    try {
+      const { data } = await axiosInstance.post('/superadmin/audit/repair-duplicate-journals', { confirm: true, reason });
+      toast.success(data.message || 'Repair complete');
+      await runDupAudit();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Repair failed');
+    } finally {
+      setDupRepairLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadDashboard();
@@ -1237,6 +1274,76 @@ const SuperAdminPortal = () => {
         {/* Payment Reversals Tab */}
         <TabsContent value="reversals">
           <div className="space-y-4">
+            {/* Duplicate Journal Audit & Repair Card */}
+            <Card className="border-orange-300 bg-orange-50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-orange-800">
+                  <AlertTriangle className="w-5 h-5" /> Duplicate Journal Cleanup
+                </CardTitle>
+                <CardDescription>
+                  If invoices were flipped from paid → draft and then re-issued via God Mode, duplicate journal entries may have been created. Run the audit first, then repair.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={runDupAudit}
+                    disabled={dupAuditLoading}
+                    className="bg-blue-600 hover:bg-blue-700"
+                    data-testid="dup-audit-btn"
+                  >
+                    {dupAuditLoading ? 'Scanning...' : '1. Diagnose (read-only)'}
+                  </Button>
+                  {dupAudit && (dupAudit.invoices_with_duplicate_journals > 0 || dupAudit.payments_with_duplicate_journals > 0) && (
+                    <Button
+                      onClick={runDupRepair}
+                      disabled={dupRepairLoading}
+                      className="bg-red-600 hover:bg-red-700"
+                      data-testid="dup-repair-btn"
+                    >
+                      {dupRepairLoading ? 'Repairing...' : '2. Repair (void duplicates)'}
+                    </Button>
+                  )}
+                </div>
+                {dupAudit && (
+                  <div className="text-sm bg-white p-3 rounded border">
+                    <p className="mb-2">
+                      <strong>Result:</strong>{' '}
+                      {dupAudit.invoices_with_duplicate_journals === 0 && dupAudit.payments_with_duplicate_journals === 0
+                        ? '✅ No duplicates found — books are clean.'
+                        : `⚠️ ${dupAudit.invoices_with_duplicate_journals} invoice(s) and ${dupAudit.payments_with_duplicate_journals} payment(s) have duplicate active journals.`}
+                    </p>
+                    {(dupAudit.details || []).length > 0 && (
+                      <div className="max-h-64 overflow-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Invoice #</TableHead>
+                              <TableHead>Company</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead className="text-right">Active Journals</TableHead>
+                              <TableHead className="text-right">Will Void</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {dupAudit.details.map((d) => (
+                              <TableRow key={d.invoice_id}>
+                                <TableCell className="font-mono text-xs">{d.invoice_number}</TableCell>
+                                <TableCell className="text-xs">{d.company_name}</TableCell>
+                                <TableCell className="text-xs">{d.current_status}</TableCell>
+                                <TableCell className="text-right text-xs">{d.active_journal_count}</TableCell>
+                                <TableCell className="text-right text-xs font-semibold text-red-700">{d.would_void_count}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Sub-tabs: Payments | Invoices | Quotations */}
             <div className="flex gap-2 border-b pb-2">
               <Button

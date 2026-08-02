@@ -472,6 +472,28 @@ async def update_invoice(
     if not update_fields:
         raise HTTPException(status_code=400, detail="No valid fields to update")
     
+    # SAFEGUARD: Prevent status downgrades that would corrupt accounting journals.
+    # Once an invoice is issued/paid, journals have been posted. Flipping it back
+    # to draft and re-issuing creates DUPLICATE journal entries. Force the user
+    # into the formal Reversal flow instead.
+    new_status = update_fields.get("status")
+    current_status = invoice.get("status")
+    if new_status and new_status != current_status:
+        BLOCKED_DOWNGRADES = {
+            ("paid", "draft"), ("paid", "issued"), ("paid", "voided"),
+            ("issued", "draft"),
+            ("partially_paid", "draft"), ("partially_paid", "issued"), ("partially_paid", "voided"),
+        }
+        if (current_status, new_status) in BLOCKED_DOWNGRADES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Cannot downgrade invoice status from '{current_status}' to '{new_status}'. "
+                    "This would create duplicate accounting journals when re-issued. "
+                    "Please use the formal Invoice Reversal flow (Super Admin → Reversals → Invoices tab) instead."
+                )
+            )
+    
     update_fields["updated_at"] = get_malaysia_time().isoformat()
     before_value = {k: invoice.get(k) for k in update_fields.keys() if k != "updated_at"}
     

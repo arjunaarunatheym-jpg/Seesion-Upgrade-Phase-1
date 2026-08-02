@@ -71,8 +71,15 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - Feedback submission: responses type dict → Any
 - Coordinator checklist visibility: queries now hit vehicle_checklists collection
 
+### God Mode Safeguard & Duplicate Journal Audit (Feb 2026)
+- **God Mode downgrade blocked**: `PUT /api/superadmin/invoices/{id}` now rejects status downgrades that would corrupt journals (paid/issued/partially_paid → draft/voided/issued). Users are told to use the formal Reversal flow.
+- **Duplicate Journal Audit UI**: Super Admin → Reversals tab has a "Duplicate Journal Cleanup" card with two actions:
+  1. Diagnose (read-only) — lists all invoices/payments that have more than one active issuance journal.
+  2. Repair — voids all later duplicate journals per source (keeps earliest as authoritative), fully audited with reason.
+- Backend endpoints: `GET /superadmin/audit/duplicate-invoice-journals`, `POST /superadmin/audit/repair-duplicate-journals`
+
 ## P0 — In Progress / Pending
-- System-wide digital signature audit & implementation (Invoices, Receipts, Payslips, Pay Advice, EA Forms, Claim Forms, Credit Notes)
+- System-wide digital signature audit & implementation (Receipts, Payslips, Pay Advice, EA Forms, Claim Forms, Credit Notes)
 
 ## P1 — Upcoming
 - Email integration (Resend) + WhatsApp link integration
