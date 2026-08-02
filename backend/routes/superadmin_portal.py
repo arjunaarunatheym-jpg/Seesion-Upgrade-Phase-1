@@ -1845,3 +1845,106 @@ async def get_invoice_reversals(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Super Admin access required")
     reversals = await db.invoice_reversals.find({}, {"_id": 0}).sort("reversed_at", -1).to_list(500)
     return reversals
+
+
+# ============ DUPLICATE JOURNAL AUDIT & REPAIR ============
+# Fixes the God Mode loophole: if super admin flipped a paid/issued invoice back
+# to draft and then re-issued, the invoice now has multiple active journal entries.
+
+@router.get("/audit/duplicate-invoice-journals")
+async def audit_duplicate_invoice_journals(current_user: User = Depends(get_current_user)):
+    """READ-ONLY: List every invoice that has more than one active (non-voided)
+    issuance journal entry. Also flags duplicate payment journals per invoice."""
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+
+    pipeline = [
+        {"$match": {"source_module": "invoice", "status": {"$ne": "voided"}}},
+        {"$group": {
+            "_id": "$source_id",
+            "count": {"$sum": 1},
+            "journals": {"$push": {"id": "$id", "journal_no": "$journal_no", "entry_date": "$entry_date", "total_debit": "$total_debit", "description": "$description"}}
+        }},
+        {"$match": {"count": {"$gt": 1}}}
+    ]
+    duplicates = await db.journal_entries.aggregate(pipeline).to_list(500)
+
+    results = []
+    for grp in duplicates:
+        inv_id = grp["_id"]
+        inv = await db.invoices.find_one({"id": inv_id}, {"_id": 0, "id": 1, "invoice_number": 1, "company_name": 1, "status": 1, "total_amount": 1})
+        # Sort journals by entry_date ascending so the earliest = original
+        journals = sorted(grp["journals"], key=lambda j: j.get("entry_date") or "")
+        results.append({
+            "invoice_id": inv_id,
+            "invoice_number": inv.get("invoice_number") if inv else "(deleted)",
+            "company_name": inv.get("company_name") if inv else "-",
+            "current_status": inv.get("status") if inv else None,
+            "total_amount": inv.get("total_amount") if inv else 0,
+            "active_journal_count": grp["count"],
+            "original_journal": journals[0],
+            "duplicate_journals": journals[1:],
+            "would_void_count": len(journals) - 1,
+        })
+
+    # Also flag duplicate payment journals per invoice (payments with same invoice_id, both active)
+    payment_pipeline = [
+        {"$match": {"source_module": "payment", "status": {"$ne": "voided"}}},
+        {"$group": {"_id": "$source_id", "count": {"$sum": 1}, "journals": {"$push": {"id": "$id", "journal_no": "$journal_no", "entry_date": "$entry_date"}}}},
+        {"$match": {"count": {"$gt": 1}}}
+    ]
+    pmt_dupes = await db.journal_entries.aggregate(payment_pipeline).to_list(500)
+
+    return {
+        "invoices_with_duplicate_journals": len(results),
+        "details": results,
+        "payments_with_duplicate_journals": len(pmt_dupes),
+        "payment_duplicates": pmt_dupes,
+        "note": "Run POST /superadmin/audit/repair-duplicate-journals with confirm=true to void ALL duplicate journals (keeps the earliest original for each invoice)."
+    }
+
+
+class RepairDupsRequest(BaseModel):
+    confirm: bool = False
+    reason: str = Field(..., min_length=10)
+
+
+@router.post("/audit/repair-duplicate-journals")
+async def repair_duplicate_journals(request: RepairDupsRequest, current_user: User = Depends(get_current_user)):
+    """Void all DUPLICATE (later) journal entries per invoice, keeping the earliest as the authoritative one.
+    Fixes the God Mode loophole (paid → draft flip → re-issue → double journals)."""
+    if not check_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Super Admin access required")
+    if not request.confirm:
+        raise HTTPException(status_code=400, detail="Set confirm=true to run the repair")
+
+    now = get_malaysia_time().isoformat()
+    voided = []
+
+    for src_module in ["invoice", "payment"]:
+        pipeline = [
+            {"$match": {"source_module": src_module, "status": {"$ne": "voided"}}},
+            {"$group": {"_id": "$source_id", "count": {"$sum": 1}, "journals": {"$push": {"id": "$id", "entry_date": "$entry_date"}}}},
+            {"$match": {"count": {"$gt": 1}}}
+        ]
+        dupes = await db.journal_entries.aggregate(pipeline).to_list(1000)
+        for grp in dupes:
+            journals = sorted(grp["journals"], key=lambda j: j.get("entry_date") or "")
+            for je in journals[1:]:
+                await db.journal_entries.update_one(
+                    {"id": je["id"]},
+                    {"$set": {
+                        "status": "voided",
+                        "voided_by": current_user.id,
+                        "voided_by_name": current_user.full_name,
+                        "voided_at": now,
+                        "void_reason": f"Auto-repair duplicate journal: {request.reason}",
+                        "updated_at": now,
+                    }}
+                )
+                voided.append({"source_module": src_module, "source_id": grp["_id"], "journal_id": je["id"]})
+
+    return {
+        "message": f"Voided {len(voided)} duplicate journal entries (earliest journal per source kept as authoritative).",
+        "voided": voided,
+    }
