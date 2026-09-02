@@ -10,15 +10,20 @@ Phase 2 — Canonical Financial Model
        document_type != "proforma"
        AND normalized_status IN {issued, partially_paid, paid}
      exclude EVERYTHING else, including:
-       - draft
+       - draft, auto_draft (informational, not yet a financial doc)
        - voided, cancelled, deleted, converted
        - proforma (any status)
        - any unknown/legacy status (triggers UNRECOGNIZED_INVOICE_STATUS)
+   Known invoice statuses (KNOWN_INVOICE_STATUSES):
+     draft, auto_draft, issued, partially_paid, paid,
+     voided, cancelled, deleted, converted
+   Note: legacy status "partial" was AUDITED against the live DB and found
+   to have 0 records — no alias was added.
    For a non-eligible invoice:
      net_invoiced_value = 0
      outstanding_amount = 0
      payment_status = one of:
-       n/a_proforma | n/a_draft | n/a_unknown
+       n/a_proforma | n/a_draft | n/a_auto_draft | n/a_unknown
        voided | cancelled | deleted | converted
      Payments and Credit Notes on such invoices are preserved (never
      written), and NON_ELIGIBLE_INVOICE_HAS_ACTIVITY is emitted when any

@@ -1,14 +1,15 @@
-Phase 2 — Audit: Existing Financial Calculation Locations
-==========================================================
-Discovered during the Phase 2 audit (grep of the current codebase).
-This file is INFORMATIONAL. No files were modified as a result of these
-findings — Phase 2 only adds a centralized service. Repair belongs to
-later phases.
+Phase 2 — Financial Integrity Findings (post-audit)
+====================================================
+
+This document is the READ-ONLY audit map. It informs future phases; no
+records were modified as part of Phase 2.
+
+1. WHERE FINANCIAL VALUES ARE CURRENTLY CALCULATED
+--------------------------------------------------
 
 FINANCIAL CONCEPT      →  CURRENT LOCATION(S)
---------------------------------------------------------------------
-Invoice face value     →  invoices.total_amount
-                          Read directly in many files including:
+
+Invoice face value     →  invoices.total_amount, read in:
                           - routes/accounting.py:496, 768
                           - routes/finance_invoices.py:472, 727, 942, 994, 1041, 1055, 1122, 1240, 1394
                           - routes/finance_payments.py:576, 635, 638, 670, 707, 981, 1128
@@ -19,7 +20,7 @@ Invoice face value     →  invoices.total_amount
 Outstanding / paid     →  routes/admin_kpis.py:84–89, 157, 158, 231
                           routes/superadmin_portal.py:597–604
                           routes/finance_payables.py:1321 (total_issued − total_collected)
-                          Custom per-report math in routes/finance_reports.py
+                          routes/finance_reports.py (multiple locations)
 
 Session revenue        →  routes/finance_session.py:52, 92 (invoice_total − tax_amount)
                           routes/superadmin_portal.py:1144, 1347, 1745, 1845
@@ -40,45 +41,94 @@ Gross profit / P&L     →  routes/finance_reports.py:363, 374, 389, 487–488, 
                           routes/finance_session.py:96, 105, 656–658
 
 Session cost           →  routes/finance_session.py:56–101 (aggregated live)
-                          Backed by trainer_fees / coordinator_fees /
-                          session_expenses / marketing_commissions collections
+                          Backed by: trainer_fees / coordinator_fees /
+                          session_expenses / marketing_commissions
                           plus session_costing snapshot doc.
 
-PROFORMA-vs-INVOICE observations (Phase 3 candidates)
------------------------------------------------------
-1. `routes/finance_invoices.py::convert_proforma_to_invoice` sets
-   `converted_from_proforma_id` on the new invoice and marks the
-   proforma `status = converted`. Where the link exists, Phase 2's
-   session snapshot correctly counts once.
 
-2. Historical proformas created before this convention (if any)
-   may lack `converted_from_proforma_id`. Phase 2 surfaces this
-   safely via the PROFORMA_UNLINKED_MATCH warning — it does NOT
-   auto-repair. That workflow is reserved for Phase 3.
+2. READ-ONLY LEGACY INVOICE STATUS AUDIT
+----------------------------------------
+Method: aggregate over the current `invoices` collection grouping by
+(status, document_type). Zero writes performed.
 
-3. `routes/finance_payments.py::create_session_credit_note` line 1124
-   uses `find_one({"session_id": session_id})` to pick a single
-   invoice per session. When a session has multiple invoices this is
-   ambiguous. Phase 2 does not change this behaviour; it merely
-   reports the ambiguity through the session snapshot.
+Result (live database at audit time):
+    status='paid'            document_type='invoice'    count=5
+    status='issued'          document_type='invoice'    count=3
+    status='draft'           document_type='invoice'    count=5
+    status='deleted'         document_type='invoice'    count=2
+    status='draft'           document_type='proforma'   count=1
 
-4. `routes/finance_session.py::get_session_costing` reads only
-   invoices with status IN {issued, partial, paid}. The new
-   canonical service uses {issued, partially_paid, paid} (matching
-   the app-wide status set). Behaviour equivalent — but a screen may
-   still be relying on the older locally-computed value. Migrating
-   frontend/reporting screens to the new canonical endpoint is a
-   later, separate task.
+    status='partial'                                    count=0
+    status='partially_paid'                             count=0
+    status='auto_draft'                                 count=0
 
-DEFERRED TO PHASE 3
--------------------
-- Proforma → Invoice link repair for historical unlinked pairs
-- Session→Invoice cardinality repair (find_one usage above)
+Conclusion:
+    - Legacy status "partial" does NOT exist in the current database.
+      The canonical whitelist therefore stays:
+          {issued, partially_paid, paid}
+      NO backward-compatible alias `partial → partially_paid` was added.
+      Previous documentation that suggested `partial` and `partially_paid`
+      might be behaviourally equivalent has been REMOVED — the audit
+      does NOT prove that.
 
-DEFERRED TO PHASE 4
--------------------
-- Write-side protections for payment / invoice / credit-note edits
-  based on the canonical outstanding/paid rules.
+    - `partially_paid` is used by the code path at
+      routes/finance_payments.py (payment recording) but no rows carry
+      that status in the current data snapshot. It remains reserved for
+      future use and stays in the eligibility whitelist.
 
-NO FINANCIAL LOGIC WAS CHANGED BY PHASE 2. The service is purely
-additive and read-only.
+    - The code writes an `auto_draft` status at
+          routes/finance_invoices.py:736
+          routes/finance_invoices.py:804
+      (auto-generated drafts). No records currently carry that status,
+      but to avoid noisy `UNRECOGNIZED_INVOICE_STATUS` warnings the
+      canonical service now treats `auto_draft` as an informational
+      (non-revenue-eligible) status alongside `draft`.
+
+Statuses discovered in code paths that WRITE `invoice.status`:
+    draft, auto_draft, issued, paid, converted, cancelled, voided, deleted
+
+All of these are now in `KNOWN_INVOICE_STATUSES` for the source-of-truth
+service.
+
+
+3. PROFORMA-vs-INVOICE OBSERVATIONS (Phase 3 candidates — DEFERRED)
+-------------------------------------------------------------------
+3a. `routes/finance_invoices.py::convert_proforma_to_invoice` correctly
+    sets `converted_from_proforma_id` on the resulting invoice and marks
+    the proforma `status = "converted"`. Where the link exists, Phase 2
+    counts the pair once (single revenue).
+
+3b. Historical proformas created before this convention (if any) may
+    lack `converted_from_proforma_id`. Phase 2 surfaces this safely via
+    the `PROFORMA_UNLINKED_MATCH` warning — it does NOT auto-repair.
+    The repair belongs to Phase 3.
+
+3c. `routes/finance_payments.py::create_session_credit_note` at line 1124
+    uses `find_one({"session_id": session_id})` to pick a single invoice
+    per session. When a session has multiple invoices this is ambiguous
+    and CAN pick the wrong document.
+    STATUS: IDENTIFIED and DEFERRED to Phase 3.
+    (This corrects a previous statement that said the ambiguity is
+    "reported through the session snapshot" — no such warning is emitted
+    by the current service.)
+
+
+4. DEFERRED WORK
+----------------
+Phase 3
+    - Historical Proforma→Invoice link repair for unlinked pairs
+    - Session→Invoice cardinality repair (the find_one usage above)
+    - Optional: dedicated `AMBIGUOUS_SESSION_INVOICE_SELECTION` warning
+
+Phase 4
+    - Write-side protections for payment / invoice / credit-note edits
+      based on the canonical outstanding/paid rules.
+    - Enforce that a non-eligible invoice cannot receive new payments.
+
+Later phases
+    - Migrating frontend screens (SessionCosting, ClaimFormPrint,
+      FinanceDashboard KPIs, financial reports) to consume the new
+      canonical endpoints.
+
+NO PRODUCTION FINANCIAL LOGIC WAS CHANGED BY PHASE 2. The service is
+purely additive and read-only.

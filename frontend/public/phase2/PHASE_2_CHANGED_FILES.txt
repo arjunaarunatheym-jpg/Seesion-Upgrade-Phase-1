@@ -37,7 +37,9 @@ backend/routes/__init__.py
     Added import and registration for `finance_source_of_truth_router`.
 
 backend/server.py
-    Added import and `include_router(finance_source_of_truth_router)`.
+    Added import (line 327) and `api_router.include_router(finance_source_of_truth_router)` (line 379).
+    Verified end-to-end via ASGITransport in tests/test_financial_source_of_truth.py::test_D_router_actually_mounted
+    and by inspecting the live /openapi.json spec of the running app.
 
 FILES DELETED (0)
 -----------------
