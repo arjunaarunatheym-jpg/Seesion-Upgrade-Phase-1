@@ -78,6 +78,13 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
   2. Repair — voids all later duplicate journals per source (keeps earliest as authoritative), fully audited with reason.
 - Backend endpoints: `GET /superadmin/audit/duplicate-invoice-journals`, `POST /superadmin/audit/repair-duplicate-journals`
 
+### Payables Excel Export Upgrade (Feb 2026)
+- Added **Summary** sheet as the first tab of `payables_{year}_{month}.xlsx`, grouped by payee (A-Z), with per-person subtotals and Grand Total. Each summary row includes the linked Invoice Number.
+- Added an **Invoice #** column (col A) to the four existing detail sheets (Trainer Fees, Coordinator Fees, Marketing Commission, Administration Fees).
+- Invoice lookup: `session_id` → `invoices.invoice_number` (voided invoices excluded). Sessions with multiple invoices join numbers with " / "; sessions with none show "— No Invoice —".
+- No changes to financial calculations, statuses, or DB records.
+- File: `/app/backend/routes/finance_payables.py::export_payables_excel`.
+
 ### Full Payment History — Phase 1 (Feb 2026)
 - **New Finance tab** `Payment History` (data-testid=`payment-history-tab`) — server-side searchable, filterable, sorted, paginated read-only ledger. Complements (does NOT replace) the existing Recent Payments widget.
 - **Backend**: `GET /api/finance/payments/history` (query: q, date_from, date_to, payment_method, funding_source, status, sort, page, page_size). Response envelope: `{ items, page, page_size, total, total_pages, sort, filters }`. Search matches receipt/reference/HRDCorp invoice #, plus invoice/company/programme via join. Sorts: newest/oldest/highest/lowest. Default page_size=25, max=100.
