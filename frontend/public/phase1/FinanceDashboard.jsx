@@ -1888,7 +1888,7 @@ const FinanceDashboard = ({ user, onLogout }) => {
 
           {/* Payment History Tab */}
           <TabsContent value="payment-history">
-            <PaymentHistoryTab />
+            <PaymentHistoryTab companySettings={companySettings} />
           </TabsContent>
 
           {/* Credit Notes Tab */}

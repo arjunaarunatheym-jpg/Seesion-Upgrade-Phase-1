@@ -65,7 +65,7 @@ const useDebouncedValue = (value, ms = 400) => {
   return debounced;
 };
 
-const PaymentHistoryTab = () => {
+const PaymentHistoryTab = ({ companySettings }) => {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 400);
 
@@ -178,6 +178,17 @@ const PaymentHistoryTab = () => {
       }
     } catch {
       toast.error("Failed to load HRDCorp invoice");
+    }
+  };
+
+  // Reprint receipt — uses the same utility as the Recent Payments widget
+  const handlePrintReceipt = async (payment) => {
+    try {
+      const { printReceipt } = await import("../../utils/printReceipt");
+      printReceipt(payment, companySettings, axiosInstance);
+    } catch (e) {
+      console.error("Reprint error:", e);
+      toast.error("Failed to generate receipt");
     }
   };
 
@@ -396,6 +407,14 @@ const PaymentHistoryTab = () => {
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost" size="sm"
+                          title="Reprint Receipt"
+                          onClick={() => handlePrintReceipt(p)}
+                          data-testid={`ph-reprint-receipt-${p.id}`}
+                        >
+                          <ReceiptIcon className="w-4 h-4 text-purple-600" />
+                        </Button>
                         {p.has_receipt && (
                           <Button variant="ghost" size="sm" title="View proof of payment" onClick={() => handleViewProof(p.id)} data-testid={`ph-view-proof-${p.id}`}>
                             <Paperclip className="w-4 h-4 text-green-600" />
@@ -497,6 +516,13 @@ const PaymentHistoryTab = () => {
                 </div>
               )}
               <div className="flex flex-wrap gap-2 pt-2 border-t">
+                <Button
+                  variant="outline" size="sm"
+                  onClick={() => handlePrintReceipt({ ...detail.payment, company_name: detail.invoice?.bill_to_name || detail.invoice?.company_name })}
+                  data-testid="ph-detail-reprint-receipt"
+                >
+                  <ReceiptIcon className="w-4 h-4 mr-1 text-purple-600" /> Reprint Receipt (PDF)
+                </Button>
                 {detail.payment?.has_receipt && (
                   <Button variant="outline" size="sm" onClick={() => handleViewProof(detail.payment.id)} data-testid="ph-detail-view-proof">
                     <Paperclip className="w-4 h-4 mr-1" /> View proof of payment
