@@ -57,10 +57,13 @@ KNOWN_INVOICE_STATUSES = (
     | INFORMATIONAL_INVOICE_STATUSES
 )
 
-# Credit-note statuses that DO reduce net invoiced value.
+# Credit-note statuses that DO reduce net invoiced value (STRICT whitelist).
 ACTIVE_CN_STATUSES = {"draft", "approved", "issued"}
 # Credit-note statuses that DO NOT reduce net invoiced value.
 VOIDED_CN_STATUSES = {"voided", "deleted", "cancelled"}
+# Every status the app is known to write for credit notes. Anything outside
+# this set triggers an UNRECOGNIZED_CREDIT_NOTE_STATUS warning.
+KNOWN_CN_STATUSES = ACTIVE_CN_STATUSES | VOIDED_CN_STATUSES
 
 REVERSED_PAYMENT_STATUS = "reversed"
 
@@ -80,6 +83,7 @@ W_OVERPAYMENT = "OVERPAYMENT"
 W_VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS = "VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS"
 W_DUPLICATE_INVOICE_NUMBER = "DUPLICATE_INVOICE_NUMBER"
 W_UNRECOGNIZED_INVOICE_STATUS = "UNRECOGNIZED_INVOICE_STATUS"
+W_UNRECOGNIZED_CREDIT_NOTE_STATUS = "UNRECOGNIZED_CREDIT_NOTE_STATUS"
 W_NON_ELIGIBLE_INVOICE_HAS_ACTIVITY = "NON_ELIGIBLE_INVOICE_HAS_ACTIVITY"
 
 
@@ -116,10 +120,29 @@ def _is_revenue_eligible_invoice(inv: Dict[str, Any]) -> bool:
     return _normalized_status(inv) in REVENUE_ELIGIBLE_INVOICE_STATUSES
 
 
+def _cn_normalized_status(cn: Dict[str, Any]) -> str:
+    """Lowercase, whitespace-stripped credit-note status. None/missing -> ''."""
+    return (cn.get("status") or "").strip().lower()
+
+
 def _cn_is_active(cn: Dict[str, Any]) -> bool:
+    """STRICT whitelist: a Credit Note reduces net invoiced value ONLY when
+    its normalized status is explicitly in ACTIVE_CN_STATUSES.
+
+    Anything else — voided, deleted, cancelled, unknown/typo statuses,
+    missing/null/blank statuses — does NOT reduce net invoiced value.
+    Legacy audit (Phase 2) found zero rows with missing status, so the
+    safest canonical treatment is applied: unknown/missing status is
+    inactive and surfaced via UNRECOGNIZED_CREDIT_NOTE_STATUS.
+    """
     if not cn:
         return False
-    return (cn.get("status") or "draft").lower() not in VOIDED_CN_STATUSES
+    return _cn_normalized_status(cn) in ACTIVE_CN_STATUSES
+
+
+def _cn_status_is_known(cn: Dict[str, Any]) -> bool:
+    """True iff the CN status is in the recognized set (active or inactive)."""
+    return _cn_normalized_status(cn) in KNOWN_CN_STATUSES
 
 
 def _payment_is_valid(p: Dict[str, Any]) -> bool:
@@ -225,6 +248,24 @@ class FinancialSourceOfTruth:
         active_cns = [c for c in credit_notes if _cn_is_active(c)]
         voided_cns = [c for c in credit_notes if not _cn_is_active(c)]
         cn_total = _round(sum(float(c.get("amount") or 0) for c in active_cns))
+
+        # ---- Unrecognized Credit Note status warning ----
+        # A CN with a status outside KNOWN_CN_STATUSES is preserved (never
+        # written) but EXCLUDED from the canonical CN adjustment.
+        for c in credit_notes:
+            if not _cn_status_is_known(c):
+                warnings.append({
+                    "code": W_UNRECOGNIZED_CREDIT_NOTE_STATUS,
+                    "credit_note_id": c.get("id"),
+                    "cn_number": c.get("cn_number"),
+                    "status": c.get("status"),
+                    "amount": c.get("amount"),
+                    "message": (
+                        f"Credit Note {c.get('cn_number')!r} has unrecognized "
+                        f"status {c.get('status')!r} — record preserved but "
+                        f"excluded from the canonical Credit Note adjustment."
+                    ),
+                })
 
         # ---- Valid payments (always read; only applied when eligible) ----
         valid_payments = [p for p in payments if _payment_is_valid(p)]

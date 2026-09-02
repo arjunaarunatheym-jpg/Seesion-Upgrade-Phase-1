@@ -1,0 +1,45 @@
+Phase 2 — Final Test Report
+============================
+
+Source revision under test
+--------------------------
+    /app/backend/server.py
+    SHA-256: 4ef86d2cf6e7c8402d65af7974601408619ab0546a877fafcd43def06cfc505d
+    (Router import line 327; api_router.include_router line 379.)
+
+Phase 2 suite  (tests/test_financial_source_of_truth.py)
+--------------------------------------------------------
+    Run     : 32
+    Passed  : 32
+    Failed  :  0
+    Includes correction tests:
+        test_D_router_actually_mounted            PASSED
+        test_A_draft_invoice_not_revenue          PASSED
+        test_B_unknown_status_not_revenue         PASSED
+        test_C_cancelled_and_voided_consistency   PASSED
+        test_E_non_eligible_with_payment          PASSED
+        test_E2_cancelled_with_payment_has_two_warnings PASSED
+        test_CN_A_draft_reduces_net               PASSED
+        test_CN_B_approved_reduces_net            PASSED
+        test_CN_C_issued_reduces_net              PASSED
+        test_CN_D_voided_does_not_reduce_net      PASSED
+        test_CN_E_cancelled_does_not_reduce_net   PASSED
+        test_CN_F_unknown_status_does_not_reduce_net       PASSED
+        test_CN_G_unknown_status_emits_warning    PASSED
+        test_CN_H_unknown_cn_record_unchanged     PASSED
+        test_CN_I_missing_status_treated_safely   PASSED
+
+Phase 1 regression  (tests/test_payment_history.py)
+---------------------------------------------------
+    Run     : 26
+    Passed  : 26
+    Failed  :  0
+
+Confirmations
+-------------
+    NO PRODUCTION FINANCIAL RECORDS WERE MODIFIED OR DELETED.
+    THE CREDIT NOTE STATUS AUDIT WAS READ-ONLY.
+    THE FINANCIAL SOURCE OF TRUTH SERVICE REMAINS READ-ONLY.
+    NO PAYMENT, INVOICE, PROFORMA OR CREDIT NOTE WRITE WORKFLOW WAS CHANGED.
+    THE APPLICATION WAS NOT REDEPLOYED.
+    PHASE 3 WAS NOT STARTED.

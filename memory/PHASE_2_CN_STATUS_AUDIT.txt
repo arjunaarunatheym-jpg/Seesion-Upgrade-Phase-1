@@ -1,0 +1,46 @@
+Phase 2 — Credit Note Status Audit (READ-ONLY)
+===============================================
+
+Method
+------
+    db.credit_notes.aggregate([
+        {"$group": {"_id": "$status", "c": {"$sum": 1}}},
+        {"$sort":  {"c": -1}}
+    ])
+Zero writes.
+
+Result (live DB at audit time)
+------------------------------
+    status        count
+    ------------- -----
+    'voided'          3
+    'issued'          3
+                  -----
+    TOTAL             6
+
+    null / missing / blank : 0
+
+Code paths that WRITE credit_notes.status
+-----------------------------------------
+    routes/finance_payments.py:1032   compares status == 'approved'
+    routes/finance_payments.py:1055   compares status != 'draft'
+    routes/finance_payments.py:1300   compares status == 'voided'
+    routes/superadmin_portal.py:1133,1320  status != 'voided' filters
+
+Statuses observed in code:
+    draft, approved, issued, voided
+
+Conclusions
+-----------
+1. Legacy "partial" / "unknown" / null statuses DO NOT exist in the live
+   credit_notes collection.
+2. The canonical service uses a STRICT whitelist:
+     ACTIVE_CN_STATUSES   = {'draft', 'approved', 'issued'}
+     VOIDED_CN_STATUSES   = {'voided', 'deleted', 'cancelled'}
+   Anything outside these two sets (including missing / null / blank) is
+   NON-active and surfaced via UNRECOGNIZED_CREDIT_NOTE_STATUS.
+3. Because 0 legacy CN rows have a missing status, the safest canonical
+   treatment (missing status → unrecognized, does NOT reduce net) is
+   applied without any backward-compat alias.
+4. No production credit-note record was modified or deleted during this
+   audit.

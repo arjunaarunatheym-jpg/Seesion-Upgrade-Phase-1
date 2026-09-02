@@ -144,7 +144,7 @@ async def seed_payment(
 
 
 async def seed_credit_note(
-    db_conn, invoice_id: str | None, amount: float, status: str = "issued",
+    db_conn, invoice_id: str | None, amount: float, status: str | None = "issued",
 ) -> dict:
     doc = {
         "id": str(uuid.uuid4()),
@@ -573,3 +573,117 @@ async def test_E2_cancelled_with_payment_has_two_warnings(app_client, finance_to
     codes = {w["code"] for w in r.json()["integrity_warnings"]}
     assert "NON_ELIGIBLE_INVOICE_HAS_ACTIVITY" in codes
     assert "VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS" in codes
+
+
+# =============================================================================
+# CREDIT NOTE STRICT ELIGIBILITY — Correction (tests A–I)
+# =============================================================================
+
+@pytest.mark.asyncio
+async def test_CN_A_draft_reduces_net(app_client, finance_token, db_conn, cleanup):
+    """CN with status='draft' MUST reduce net invoiced value."""
+    inv = await seed_invoice(db_conn, None, 10000.0)
+    await seed_credit_note(db_conn, inv["id"], 300.0, status="draft")
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(finance_token))).json()
+    assert b["credit_note_total"] == 300.0
+    assert b["net_invoiced_value"] == 9700.0
+
+
+@pytest.mark.asyncio
+async def test_CN_B_approved_reduces_net(app_client, finance_token, db_conn, cleanup):
+    """CN with status='approved' MUST reduce net invoiced value."""
+    inv = await seed_invoice(db_conn, None, 10000.0)
+    await seed_credit_note(db_conn, inv["id"], 250.0, status="approved")
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(finance_token))).json()
+    assert b["credit_note_total"] == 250.0
+    assert b["net_invoiced_value"] == 9750.0
+
+
+@pytest.mark.asyncio
+async def test_CN_C_issued_reduces_net(app_client, finance_token, db_conn, cleanup):
+    """CN with status='issued' MUST reduce net invoiced value."""
+    inv = await seed_invoice(db_conn, None, 10000.0)
+    await seed_credit_note(db_conn, inv["id"], 500.0, status="issued")
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(finance_token))).json()
+    assert b["credit_note_total"] == 500.0
+    assert b["net_invoiced_value"] == 9500.0
+
+
+@pytest.mark.asyncio
+async def test_CN_D_voided_does_not_reduce_net(app_client, finance_token, db_conn, cleanup):
+    """CN with status='voided' MUST NOT reduce net invoiced value."""
+    inv = await seed_invoice(db_conn, None, 10000.0)
+    await seed_credit_note(db_conn, inv["id"], 999.0, status="voided")
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(finance_token))).json()
+    assert b["credit_note_total"] == 0.0
+    assert b["voided_credit_note_count"] == 1
+    assert b["net_invoiced_value"] == 10000.0
+
+
+@pytest.mark.asyncio
+async def test_CN_E_cancelled_does_not_reduce_net(app_client, finance_token, db_conn, cleanup):
+    """CN with status='cancelled' MUST NOT reduce net invoiced value."""
+    inv = await seed_invoice(db_conn, None, 10000.0)
+    await seed_credit_note(db_conn, inv["id"], 800.0, status="cancelled")
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(finance_token))).json()
+    assert b["credit_note_total"] == 0.0
+    assert b["net_invoiced_value"] == 10000.0
+
+
+@pytest.mark.asyncio
+async def test_CN_F_unknown_status_does_not_reduce_net(app_client, finance_token, db_conn, cleanup):
+    """CN with an unknown/typo status MUST NOT reduce net invoiced value."""
+    inv = await seed_invoice(db_conn, None, 10000.0)
+    await seed_credit_note(db_conn, inv["id"], 750.0, status="legacy_typo")
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(finance_token))).json()
+    assert b["credit_note_total"] == 0.0
+    assert b["net_invoiced_value"] == 10000.0
+
+
+@pytest.mark.asyncio
+async def test_CN_G_unknown_status_emits_warning(app_client, finance_token, db_conn, cleanup):
+    """Unknown CN status MUST emit UNRECOGNIZED_CREDIT_NOTE_STATUS."""
+    inv = await seed_invoice(db_conn, None, 10000.0)
+    await seed_credit_note(db_conn, inv["id"], 100.0, status="mystery_status")
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(finance_token))).json()
+    codes = {w["code"] for w in b["integrity_warnings"]}
+    assert "UNRECOGNIZED_CREDIT_NOTE_STATUS" in codes
+
+
+@pytest.mark.asyncio
+async def test_CN_H_unknown_cn_record_unchanged(app_client, finance_token, db_conn, cleanup):
+    """The underlying CN record MUST NOT be modified by the API call."""
+    inv = await seed_invoice(db_conn, None, 10000.0)
+    cn = await seed_credit_note(db_conn, inv["id"], 100.0, status="mystery_status")
+    before = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+    await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                         headers=_auth(finance_token))
+    after = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+    assert before == after, "Phase 2 must NEVER mutate credit-note records"
+
+
+@pytest.mark.asyncio
+async def test_CN_I_missing_status_treated_safely(app_client, finance_token, db_conn, cleanup):
+    """Per the read-only Phase 2 CN status audit, no legacy rows have missing
+    status (0 records). Safest canonical treatment: missing/null status is
+    treated as unrecognized (does NOT reduce net) and emits
+    UNRECOGNIZED_CREDIT_NOTE_STATUS. The underlying record is untouched.
+    """
+    inv = await seed_invoice(db_conn, None, 10000.0)
+    cn = await seed_credit_note(db_conn, inv["id"], 400.0, status=None)
+    before = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(finance_token))).json()
+    assert b["credit_note_total"] == 0.0, "null/missing CN status must not reduce net"
+    assert b["net_invoiced_value"] == 10000.0
+    codes = {w["code"] for w in b["integrity_warnings"]}
+    assert "UNRECOGNIZED_CREDIT_NOTE_STATUS" in codes
+    after = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+    assert before == after

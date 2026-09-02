@@ -30,8 +30,15 @@ Phase 2 — Canonical Financial Model
      active activity exists.
 
 3. CREDIT NOTE ADJUSTMENT
-   Active statuses:   {draft, approved, issued}   (reduce net)
-   Ignored statuses:  {voided, deleted, cancelled}
+   STRICT whitelist:
+     Active statuses (reduce net):   {draft, approved, issued}
+     Inactive statuses:              {voided, deleted, cancelled}
+     Any other status (typo, legacy unknown, missing/null/blank)
+        -> NOT active, does NOT reduce net
+        -> emits UNRECOGNIZED_CREDIT_NOTE_STATUS warning
+   Legacy audit: 0 rows with missing status in the live DB → safest
+   canonical treatment is to treat missing/null as unrecognized.
+   Underlying CN record is preserved (service never writes).
 
 4. NET INVOICED VALUE (per invoice)
    = document_face_value − sum(active_credit_notes)
@@ -74,4 +81,5 @@ Phase 2 — Canonical Financial Model
     VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS  invoice is voided/cancelled but has active payments
     DUPLICATE_INVOICE_NUMBER            same invoice_number appears more than once in a session
     UNRECOGNIZED_INVOICE_STATUS         invoice.status is outside the known set
+    UNRECOGNIZED_CREDIT_NOTE_STATUS     credit_note.status is outside {draft,approved,issued,voided,deleted,cancelled}
     NON_ELIGIBLE_INVOICE_HAS_ACTIVITY   non-eligible invoice has active payments or credit notes

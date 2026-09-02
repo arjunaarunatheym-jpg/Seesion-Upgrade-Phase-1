@@ -20,10 +20,10 @@ backend/routes/finance_source_of_truth.py
     Authorization: admin / super_admin / finance only.
 
 backend/tests/test_financial_source_of_truth.py
-    17 pytest cases (16 required + 1 bonus 404 regression) covering
-    all Phase 2 acceptance tests. All fixtures use the isolation
-    marker "ph2_test" and are cleaned up on teardown. No production
-    data is ever touched.
+    32 pytest cases (all passing). Covers all Phase 2 canonical rules
+    plus the strict Credit Note whitelist tests A–I. All fixtures use
+    the isolation marker "ph2_test" and are cleaned up on teardown.
+    No production data is ever touched.
 
 memory/PHASE_2_FINANCIAL_MODEL.txt
     Canonical financial model — definitions, rules, warning codes.
