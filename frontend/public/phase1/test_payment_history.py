@@ -337,3 +337,179 @@ async def test_status_reversed_filter(app_client, finance_token, seeded_payments
     assert r.status_code == 200
     for p in r.json()["items"]:
         assert p.get("status") == "reversed"
+
+
+# ============================================================
+# PHASE 1 CORRECTION — CSV formula-injection & hardening tests
+# ============================================================
+
+@pytest.fixture(scope="module")
+async def malicious_payments(db_conn, seeded_payments):
+    """Seed payments whose textual fields contain values that spreadsheet
+    software might interpret as formulas. Used to prove the CSV export
+    sanitizer neutralizes them. These records are isolated by a unique
+    marker and are explicitly cleaned up on teardown so no existing
+    production/live financial data is touched.
+    """
+    invoice_a = seeded_payments["invoice_a"]
+    marker = f"PHINJ_{uuid.uuid4().hex[:6]}"
+    payloads = [
+        {"reference_number": "=1+1", "receipt_number": f"{marker}/RCP1"},
+        {"reference_number": "+SUM(1,1)", "receipt_number": f"{marker}/RCP2"},
+        {"reference_number": "-1+1", "receipt_number": f"{marker}/RCP3"},
+        {"reference_number": "@something", "receipt_number": f"{marker}/RCP4"},
+    ]
+    docs = []
+    for i, extra in enumerate(payloads):
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "invoice_id": invoice_a["id"],
+            "amount": float(500 + i),
+            "payment_date": f"2025-11-0{i + 1}",
+            "payment_method": "cash",
+            "payment_type": "self_pay",
+            "created_at": f"2025-11-0{i + 1}T10:00:00",
+            "status": None,
+            TEST_TAG: True,
+            **extra,
+        })
+    await db_conn.payments.insert_many(docs)
+    yield {"marker": marker, "docs": docs, "invoice_number": invoice_a["invoice_number"]}
+    # Isolated cleanup — only the seeded malicious rows are removed.
+    await db_conn.payments.delete_many({"receipt_number": {"$regex": f"^{marker}"}})
+
+
+@pytest.mark.asyncio
+async def test_csv_export_authorized_finance(app_client, finance_token, seeded_payments):
+    """A — Authorized Finance role can access the CSV export."""
+    r = await app_client.get(
+        "/api/finance/payments/history/export",
+        headers=auth_headers(finance_token),
+    )
+    assert r.status_code == 200
+    ct = r.headers.get("content-type", "")
+    assert ct.startswith("text/csv")
+    body = r.text
+    # Header row present
+    assert body.splitlines()[0].startswith("Payment Date,Receipt Number,")
+
+
+@pytest.mark.asyncio
+async def test_csv_export_unauthorized(app_client, coordinator_token, seeded_payments):
+    """B — Non-finance role cannot access the CSV export."""
+    r = await app_client.get(
+        "/api/finance/payments/history/export",
+        headers=auth_headers(coordinator_token),
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_csv_export_no_token_unauthorized(app_client):
+    """B — Missing token is rejected before reaching the CSV export."""
+    r = await app_client.get("/api/finance/payments/history/export")
+    assert r.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_csv_export_respects_filters(app_client, finance_token, seeded_payments):
+    """C — CSV export respects search & filter parameters."""
+    import csv as _csv
+    import io as _io
+    r = await app_client.get(
+        "/api/finance/payments/history/export?payment_method=cash",
+        headers=auth_headers(finance_token),
+    )
+    assert r.status_code == 200
+    reader = _csv.reader(_io.StringIO(r.text))
+    rows = list(reader)
+    assert len(rows) >= 2  # header + at least one row
+    header = rows[0]
+    method_idx = header.index("Payment Method")
+    # Every data row's Payment Method must equal 'cash'
+    for row in rows[1:]:
+        assert row[method_idx] == "cash", f"filter leak: {row}"
+
+
+@pytest.mark.asyncio
+async def test_csv_formula_injection_sanitized(
+    app_client, finance_token, seeded_payments, malicious_payments,
+):
+    """D — CSV export sanitizes textual values that begin with =, +, -, or @.
+    Legitimate numeric amounts remain numeric.
+    """
+    import csv as _csv
+    import io as _io
+    marker = malicious_payments["marker"]
+    r = await app_client.get(
+        f"/api/finance/payments/history/export?q={marker}",
+        headers=auth_headers(finance_token),
+    )
+    assert r.status_code == 200
+
+    reader = _csv.reader(_io.StringIO(r.text))
+    rows = list(reader)
+    assert len(rows) >= 2, "expected malicious rows to be exported"
+    header = rows[0]
+    ref_idx = header.index("Reference Number")
+    amt_idx = header.index("Amount (RM)")
+
+    dangerous = ("=", "+", "-", "@")
+    seen_refs = set()
+    for row in rows[1:]:
+        for cell in row:
+            stripped = (cell or "").lstrip()
+            # Cell must NOT start with a bare formula-trigger character
+            if stripped and stripped[0] in dangerous:
+                pytest.fail(f"CSV cell not sanitized: {cell!r} in row {row!r}")
+        # Amount column must remain a plain numeric-looking value (no leading apostrophe)
+        amt = row[amt_idx]
+        assert not amt.startswith("'"), f"Amount was wrongly sanitized: {amt!r}"
+        float(amt)  # must parse as number
+        seen_refs.add(row[ref_idx])
+
+    # Every malicious reference should now start with an apostrophe
+    assert "'=1+1" in seen_refs
+    assert "'+SUM(1,1)" in seen_refs
+    assert "'-1+1" in seen_refs
+    assert "'@something" in seen_refs
+
+
+@pytest.mark.asyncio
+async def test_page_size_over_100_rejected(app_client, finance_token, seeded_payments):
+    """E — page_size > 100 is rejected by validation."""
+    r = await app_client.get(
+        "/api/finance/payments/history?page_size=101",
+        headers=auth_headers(finance_token),
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_nonexistent_payment_detail_returns_404(
+    app_client, finance_token, seeded_payments,
+):
+    """F — Payment detail for a nonexistent id returns 404."""
+    r = await app_client.get(
+        "/api/finance/payments/nonexistent-payment-id-xyz/detail",
+        headers=auth_headers(finance_token),
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_existing_payments_still_untouched_after_correction(
+    app_client, finance_token, seeded_payments, malicious_payments, db_conn,
+):
+    """Regression — even after CSV sanitization, running the export must NOT
+    mutate any stored payment. The DB values remain exactly as seeded.
+    """
+    sample = seeded_payments["payments"][20]
+    before = await db_conn.payments.find_one({"id": sample["id"]}, {"_id": 0})
+    # Trigger the sanitized export
+    await app_client.get(
+        "/api/finance/payments/history/export",
+        headers=auth_headers(finance_token),
+    )
+    after = await db_conn.payments.find_one({"id": sample["id"]}, {"_id": 0})
+    assert before == after, "Sanitizer must not mutate DB records"

@@ -204,6 +204,32 @@ PAYMENT_HISTORY_ALLOWED_SORTS = {
     "lowest": [("amount", 1), ("payment_date", -1)],
 }
 
+# CSV formula-injection sanitization.
+# Spreadsheet apps (Excel / Google Sheets / LibreOffice) may interpret a cell
+# beginning with '=', '+', '-' or '@' as a formula. When exporting user- or
+# DB-derived TEXTUAL values, prefix such values with a single apostrophe so the
+# cell is treated as literal text. Numeric values are returned unchanged so
+# legitimate amounts remain numeric in the CSV.
+_CSV_INJECTION_PREFIXES = ("=", "+", "-", "@")
+
+
+def _csv_safe_text(value):
+    """Sanitize a textual CSV cell against formula injection.
+    Numeric (int/float) values pass through unchanged.
+    None -> empty string.
+    A leading whitespace + dangerous character is neutralized with a leading apostrophe.
+    Applied ONLY at CSV export time — the underlying DB record is never mutated.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    s = str(value)
+    stripped = s.lstrip()
+    if stripped and stripped[0] in _CSV_INJECTION_PREFIXES:
+        return "'" + s
+    return s
+
 
 def _escape_regex(s: str) -> str:
     """Escape user input for use in a MongoDB regex query."""
@@ -442,17 +468,19 @@ async def export_payment_history_csv(
         "Reference Number", "Amount (RM)", "Status",
     ])
     for p in items:
+        # Sanitize every textual field against CSV formula injection.
+        # Numeric amount stays numeric; DB records are never mutated.
         writer.writerow([
-            p.get("payment_date") or "",
-            p.get("receipt_number") or "",
-            p.get("company_name") or "",
-            p.get("invoice_number") or "",
-            p.get("programme_name") or p.get("session_name") or "",
-            p.get("payment_type") or "",
-            p.get("payment_method") or "",
-            p.get("reference_number") or "",
+            _csv_safe_text(p.get("payment_date") or ""),
+            _csv_safe_text(p.get("receipt_number") or ""),
+            _csv_safe_text(p.get("company_name") or ""),
+            _csv_safe_text(p.get("invoice_number") or ""),
+            _csv_safe_text(p.get("programme_name") or p.get("session_name") or ""),
+            _csv_safe_text(p.get("payment_type") or ""),
+            _csv_safe_text(p.get("payment_method") or ""),
+            _csv_safe_text(p.get("reference_number") or ""),
             p.get("amount") or 0,
-            p.get("status") or "active",
+            _csv_safe_text(p.get("status") or "active"),
         ])
 
     buffer.seek(0)

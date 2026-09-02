@@ -1,0 +1,59 @@
+Phase 1 Correction — CSV Formula-Injection Protection
+=====================================================
+Date: 2026-02-02
+Scope: SECURITY CORRECTION ONLY, applied after independent audit.
+Purpose: Prevent CSV formula injection in the Payment History CSV export.
+
+FILES CHANGED (2)
+-----------------
+backend/routes/finance_payments.py
+    - Added constant `_CSV_INJECTION_PREFIXES = ("=", "+", "-", "@")`.
+    - Added helper `_csv_safe_text(value)`:
+        * None -> "".
+        * int/float (excluding bool) returned unchanged (amounts stay numeric).
+        * If string's first non-whitespace character is in the dangerous set,
+          the value is returned with a leading apostrophe (') so spreadsheet
+          software treats it as literal text rather than a formula.
+    - CSV export endpoint (/finance/payments/history/export) now wraps every
+      TEXTUAL cell in `_csv_safe_text(...)`:
+        Payment Date, Receipt Number, Client / Company, Invoice Number,
+        Session / Programme, Funding Source, Payment Method,
+        Reference Number, Status.
+      The Amount (RM) column is intentionally NOT wrapped — it must remain
+      a numeric CSV value.
+
+backend/tests/test_payment_history.py
+    - Added fixture `malicious_payments` (module-scoped) that seeds 4 rows
+      with formula-style textual values (=1+1, +SUM(1,1), -1+1, @something)
+      under a unique isolation marker. Fixture teardown deletes ONLY the
+      rows it created — no impact on existing/production records.
+    - Added 8 new tests (all passing):
+        A  test_csv_export_authorized_finance
+        B  test_csv_export_unauthorized (coordinator -> 403)
+        B  test_csv_export_no_token_unauthorized (no token -> 401/403)
+        C  test_csv_export_respects_filters
+        D  test_csv_formula_injection_sanitized
+        E  test_page_size_over_100_rejected (422)
+        F  test_nonexistent_payment_detail_returns_404
+        +  test_existing_payments_still_untouched_after_correction
+           (regression — DB record unchanged after export runs)
+
+TEST RESULT
+-----------
+    26 passed, 0 failed, 0 skipped
+    (18 original Phase 1 tests + 8 new correction tests)
+    Command: cd /app/backend && python -m pytest tests/test_payment_history.py -v
+
+DATABASE CHANGES
+----------------
+    NONE. No production/live records were modified or deleted.
+    The malicious_payments fixture only creates its own isolated rows and
+    deletes them on teardown, restricted by a per-run marker.
+
+FINANCIAL LOGIC CHANGES
+-----------------------
+    NONE. No calculation, no financial write, no revenue/P&L/HRD Corp change.
+
+REDEPLOYMENT
+------------
+    Application was NOT redeployed.
