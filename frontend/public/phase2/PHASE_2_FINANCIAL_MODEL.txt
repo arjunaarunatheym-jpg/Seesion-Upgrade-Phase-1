@@ -1,0 +1,58 @@
+Phase 2 — Canonical Financial Model
+====================================
+
+1. DOCUMENT FACE VALUE
+   = invoices.total_amount
+
+2. INVOICE ELIGIBILITY FOR REVENUE
+   Include if:
+     document_type != "proforma"
+     AND status IN {issued, partially_paid, paid}
+   Exclude if:
+     status IN {voided, cancelled, deleted, converted, draft}
+     OR document_type == "proforma"
+
+3. CREDIT NOTE ADJUSTMENT
+   Active statuses:   {draft, approved, issued}   (reduce net)
+   Ignored statuses:  {voided, deleted, cancelled}
+
+4. NET INVOICED VALUE (per invoice)
+   = document_face_value − sum(active_credit_notes)
+   Proformas contribute 0.
+
+5. VALID PAYMENTS (per invoice)
+   Include payment if status != "reversed"
+
+6. PAID AMOUNT
+   = sum of valid payments attributable to the invoice
+
+7. OUTSTANDING (per invoice)
+   = max(0, net_invoiced_value − paid_amount)
+   Overpayment is preserved separately (never silently normalized).
+
+8. SESSION REVENUE
+   = sum of NET_INVOICED_VALUE across all revenue-eligible invoices in the session
+   Proformas NEVER contribute.
+   Proforma + Invoice with converted_from_proforma_id link => counted ONCE.
+   Ambiguous proforma+invoice pair with same face value and no link =>
+     counted ONCE (proforma excluded) + PROFORMA_UNLINKED_MATCH warning.
+
+9. SESSION COST
+   = trainer_fees + coordinator_fees + expenses + marketing_and_admin
+   (existing records — Phase 2 does NOT re-derive them.)
+
+10. GROSS PROFIT
+    = SESSION_REVENUE − SESSION_COST
+
+11. GROSS MARGIN %
+    = GROSS_PROFIT / SESSION_REVENUE * 100  (0 when revenue is 0)
+
+12. INTEGRITY WARNING CODES (informational, non-destructive)
+    PROFORMA_UNLINKED_MATCH             ambiguous proforma+invoice pair
+    MULTIPLE_ACTIVE_PROFORMAS           more than one non-converted proforma in a session
+    PAYMENT_MISSING_INVOICE             payment.invoice_id points to a missing invoice
+    CN_MISSING_INVOICE                  credit note.invoice_id points to a missing invoice
+    NET_NEGATIVE_AFTER_CN               credit notes exceed invoice face value
+    OVERPAYMENT                         paid > net invoiced
+    VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS  invoice is voided/cancelled but has active payments
+    DUPLICATE_INVOICE_NUMBER            same invoice_number appears more than once in a session

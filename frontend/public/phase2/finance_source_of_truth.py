@@ -1,0 +1,71 @@
+"""Finance — Source of Truth read-only endpoints (Phase 2).
+See /app/backend/services/financial_source_of_truth.py for the canonical rules.
+"""
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from core import db, get_current_user
+from models import User
+from services.financial_source_of_truth import FinancialSourceOfTruth
+
+router = APIRouter(prefix="/finance/source-of-truth", tags=["finance-source-of-truth"])
+
+
+def _service() -> FinancialSourceOfTruth:
+    return FinancialSourceOfTruth(db)
+
+
+def _require_finance(current_user: User) -> None:
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+
+@router.get("/invoice/{invoice_id}")
+async def get_invoice_source_of_truth(
+    invoice_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Canonical, READ-ONLY financial breakdown for one invoice.
+    Includes: face value, credit notes, net invoiced, paid, outstanding,
+    payment status, integrity warnings.
+    """
+    _require_finance(current_user)
+    snap = await _service().get_invoice_snapshot(invoice_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return snap
+
+
+@router.get("/session/{session_id}")
+async def get_session_source_of_truth(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Canonical, READ-ONLY financial breakdown for one session.
+    Aggregates all legitimate invoices, applies Proforma≠revenue rule,
+    surfaces integrity warnings, returns revenue / cost / gross profit.
+    """
+    _require_finance(current_user)
+    snap = await _service().get_session_snapshot(session_id)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return snap
+
+
+@router.get("/integrity/payments")
+async def scan_payment_integrity(
+    sample_size: int = Query(5000, ge=1, le=20000),
+    current_user: User = Depends(get_current_user),
+):
+    """READ-ONLY scan for payments referencing missing invoices."""
+    _require_finance(current_user)
+    return {"warnings": await _service().find_payment_integrity_warnings(sample_size)}
+
+
+@router.get("/integrity/credit-notes")
+async def scan_credit_note_integrity(
+    sample_size: int = Query(5000, ge=1, le=20000),
+    current_user: User = Depends(get_current_user),
+):
+    """READ-ONLY scan for credit notes referencing missing invoices."""
+    _require_finance(current_user)
+    return {"warnings": await _service().find_credit_note_integrity_warnings(sample_size)}

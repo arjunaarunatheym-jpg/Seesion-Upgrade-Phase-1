@@ -1,0 +1,84 @@
+Phase 2 — Audit: Existing Financial Calculation Locations
+==========================================================
+Discovered during the Phase 2 audit (grep of the current codebase).
+This file is INFORMATIONAL. No files were modified as a result of these
+findings — Phase 2 only adds a centralized service. Repair belongs to
+later phases.
+
+FINANCIAL CONCEPT      →  CURRENT LOCATION(S)
+--------------------------------------------------------------------
+Invoice face value     →  invoices.total_amount
+                          Read directly in many files including:
+                          - routes/accounting.py:496, 768
+                          - routes/finance_invoices.py:472, 727, 942, 994, 1041, 1055, 1122, 1240, 1394
+                          - routes/finance_payments.py:576, 635, 638, 670, 707, 981, 1128
+                          - routes/finance_session.py:52, 162, 222, 257, 268, 312, 313, 316, 642, 657, 658
+                          - routes/finance_payables.py:1000, 1157
+                          - routes/superadmin_portal.py:1144, 1163, 1347, 1745, 1845, 1897
+
+Outstanding / paid     →  routes/admin_kpis.py:84–89, 157, 158, 231
+                          routes/superadmin_portal.py:597–604
+                          routes/finance_payables.py:1321 (total_issued − total_collected)
+                          Custom per-report math in routes/finance_reports.py
+
+Session revenue        →  routes/finance_session.py:52, 92 (invoice_total − tax_amount)
+                          routes/superadmin_portal.py:1144, 1347, 1745, 1845
+                          routes/finance_payables.py:1000–1001, 1157–1158, 1202
+
+Credit-note aggregation→  routes/accounting.py:1492, 3250
+                          routes/finance_invoices.py:278
+                          routes/admin_kpis.py:125–130
+                          routes/finance_payments.py:947–1078, 1099–1180, 1233–1354
+                          routes/superadmin_portal.py:1106, 1172
+
+Proforma detection     →  routes/finance_invoices.py:112–113, 449–581 (convert flow)
+                          routes/finance_payments.py:560–564
+                          routes/finance_session.py:174–180, 229
+
+Gross profit / P&L     →  routes/finance_reports.py:363, 374, 389, 487–488, 523, 1154, 1183, 1184, 1242
+                          routes/finance_payables.py:1202 (marketing recalculation)
+                          routes/finance_session.py:96, 105, 656–658
+
+Session cost           →  routes/finance_session.py:56–101 (aggregated live)
+                          Backed by trainer_fees / coordinator_fees /
+                          session_expenses / marketing_commissions collections
+                          plus session_costing snapshot doc.
+
+PROFORMA-vs-INVOICE observations (Phase 3 candidates)
+-----------------------------------------------------
+1. `routes/finance_invoices.py::convert_proforma_to_invoice` sets
+   `converted_from_proforma_id` on the new invoice and marks the
+   proforma `status = converted`. Where the link exists, Phase 2's
+   session snapshot correctly counts once.
+
+2. Historical proformas created before this convention (if any)
+   may lack `converted_from_proforma_id`. Phase 2 surfaces this
+   safely via the PROFORMA_UNLINKED_MATCH warning — it does NOT
+   auto-repair. That workflow is reserved for Phase 3.
+
+3. `routes/finance_payments.py::create_session_credit_note` line 1124
+   uses `find_one({"session_id": session_id})` to pick a single
+   invoice per session. When a session has multiple invoices this is
+   ambiguous. Phase 2 does not change this behaviour; it merely
+   reports the ambiguity through the session snapshot.
+
+4. `routes/finance_session.py::get_session_costing` reads only
+   invoices with status IN {issued, partial, paid}. The new
+   canonical service uses {issued, partially_paid, paid} (matching
+   the app-wide status set). Behaviour equivalent — but a screen may
+   still be relying on the older locally-computed value. Migrating
+   frontend/reporting screens to the new canonical endpoint is a
+   later, separate task.
+
+DEFERRED TO PHASE 3
+-------------------
+- Proforma → Invoice link repair for historical unlinked pairs
+- Session→Invoice cardinality repair (find_one usage above)
+
+DEFERRED TO PHASE 4
+-------------------
+- Write-side protections for payment / invoice / credit-note edits
+  based on the canonical outstanding/paid rules.
+
+NO FINANCIAL LOGIC WAS CHANGED BY PHASE 2. The service is purely
+additive and read-only.

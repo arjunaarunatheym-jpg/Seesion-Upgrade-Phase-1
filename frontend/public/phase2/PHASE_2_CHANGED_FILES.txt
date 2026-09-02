@@ -1,0 +1,61 @@
+Phase 2 — Financial Source of Truth — Changed Files
+====================================================
+Date: 2026-02-02
+Scope: Centralized READ-ONLY financial calculation service. No writes,
+       no workflow changes, no data migrations, no redeploy.
+
+FILES ADDED (5)
+---------------
+backend/services/financial_source_of_truth.py
+    The single authoritative calculator. Class `FinancialSourceOfTruth`
+    with per-invoice and per-session canonical snapshots and integrity
+    scanners. Uses batched Mongo reads (no N+1). Never writes.
+
+backend/routes/finance_source_of_truth.py
+    Read-only FastAPI router exposing:
+      GET /api/finance/source-of-truth/invoice/{invoice_id}
+      GET /api/finance/source-of-truth/session/{session_id}
+      GET /api/finance/source-of-truth/integrity/payments
+      GET /api/finance/source-of-truth/integrity/credit-notes
+    Authorization: admin / super_admin / finance only.
+
+backend/tests/test_financial_source_of_truth.py
+    17 pytest cases (16 required + 1 bonus 404 regression) covering
+    all Phase 2 acceptance tests. All fixtures use the isolation
+    marker "ph2_test" and are cleaned up on teardown. No production
+    data is ever touched.
+
+memory/PHASE_2_FINANCIAL_MODEL.txt
+    Canonical financial model — definitions, rules, warning codes.
+
+memory/PHASE_2_INTEGRITY_FINDINGS.txt
+    Findings map produced during the initial audit.
+
+FILES MODIFIED (2)
+------------------
+backend/routes/__init__.py
+    Added import and registration for `finance_source_of_truth_router`.
+
+backend/server.py
+    Added import and `include_router(finance_source_of_truth_router)`.
+
+FILES DELETED (0)
+-----------------
+(none)
+
+DATABASE WRITES BY PHASE 2
+--------------------------
+NONE by the service itself.
+Test-only writes are seeded with the `ph2_test` marker and cleaned
+up automatically on teardown; no production/live records are touched.
+
+INDEXES ADDED
+-------------
+NONE required — existing indexes (payment_invoice_id, invoice_number,
+etc.) already support the batched read patterns used by this service.
+
+WORKFLOW CHANGES
+----------------
+NONE. No POST/PUT/DELETE endpoints were added, modified, or removed.
+No changes to payment recording, invoice creation, proforma conversion,
+credit-note creation, HRD Corp workflow, or session workflow.

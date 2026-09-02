@@ -1,0 +1,535 @@
+"""Financial Source of Truth (Phase 2)
+==========================================================================
+Purpose
+-------
+A single, centralized, READ-ONLY calculation layer for all MDDRC financial
+values. This service is intentionally isolated from write workflows.
+
+Canonical rules implemented here MUST be reused by every screen/report/API
+that needs a financial value. Frontend components must not invent their own
+formulas.
+
+Absolute guarantees
+-------------------
+1. This module NEVER writes to MongoDB. It only reads.
+2. It NEVER assumes 1 invoice per session — multiple invoices are supported.
+3. It NEVER treats a proforma as revenue. Converted proformas are excluded
+   from revenue via ``status == 'converted'`` OR ``document_type == 'proforma'``.
+4. Reversed payments (``payments.status == 'reversed'``) are excluded from
+   the paid total.
+5. Voided credit notes (``credit_notes.status`` in ``VOIDED_CN_STATUSES``)
+   are excluded from the credit-note adjustment.
+6. Ambiguous historical states (proforma+invoice with no link, missing
+   references, negative results) produce **integrity warnings** rather than
+   silent adjustments.
+
+Phase 2 does NOT include:
+- Any write operation.
+- Any Proforma→Invoice repair — that is Phase 3.
+- Any workflow change (create/update/reverse) — later phases.
+"""
+from __future__ import annotations
+
+from typing import Any, Dict, Iterable, List, Optional, Sequence
+
+
+# -----------------------------------------------------------------------------
+# Canonical constants
+# -----------------------------------------------------------------------------
+PROFORMA_DOC_TYPE = "proforma"
+INVOICE_DOC_TYPE = "invoice"
+
+# Invoice statuses that DO count towards recognized/net invoiced value.
+REVENUE_ELIGIBLE_INVOICE_STATUSES = {"issued", "partially_paid", "paid"}
+# Invoice statuses that are explicitly excluded from revenue.
+EXCLUDED_INVOICE_STATUSES = {"voided", "cancelled", "deleted", "converted"}
+# Invoices in these statuses are informational only (not yet financial docs).
+INFORMATIONAL_INVOICE_STATUSES = {"draft"}
+
+# Credit-note statuses that DO reduce net invoiced value.
+ACTIVE_CN_STATUSES = {"draft", "approved", "issued"}
+# Credit-note statuses that DO NOT reduce net invoiced value.
+VOIDED_CN_STATUSES = {"voided", "deleted", "cancelled"}
+
+REVERSED_PAYMENT_STATUS = "reversed"
+
+# Rounding — 2 decimals is the app-wide convention for MYR.
+ROUND_DP = 2
+
+
+# -----------------------------------------------------------------------------
+# Integrity warning codes (informational only; never modify data)
+# -----------------------------------------------------------------------------
+W_PROFORMA_UNLINKED_MATCH = "PROFORMA_UNLINKED_MATCH"
+W_MULTIPLE_ACTIVE_PROFORMAS = "MULTIPLE_ACTIVE_PROFORMAS"
+W_PAYMENT_MISSING_INVOICE = "PAYMENT_MISSING_INVOICE"
+W_CN_MISSING_INVOICE = "CN_MISSING_INVOICE"
+W_NET_NEGATIVE_AFTER_CN = "NET_NEGATIVE_AFTER_CN"
+W_OVERPAYMENT = "OVERPAYMENT"
+W_VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS = "VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS"
+W_DUPLICATE_INVOICE_NUMBER = "DUPLICATE_INVOICE_NUMBER"
+
+
+def _round(v: float) -> float:
+    return round(float(v or 0), ROUND_DP)
+
+
+def _is_proforma(inv: Dict[str, Any]) -> bool:
+    if not inv:
+        return False
+    return inv.get("document_type") == PROFORMA_DOC_TYPE
+
+
+def _is_revenue_eligible_invoice(inv: Dict[str, Any]) -> bool:
+    """An invoice document that legitimately represents recognized value.
+    Proformas, voided, cancelled, converted, deleted are excluded.
+    Draft invoices are excluded as a conservative default (not yet issued).
+    """
+    if not inv:
+        return False
+    if _is_proforma(inv):
+        return False
+    status = (inv.get("status") or "").lower()
+    if status in EXCLUDED_INVOICE_STATUSES:
+        return False
+    if status in INFORMATIONAL_INVOICE_STATUSES:
+        return False
+    return True
+
+
+def _cn_is_active(cn: Dict[str, Any]) -> bool:
+    if not cn:
+        return False
+    return (cn.get("status") or "draft").lower() not in VOIDED_CN_STATUSES
+
+
+def _payment_is_valid(p: Dict[str, Any]) -> bool:
+    if not p:
+        return False
+    return (p.get("status") or "").lower() != REVERSED_PAYMENT_STATUS
+
+
+# =============================================================================
+# Service
+# =============================================================================
+class FinancialSourceOfTruth:
+    """Read-only canonical calculator.
+
+    All methods take *primitive* identifiers and return plain dicts. They never
+    mutate any collection.
+    """
+
+    def __init__(self, db):
+        self.db = db
+
+    # -------------------------------------------------------------------------
+    # Batch loaders — used internally to avoid N+1.
+    # -------------------------------------------------------------------------
+    async def _load_invoices(self, invoice_ids: Sequence[str]) -> Dict[str, Dict[str, Any]]:
+        if not invoice_ids:
+            return {}
+        ids = list({i for i in invoice_ids if i})
+        docs = await self.db.invoices.find({"id": {"$in": ids}}, {"_id": 0}).to_list(len(ids))
+        return {d["id"]: d for d in docs if d.get("id")}
+
+    async def _load_payments_for_invoices(self, invoice_ids: Sequence[str]) -> Dict[str, List[Dict[str, Any]]]:
+        if not invoice_ids:
+            return {}
+        ids = list({i for i in invoice_ids if i})
+        docs = await self.db.payments.find(
+            {"invoice_id": {"$in": ids}},
+            {"_id": 0, "receipt_url": 0, "hrdcorp_invoice_url": 0},
+        ).to_list(20000)
+        grouped: Dict[str, List[Dict[str, Any]]] = {i: [] for i in ids}
+        for p in docs:
+            grouped.setdefault(p.get("invoice_id"), []).append(p)
+        return grouped
+
+    async def _load_credit_notes_for_invoices(self, invoice_ids: Sequence[str]) -> Dict[str, List[Dict[str, Any]]]:
+        if not invoice_ids:
+            return {}
+        ids = list({i for i in invoice_ids if i})
+        docs = await self.db.credit_notes.find(
+            {"invoice_id": {"$in": ids}}, {"_id": 0},
+        ).to_list(20000)
+        grouped: Dict[str, List[Dict[str, Any]]] = {i: [] for i in ids}
+        for c in docs:
+            grouped.setdefault(c.get("invoice_id"), []).append(c)
+        return grouped
+
+    async def _load_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        return await self.db.sessions.find_one({"id": session_id}, {"_id": 0})
+
+    async def _load_session_invoices(self, session_id: str) -> List[Dict[str, Any]]:
+        return await self.db.invoices.find(
+            {"session_id": session_id}, {"_id": 0},
+        ).to_list(2000)
+
+    # -------------------------------------------------------------------------
+    # Public — per-invoice canonical snapshot.
+    # -------------------------------------------------------------------------
+    async def get_invoice_snapshot(self, invoice_id: str) -> Optional[Dict[str, Any]]:
+        """Return the canonical financial snapshot for a single invoice.
+        Returns None if the invoice does not exist.
+        """
+        inv = await self.db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+        if not inv:
+            return None
+        payments_map = await self._load_payments_for_invoices([invoice_id])
+        cn_map = await self._load_credit_notes_for_invoices([invoice_id])
+        return self._compute_invoice_snapshot(inv, payments_map.get(invoice_id, []), cn_map.get(invoice_id, []))
+
+    def _compute_invoice_snapshot(
+        self,
+        inv: Dict[str, Any],
+        payments: List[Dict[str, Any]],
+        credit_notes: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        warnings: List[Dict[str, str]] = []
+
+        document_face_value = _round(inv.get("total_amount", 0))
+        is_proforma = _is_proforma(inv)
+        is_revenue_eligible = _is_revenue_eligible_invoice(inv)
+
+        # ---- Credit Note adjustment (only for real invoices) ----
+        active_cns = [c for c in credit_notes if _cn_is_active(c)]
+        voided_cns = [c for c in credit_notes if not _cn_is_active(c)]
+        cn_total = _round(sum(float(c.get("amount") or 0) for c in active_cns))
+
+        # ---- Net invoiced value ----
+        # A proforma contributes 0 to net invoiced value.
+        # A voided/cancelled/converted invoice contributes 0.
+        if is_proforma or (inv.get("status") in EXCLUDED_INVOICE_STATUSES):
+            net_invoiced = 0.0
+        else:
+            net_invoiced = _round(document_face_value - cn_total)
+            if net_invoiced < 0:
+                warnings.append({
+                    "code": W_NET_NEGATIVE_AFTER_CN,
+                    "message": (
+                        f"Credit notes ({cn_total}) exceed invoice face value "
+                        f"({document_face_value})."
+                    ),
+                })
+
+        # ---- Valid payments ----
+        valid_payments = [p for p in payments if _payment_is_valid(p)]
+        reversed_payments = [p for p in payments if not _payment_is_valid(p)]
+        paid_amount = _round(sum(float(p.get("amount") or 0) for p in valid_payments))
+
+        # ---- Outstanding & overpayment ----
+        # Net invoiced value is the target. Preserve overpayment as info.
+        if is_proforma:
+            outstanding = 0.0
+            overpayment = 0.0
+        else:
+            # Guard against silent negative — but do surface overpayment.
+            outstanding = _round(max(0.0, net_invoiced - paid_amount))
+            overpayment = _round(max(0.0, paid_amount - net_invoiced))
+            if overpayment > 0:
+                warnings.append({
+                    "code": W_OVERPAYMENT,
+                    "message": f"Paid {paid_amount} exceeds net invoiced {net_invoiced}.",
+                })
+
+        # ---- Warning: voided invoice with active payments ----
+        if (inv.get("status") or "").lower() in {"voided", "cancelled", "deleted"} and valid_payments:
+            warnings.append({
+                "code": W_VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS,
+                "message": (
+                    f"Invoice status is {inv.get('status')} but "
+                    f"{len(valid_payments)} active payment(s) exist."
+                ),
+            })
+
+        # ---- Payment status label ----
+        payment_status = self._derive_payment_status(is_proforma, net_invoiced, paid_amount, inv)
+
+        return {
+            "invoice_id": inv.get("id"),
+            "invoice_number": inv.get("invoice_number"),
+            "session_id": inv.get("session_id"),
+            "company_name": inv.get("company_name") or inv.get("bill_to_name"),
+            "document_type": inv.get("document_type") or INVOICE_DOC_TYPE,
+            "is_proforma": is_proforma,
+            "is_revenue_eligible": is_revenue_eligible,
+            "status": inv.get("status"),
+            "converted_from_proforma_id": inv.get("converted_from_proforma_id"),
+            "converted_to_invoice_id": inv.get("converted_to_invoice_id"),
+
+            # Canonical financial values
+            "document_face_value": document_face_value,
+            "credit_note_total": cn_total,
+            "credit_note_count": len(active_cns),
+            "voided_credit_note_count": len(voided_cns),
+            "net_invoiced_value": net_invoiced,
+            "paid_amount": paid_amount,
+            "reversed_payment_count": len(reversed_payments),
+            "valid_payment_count": len(valid_payments),
+            "outstanding_amount": outstanding,
+            "overpayment_amount": overpayment,
+            "payment_status": payment_status,
+
+            # Audit breakdown
+            "breakdown": {
+                "gross_invoice_value": document_face_value,
+                "credit_notes_deducted": cn_total,
+                "net_invoiced_value": net_invoiced,
+                "valid_payments": paid_amount,
+                "outstanding": outstanding,
+            },
+            "integrity_warnings": warnings,
+        }
+
+    @staticmethod
+    def _derive_payment_status(is_proforma: bool, net_invoiced: float, paid: float, inv: Dict[str, Any]) -> str:
+        if is_proforma:
+            return "n/a_proforma"
+        status = (inv.get("status") or "").lower()
+        if status in EXCLUDED_INVOICE_STATUSES:
+            return status
+        if net_invoiced <= 0:
+            return "fully_credited"
+        if paid <= 0:
+            return "unpaid"
+        if paid < net_invoiced:
+            return "partially_paid"
+        if paid == net_invoiced:
+            return "paid"
+        return "overpaid"
+
+    # -------------------------------------------------------------------------
+    # Public — session canonical snapshot (aggregates multiple invoices).
+    # -------------------------------------------------------------------------
+    async def get_session_snapshot(self, session_id: str) -> Optional[Dict[str, Any]]:
+        session = await self._load_session(session_id)
+        if not session:
+            return None
+
+        invoices = await self._load_session_invoices(session_id)
+        invoice_ids = [i["id"] for i in invoices if i.get("id")]
+        payments_map = await self._load_payments_for_invoices(invoice_ids)
+        cn_map = await self._load_credit_notes_for_invoices(invoice_ids)
+
+        return await self._compute_session_snapshot(session, invoices, payments_map, cn_map)
+
+    async def _compute_session_snapshot(
+        self,
+        session: Dict[str, Any],
+        invoices: List[Dict[str, Any]],
+        payments_map: Dict[str, List[Dict[str, Any]]],
+        cn_map: Dict[str, List[Dict[str, Any]]],
+    ) -> Dict[str, Any]:
+        session_id = session.get("id")
+        warnings: List[Dict[str, str]] = []
+
+        # Separate proformas vs invoices vs excluded
+        proformas: List[Dict[str, Any]] = []
+        active_invoices: List[Dict[str, Any]] = []
+        excluded_invoices: List[Dict[str, Any]] = []
+        for inv in invoices:
+            if _is_proforma(inv):
+                proformas.append(inv)
+            elif not _is_revenue_eligible_invoice(inv):
+                excluded_invoices.append(inv)
+            else:
+                active_invoices.append(inv)
+
+        # ---- Warning: multiple active proformas ----
+        active_proformas = [p for p in proformas if (p.get("status") or "").lower() not in {"converted", "cancelled", "voided"}]
+        if len(active_proformas) > 1:
+            warnings.append({
+                "code": W_MULTIPLE_ACTIVE_PROFORMAS,
+                "message": f"Session has {len(active_proformas)} active proformas.",
+            })
+
+        # ---- Warning: proforma+invoice look like same value with no reliable link ----
+        # For each active proforma, check whether any real invoice references it via
+        # converted_from_proforma_id. If not AND another invoice has the same face value,
+        # flag ambiguity. Do NOT sum both.
+        linked_proforma_ids = {inv.get("converted_from_proforma_id") for inv in invoices if inv.get("converted_from_proforma_id")}
+        for pf in proformas:
+            pf_amount = _round(pf.get("total_amount", 0))
+            if pf.get("id") in linked_proforma_ids:
+                continue  # link is known — safe
+            for inv in active_invoices:
+                if _round(inv.get("total_amount", 0)) == pf_amount:
+                    warnings.append({
+                        "code": W_PROFORMA_UNLINKED_MATCH,
+                        "message": (
+                            f"Proforma {pf.get('invoice_number')} (RM {pf_amount}) and "
+                            f"Invoice {inv.get('invoice_number')} (RM {pf_amount}) "
+                            f"share the same value with no reliable link. "
+                            f"Counted ONCE as invoiced (proforma excluded)."
+                        ),
+                        "proforma_id": pf.get("id"),
+                        "invoice_id": inv.get("id"),
+                    })
+                    break
+
+        # ---- Warning: duplicate invoice numbers in this session ----
+        seen_numbers: Dict[str, int] = {}
+        for inv in active_invoices:
+            n = inv.get("invoice_number")
+            if not n:
+                continue
+            seen_numbers[n] = seen_numbers.get(n, 0) + 1
+        for n, c in seen_numbers.items():
+            if c > 1:
+                warnings.append({
+                    "code": W_DUPLICATE_INVOICE_NUMBER,
+                    "message": f"Invoice number {n} appears {c} times in this session.",
+                })
+
+        # ---- Per-invoice snapshots (only for active invoices) ----
+        invoice_snapshots = []
+        gross_invoice_value = 0.0
+        credit_note_total = 0.0
+        net_invoiced_value = 0.0
+        paid_amount = 0.0
+        outstanding_amount = 0.0
+        overpayment_amount = 0.0
+        for inv in active_invoices:
+            snap = self._compute_invoice_snapshot(
+                inv,
+                payments_map.get(inv.get("id"), []),
+                cn_map.get(inv.get("id"), []),
+            )
+            invoice_snapshots.append(snap)
+            gross_invoice_value += snap["document_face_value"]
+            credit_note_total += snap["credit_note_total"]
+            net_invoiced_value += snap["net_invoiced_value"]
+            paid_amount += snap["paid_amount"]
+            outstanding_amount += snap["outstanding_amount"]
+            overpayment_amount += snap["overpayment_amount"]
+            warnings.extend(snap["integrity_warnings"])
+
+        # ---- Session cost & gross profit ----
+        cost_breakdown = await self._compute_session_cost(session_id)
+        session_cost = cost_breakdown["total"]
+        session_revenue = _round(net_invoiced_value)
+        gross_profit = _round(session_revenue - session_cost)
+
+        return {
+            "session_id": session_id,
+            "session_name": session.get("name"),
+            "company_id": session.get("company_id"),
+
+            # Document counts
+            "invoice_count": len(active_invoices),
+            "proforma_count": len(proformas),
+            "excluded_invoice_count": len(excluded_invoices),
+
+            # Canonical amounts
+            "gross_invoice_value": _round(gross_invoice_value),
+            "credit_note_total": _round(credit_note_total),
+            "net_invoiced_value": _round(net_invoiced_value),
+            "paid_amount": _round(paid_amount),
+            "outstanding_amount": _round(outstanding_amount),
+            "overpayment_amount": _round(overpayment_amount),
+
+            # Revenue / cost / profit
+            "session_revenue": session_revenue,
+            "session_cost": session_cost,
+            "session_cost_breakdown": cost_breakdown,
+            "gross_profit": gross_profit,
+            "gross_margin_pct": _round((gross_profit / session_revenue * 100) if session_revenue > 0 else 0),
+
+            # Audit
+            "invoices": invoice_snapshots,
+            "breakdown": {
+                "gross_invoice_value": _round(gross_invoice_value),
+                "credit_notes_deducted": _round(credit_note_total),
+                "net_invoiced_value": _round(net_invoiced_value),
+                "valid_payments": _round(paid_amount),
+                "outstanding": _round(outstanding_amount),
+                "session_cost": session_cost,
+                "gross_profit": gross_profit,
+            },
+            "integrity_warnings": warnings,
+        }
+
+    # -------------------------------------------------------------------------
+    # Session cost aggregation (READ-ONLY view of existing cost records).
+    # -------------------------------------------------------------------------
+    async def _compute_session_cost(self, session_id: str) -> Dict[str, Any]:
+        trainer_fees = await self.db.trainer_fees.find({"session_id": session_id}, {"_id": 0}).to_list(500)
+        trainer_total = _round(sum(float(f.get("fee_amount") or 0) for f in trainer_fees))
+
+        coord = await self.db.coordinator_fees.find_one({"session_id": session_id}, {"_id": 0})
+        coord_total = _round(float(coord.get("total_fee") or 0) if coord else 0)
+
+        expenses = await self.db.session_expenses.find({"session_id": session_id}, {"_id": 0}).to_list(500)
+        expense_total = _round(sum(float(e.get("actual_amount") or e.get("estimated_amount") or 0) for e in expenses))
+
+        marketing_docs = await self.db.marketing_commissions.find(
+            {"session_id": session_id}, {"_id": 0},
+        ).to_list(500)
+        marketing_total = _round(sum(float(m.get("calculated_amount") or 0) for m in marketing_docs))
+
+        total = _round(trainer_total + coord_total + expense_total + marketing_total)
+        return {
+            "trainer_fees": trainer_total,
+            "coordinator_fees": coord_total,
+            "expenses": expense_total,
+            "marketing_and_admin": marketing_total,
+            "total": total,
+        }
+
+    # -------------------------------------------------------------------------
+    # Standalone integrity scans (read-only) — used for tests 12, 13.
+    # -------------------------------------------------------------------------
+    async def find_payment_integrity_warnings(self, sample_size: int = 5000) -> List[Dict[str, Any]]:
+        """Return payments whose invoice_id references a missing invoice."""
+        payments = await self.db.payments.find(
+            {"status": {"$ne": REVERSED_PAYMENT_STATUS}},
+            {"_id": 0, "id": 1, "invoice_id": 1, "receipt_number": 1, "amount": 1},
+        ).limit(sample_size).to_list(sample_size)
+        invoice_ids = list({p.get("invoice_id") for p in payments if p.get("invoice_id")})
+        existing = set()
+        if invoice_ids:
+            docs = await self.db.invoices.find(
+                {"id": {"$in": invoice_ids}}, {"_id": 0, "id": 1},
+            ).to_list(len(invoice_ids))
+            existing = {d["id"] for d in docs}
+        warnings = []
+        for p in payments:
+            inv_id = p.get("invoice_id")
+            if inv_id and inv_id not in existing:
+                warnings.append({
+                    "code": W_PAYMENT_MISSING_INVOICE,
+                    "payment_id": p.get("id"),
+                    "invoice_id": inv_id,
+                    "receipt_number": p.get("receipt_number"),
+                    "amount": p.get("amount"),
+                    "message": f"Payment {p.get('receipt_number')} references missing invoice {inv_id}.",
+                })
+        return warnings
+
+    async def find_credit_note_integrity_warnings(self, sample_size: int = 5000) -> List[Dict[str, Any]]:
+        """Return credit notes whose invoice_id references a missing invoice."""
+        cns = await self.db.credit_notes.find(
+            {"invoice_id": {"$ne": None}},
+            {"_id": 0, "id": 1, "invoice_id": 1, "cn_number": 1, "amount": 1, "status": 1},
+        ).limit(sample_size).to_list(sample_size)
+        invoice_ids = list({c.get("invoice_id") for c in cns if c.get("invoice_id")})
+        existing = set()
+        if invoice_ids:
+            docs = await self.db.invoices.find(
+                {"id": {"$in": invoice_ids}}, {"_id": 0, "id": 1},
+            ).to_list(len(invoice_ids))
+            existing = {d["id"] for d in docs}
+        warnings = []
+        for c in cns:
+            inv_id = c.get("invoice_id")
+            if inv_id and inv_id not in existing:
+                warnings.append({
+                    "code": W_CN_MISSING_INVOICE,
+                    "credit_note_id": c.get("id"),
+                    "invoice_id": inv_id,
+                    "cn_number": c.get("cn_number"),
+                    "amount": c.get("amount"),
+                    "status": c.get("status"),
+                    "message": f"Credit Note {c.get('cn_number')} references missing invoice {inv_id}.",
+                })
+        return warnings

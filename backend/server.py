@@ -324,6 +324,7 @@ from routes import (
     admin_data_management_router,
     certificate_verify_router,
     admin_fee_router,
+    finance_source_of_truth_router,
 )
 
 # Import accounting auto-posting functions (Phase 2)
@@ -375,6 +376,7 @@ api_router.include_router(vehicle_details_router)
 api_router.include_router(admin_data_management_router)
 api_router.include_router(certificate_verify_router)
 api_router.include_router(admin_fee_router)
+api_router.include_router(finance_source_of_truth_router)
 # ==================== END MODULAR ROUTERS ====================
 
 # Static files directory
