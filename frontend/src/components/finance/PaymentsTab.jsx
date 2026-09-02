@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { CreditCard, RefreshCw, Receipt, Paperclip, Image as ImageIcon, X } from "lucide-react";
+import { CreditCard, RefreshCw, Receipt, Paperclip, Image as ImageIcon, X, History } from "lucide-react";
 
 const initialPaymentForm = {
   invoice_id: '',
@@ -40,6 +40,7 @@ const PaymentsTab = ({
   companySettings,
   onRefresh,
   selectedInvoiceId,
+  onViewAllPayments,
 }) => {
   const [paymentForm, setPaymentForm] = useState({
     ...initialPaymentForm,
@@ -535,11 +536,24 @@ const PaymentsTab = ({
       {/* Recent Payments */}
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center flex-wrap gap-2">
             <CardTitle>Recent Payments</CardTitle>
-            <Button variant="outline" size="sm" onClick={onRefresh}>
-              <RefreshCw className="w-4 h-4" />
-            </Button>
+            <div className="flex gap-2">
+              {onViewAllPayments && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onViewAllPayments}
+                  data-testid="view-all-payments-btn"
+                >
+                  <History className="w-4 h-4 mr-1" />
+                  View All Payments
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={onRefresh}>
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

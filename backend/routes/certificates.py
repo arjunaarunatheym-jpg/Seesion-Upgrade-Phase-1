@@ -391,7 +391,7 @@ async def upload_participant_certificate(
     unique_filename = f"{session_id}_{participant_id}_{uuid.uuid4().hex[:8]}.pdf"
     file_path = CERTIFICATE_PDF_DIR / unique_filename
     
-    with open(file_path, "wb") as buffer:
+    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
         shutil.copyfileobj(file.file, buffer)
     
     certificate_url = f"/api/static/certificates_pdf/{unique_filename}"

@@ -23,6 +23,7 @@ import { downloadPdf, downloadPdfLandscape } from '../utils/htmlToPdf';
 import { DigitalSignatureManager } from '../components/shared/DigitalSignatureManager';
 import { InvoicesTab } from '../components/finance/InvoicesTab';
 import { PaymentsTab } from '../components/finance/PaymentsTab';
+import { PaymentHistoryTab } from '../components/finance/PaymentHistoryTab';
 import AdminFeePayoutsPanel from '../components/admin/AdminFeePayoutsPanel';
 import { CreditNotesTab } from '../components/finance/CreditNotesTab';
 import { PayablesTab } from '../components/finance/PayablesTab';
@@ -1690,6 +1691,10 @@ const FinanceDashboard = ({ user, onLogout }) => {
             <TabsTrigger value="invoices" className="flex-shrink-0 text-xs sm:text-sm">Invoices</TabsTrigger>
             <TabsTrigger value="payables" className="flex-shrink-0 text-xs sm:text-sm">Payables</TabsTrigger>
             <TabsTrigger value="payments" className="flex-shrink-0 text-xs sm:text-sm">Payments</TabsTrigger>
+            <TabsTrigger value="payment-history" className="flex-shrink-0 text-xs sm:text-sm" data-testid="payment-history-tab">
+              <BookOpen className="w-4 h-4 mr-1 hidden sm:inline" />
+              Payment History
+            </TabsTrigger>
             <TabsTrigger value="credit-notes" className="flex-shrink-0 text-xs sm:text-sm">Credit Notes</TabsTrigger>
             <TabsTrigger value="profit-loss" className="flex-shrink-0 text-xs sm:text-sm">
               <BarChart3 className="w-4 h-4 mr-1 hidden sm:inline" />
@@ -1877,7 +1882,13 @@ const FinanceDashboard = ({ user, onLogout }) => {
               companySettings={companySettings}
               onRefresh={() => { loadPayments(); loadInvoices(); loadDashboard(); }}
               selectedInvoiceId={paymentForm.invoice_id}
+              onViewAllPayments={() => setActiveTab('payment-history')}
             />
+          </TabsContent>
+
+          {/* Payment History Tab */}
+          <TabsContent value="payment-history">
+            <PaymentHistoryTab />
           </TabsContent>
 
           {/* Credit Notes Tab */}

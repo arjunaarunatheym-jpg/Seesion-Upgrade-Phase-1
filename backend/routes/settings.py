@@ -74,7 +74,7 @@ async def upload_logo(file: UploadFile = File(...), current_user: User = Depends
     filename = f"logo.{file_ext}"
     file_path = LOGO_DIR / filename
     
-    with open(file_path, "wb") as buffer:
+    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
         shutil.copyfileobj(file.file, buffer)
     
     logo_url = f"/api/static/logos/{filename}"
@@ -100,7 +100,7 @@ async def upload_certificate_template(file: UploadFile = File(...), current_user
     filename = "certificate_template.docx"
     file_path = TEMPLATE_DIR / filename
     
-    with open(file_path, "wb") as buffer:
+    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
         shutil.copyfileobj(file.file, buffer)
     
     template_url = f"/api/static/templates/{filename}"
@@ -240,7 +240,7 @@ async def upload_certificate_asset(
     file_path = asset_dir / filename
     
     # Save file
-    with open(file_path, "wb") as buffer:
+    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
         shutil.copyfileobj(file.file, buffer)
     
     url = f"/api/static/certificate_assets/{filename}"

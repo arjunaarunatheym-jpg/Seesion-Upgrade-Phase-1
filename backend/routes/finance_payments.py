@@ -2,10 +2,14 @@
 Finance Payments & Credit Notes routes
 Stage F3: ~18 endpoints
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi.responses import StreamingResponse
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel
+import csv
+import io
+import math
 import uuid
 import pytz
 
@@ -187,6 +191,329 @@ async def get_payments(current_user: User = Depends(get_current_user)):
             p["has_hrdcorp_invoice"] = p["id"] in hrd_set
     
     return payments
+
+
+# ============ PAYMENT HISTORY (Phase 1) ============
+# Server-side searchable / filterable / paginated read-only history view.
+# Existing GET /payments is preserved for the "Recent Payments" dashboard widget.
+PAYMENT_HISTORY_MAX_PAGE_SIZE = 100
+PAYMENT_HISTORY_ALLOWED_SORTS = {
+    "newest": [("payment_date", -1), ("created_at", -1)],
+    "oldest": [("payment_date", 1), ("created_at", 1)],
+    "highest": [("amount", -1), ("payment_date", -1)],
+    "lowest": [("amount", 1), ("payment_date", -1)],
+}
+
+
+def _escape_regex(s: str) -> str:
+    """Escape user input for use in a MongoDB regex query."""
+    import re
+    return re.escape(s or "")
+
+
+async def _build_payment_history_query(
+    q: Optional[str],
+    date_from: Optional[str],
+    date_to: Optional[str],
+    payment_method: Optional[str],
+    funding_source: Optional[str],
+    status: Optional[str],
+) -> dict:
+    """Build the Mongo query for payment history (server-side filtering)."""
+    query: dict = {}
+
+    # Date range filter (payment_date is stored as ISO date string 'YYYY-MM-DD')
+    date_filter: dict = {}
+    if date_from:
+        date_filter["$gte"] = date_from
+    if date_to:
+        date_filter["$lte"] = date_to
+    if date_filter:
+        query["payment_date"] = date_filter
+
+    if payment_method and payment_method != "all":
+        query["payment_method"] = payment_method
+
+    if funding_source and funding_source != "all":
+        query["payment_type"] = funding_source
+
+    # Status: 'active' (default in UI) => exclude reversed; 'reversed' => only reversed; 'all' => everything
+    if status == "reversed":
+        query["status"] = "reversed"
+    elif status == "active" or not status:
+        query["status"] = {"$ne": "reversed"}
+    # 'all' -> no status filter
+
+    # Search: match receipt_number OR reference_number OR resolve invoice/company via a pre-lookup
+    if q and q.strip():
+        term = q.strip()
+        pattern = _escape_regex(term)
+        or_clauses = [
+            {"receipt_number": {"$regex": pattern, "$options": "i"}},
+            {"reference_number": {"$regex": pattern, "$options": "i"}},
+            {"hrdcorp_invoice_number": {"$regex": pattern, "$options": "i"}},
+        ]
+
+        # Resolve matching invoices by invoice_number OR company/bill-to name and add invoice_id filter
+        matching_invoices = await db.invoices.find(
+            {
+                "$or": [
+                    {"invoice_number": {"$regex": pattern, "$options": "i"}},
+                    {"company_name": {"$regex": pattern, "$options": "i"}},
+                    {"bill_to_name": {"$regex": pattern, "$options": "i"}},
+                    {"session_name": {"$regex": pattern, "$options": "i"}},
+                    {"programme_name": {"$regex": pattern, "$options": "i"}},
+                ]
+            },
+            {"_id": 0, "id": 1},
+        ).to_list(2000)
+        invoice_ids = [inv["id"] for inv in matching_invoices if inv.get("id")]
+        if invoice_ids:
+            or_clauses.append({"invoice_id": {"$in": invoice_ids}})
+
+        query["$or"] = or_clauses
+
+    return query
+
+
+async def _enrich_payments_with_invoice(payments: list) -> list:
+    """Attach invoice_number, company_name and session/programme info to each payment."""
+    invoice_ids = list({p.get("invoice_id") for p in payments if p.get("invoice_id")})
+    invoice_map: dict = {}
+    session_map: dict = {}
+
+    if invoice_ids:
+        invoices = await db.invoices.find(
+            {"id": {"$in": invoice_ids}},
+            {
+                "_id": 0,
+                "id": 1,
+                "invoice_number": 1,
+                "company_name": 1,
+                "bill_to_name": 1,
+                "session_id": 1,
+                "session_name": 1,
+                "programme_name": 1,
+                "total_amount": 1,
+            },
+        ).to_list(len(invoice_ids))
+        invoice_map = {inv["id"]: inv for inv in invoices if inv.get("id")}
+
+        session_ids = list({inv.get("session_id") for inv in invoices if inv.get("session_id")})
+        if session_ids:
+            sessions = await db.sessions.find(
+                {"id": {"$in": session_ids}},
+                {"_id": 0, "id": 1, "program_id": 1, "funding_source": 1, "start_date": 1},
+            ).to_list(len(session_ids))
+            session_map = {s["id"]: s for s in sessions if s.get("id")}
+
+            program_ids = list({s.get("program_id") for s in sessions if s.get("program_id")})
+            if program_ids:
+                programs = await db.programs.find(
+                    {"id": {"$in": program_ids}}, {"_id": 0, "id": 1, "name": 1}
+                ).to_list(len(program_ids))
+                program_map = {p["id"]: p.get("name") for p in programs if p.get("id")}
+                for s in session_map.values():
+                    s["program_name"] = program_map.get(s.get("program_id"))
+
+    # Presence flags for attachments (avoid ever streaming base64 blobs to the list view)
+    payment_ids = [p["id"] for p in payments if p.get("id")]
+    receipt_set = set()
+    hrd_set = set()
+    if payment_ids:
+        with_receipt = await db.payments.find(
+            {"id": {"$in": payment_ids}, "receipt_url": {"$exists": True, "$nin": [None, ""]}},
+            {"_id": 0, "id": 1},
+        ).to_list(len(payment_ids))
+        with_hrd_inv = await db.payments.find(
+            {"id": {"$in": payment_ids}, "hrdcorp_invoice_url": {"$exists": True, "$nin": [None, ""]}},
+            {"_id": 0, "id": 1},
+        ).to_list(len(payment_ids))
+        receipt_set = {p["id"] for p in with_receipt}
+        hrd_set = {p["id"] for p in with_hrd_inv}
+
+    for p in payments:
+        inv = invoice_map.get(p.get("invoice_id")) or {}
+        p["invoice_number"] = inv.get("invoice_number")
+        p["company_name"] = inv.get("bill_to_name") or inv.get("company_name")
+        p["session_id"] = inv.get("session_id")
+        p["session_name"] = inv.get("session_name") or inv.get("programme_name")
+        sess = session_map.get(inv.get("session_id")) if inv.get("session_id") else None
+        if sess:
+            p["programme_name"] = sess.get("program_name") or p.get("session_name")
+            p["session_funding_source"] = sess.get("funding_source")
+        p["has_receipt"] = p.get("id") in receipt_set
+        p["has_hrdcorp_invoice"] = p.get("id") in hrd_set
+    return payments
+
+
+@router.get("/payments/history")
+async def get_payment_history(
+    q: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    funding_source: Optional[str] = None,
+    status: Optional[str] = "active",
+    sort: str = "newest",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=PAYMENT_HISTORY_MAX_PAGE_SIZE),
+    current_user: User = Depends(get_current_user),
+):
+    """Server-side paginated, searchable, filterable payment history.
+    READ-ONLY — does not modify any payment/invoice data.
+    """
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    sort_spec = PAYMENT_HISTORY_ALLOWED_SORTS.get(sort, PAYMENT_HISTORY_ALLOWED_SORTS["newest"])
+    query = await _build_payment_history_query(
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+        payment_method=payment_method,
+        funding_source=funding_source,
+        status=status,
+    )
+
+    total = await db.payments.count_documents(query)
+    total_pages = max(1, math.ceil(total / page_size)) if total else 0
+    skip = (page - 1) * page_size
+
+    projection = {"_id": 0, "receipt_url": 0, "hrdcorp_invoice_url": 0}
+    cursor = db.payments.find(query, projection).sort(sort_spec).skip(skip).limit(page_size)
+    items = await cursor.to_list(page_size)
+    items = await _enrich_payments_with_invoice(items)
+
+    return {
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "sort": sort,
+        "filters": {
+            "q": q,
+            "date_from": date_from,
+            "date_to": date_to,
+            "payment_method": payment_method,
+            "funding_source": funding_source,
+            "status": status,
+        },
+    }
+
+
+@router.get("/payments/history/export")
+async def export_payment_history_csv(
+    q: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    funding_source: Optional[str] = None,
+    status: Optional[str] = "active",
+    sort: str = "newest",
+    current_user: User = Depends(get_current_user),
+):
+    """Export the currently filtered payment history as CSV. READ-ONLY."""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    sort_spec = PAYMENT_HISTORY_ALLOWED_SORTS.get(sort, PAYMENT_HISTORY_ALLOWED_SORTS["newest"])
+    query = await _build_payment_history_query(
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+        payment_method=payment_method,
+        funding_source=funding_source,
+        status=status,
+    )
+
+    # Hard cap to avoid huge exports; UI recommends narrowing filters for very large sets.
+    EXPORT_LIMIT = 5000
+    projection = {"_id": 0, "receipt_url": 0, "hrdcorp_invoice_url": 0}
+    items = await db.payments.find(query, projection).sort(sort_spec).limit(EXPORT_LIMIT).to_list(EXPORT_LIMIT)
+    items = await _enrich_payments_with_invoice(items)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "Payment Date", "Receipt Number", "Client / Company", "Invoice Number",
+        "Session / Programme", "Funding Source", "Payment Method",
+        "Reference Number", "Amount (RM)", "Status",
+    ])
+    for p in items:
+        writer.writerow([
+            p.get("payment_date") or "",
+            p.get("receipt_number") or "",
+            p.get("company_name") or "",
+            p.get("invoice_number") or "",
+            p.get("programme_name") or p.get("session_name") or "",
+            p.get("payment_type") or "",
+            p.get("payment_method") or "",
+            p.get("reference_number") or "",
+            p.get("amount") or 0,
+            p.get("status") or "active",
+        ])
+
+    buffer.seek(0)
+    filename = f"payment-history-{get_malaysia_time().strftime('%Y%m%d-%H%M%S')}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/payments/{payment_id}/detail")
+async def get_payment_detail(payment_id: str, current_user: User = Depends(get_current_user)):
+    """Read-only detail view for a single payment (Payment History)."""
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    payment = await db.payments.find_one(
+        {"id": payment_id},
+        {"_id": 0, "receipt_url": 0, "hrdcorp_invoice_url": 0},
+    )
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    invoice = None
+    session = None
+    program = None
+    if payment.get("invoice_id"):
+        invoice = await db.invoices.find_one({"id": payment["invoice_id"]}, {"_id": 0})
+        if invoice and invoice.get("session_id"):
+            session = await db.sessions.find_one({"id": invoice["session_id"]}, {"_id": 0})
+            if session and session.get("program_id"):
+                program = await db.programs.find_one({"id": session["program_id"]}, {"_id": 0, "id": 1, "name": 1})
+
+    recorded_by_name = None
+    if payment.get("recorded_by"):
+        recorder = await db.users.find_one({"id": payment["recorded_by"]}, {"_id": 0, "full_name": 1, "email": 1})
+        if recorder:
+            recorded_by_name = recorder.get("full_name") or recorder.get("email")
+
+    payment["has_receipt"] = bool(
+        await db.payments.find_one(
+            {"id": payment_id, "receipt_url": {"$exists": True, "$nin": [None, ""]}},
+            {"_id": 0, "id": 1},
+        )
+    )
+    payment["has_hrdcorp_invoice"] = bool(
+        await db.payments.find_one(
+            {"id": payment_id, "hrdcorp_invoice_url": {"$exists": True, "$nin": [None, ""]}},
+            {"_id": 0, "id": 1},
+        )
+    )
+
+    return {
+        "payment": payment,
+        "invoice": invoice,
+        "session": session,
+        "program": program,
+        "recorded_by_name": recorded_by_name,
+    }
+# ============ END PAYMENT HISTORY ============
 
 
 @router.post("/payments")

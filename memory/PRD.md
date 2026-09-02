@@ -78,10 +78,23 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
   2. Repair — voids all later duplicate journals per source (keeps earliest as authoritative), fully audited with reason.
 - Backend endpoints: `GET /superadmin/audit/duplicate-invoice-journals`, `POST /superadmin/audit/repair-duplicate-journals`
 
+### Full Payment History — Phase 1 (Feb 2026)
+- **New Finance tab** `Payment History` (data-testid=`payment-history-tab`) — server-side searchable, filterable, sorted, paginated read-only ledger. Complements (does NOT replace) the existing Recent Payments widget.
+- **Backend**: `GET /api/finance/payments/history` (query: q, date_from, date_to, payment_method, funding_source, status, sort, page, page_size). Response envelope: `{ items, page, page_size, total, total_pages, sort, filters }`. Search matches receipt/reference/HRDCorp invoice #, plus invoice/company/programme via join. Sorts: newest/oldest/highest/lowest. Default page_size=25, max=100.
+- **CSV export**: `GET /api/finance/payments/history/export` (hard-capped at 5000 rows).
+- **Detail view**: `GET /api/finance/payments/{id}/detail` returns payment, invoice, session, programme, recorder — read-only.
+- **Recent Payments** widget now has a "View All Payments" button (data-testid=`view-all-payments-btn`) that switches to the Payment History tab.
+- **Indexes** (added via `/app/backend/add_payment_history_indexes.py`): payment_date_created_desc, payment_amount, payment_method, payment_type, payment_status, payment_invoice_id, payment_receipt_number, payment_reference_number, invoice_number_idx, invoice_company_name_idx, invoice_bill_to_name_idx.
+- **Financial logic**: NOT modified. Read-only guarantee asserted by pytest.
+- **Tests**: 18 tests in `/app/backend/tests/test_payment_history.py` — all passing (default sort, pagination, page-size, >100 records access, search by invoice/receipt/company, date/method/funding filters, empty state, auth 403/401, recent-payments regression, existing-payments-unchanged, payment detail, sort highest, status=reversed).
+- **Frontend**: `/app/frontend/src/components/finance/PaymentHistoryTab.jsx` (search debounced 400 ms; filters, sort, page-size, pagination controls; detail dialog; CSV export; empty/loading/error states).
+
 ## P0 — In Progress / Pending
 - System-wide digital signature audit & implementation (Receipts, Payslips, Pay Advice, EA Forms, Claim Forms, Credit Notes)
+- File & Media Storage (Emergent Object Storage) — deferred by user; will pick up when requested
 
 ## P1 — Upcoming
+- Payment History polish (default status filter to 'All' if user prefers) + Phase 2 (payment integrity / reversal rules moved into the history page)
 - Email integration (Resend) + WhatsApp link integration
 - Trainer Contract Workflow
 - Session P&L / Profitability view (revenue vs expenses per session)

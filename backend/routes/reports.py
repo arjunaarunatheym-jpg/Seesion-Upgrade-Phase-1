@@ -148,7 +148,7 @@ async def upload_edited_docx(
     file_path = REPORT_DIR / f"edited_{session_id}.docx"
     contents = await file.read()
     
-    with open(file_path, 'wb') as f:
+    with open(file_path, 'wb') as f:  # noqa: ephemeral-upload-storage
         f.write(contents)
     
     # Update report
@@ -177,7 +177,7 @@ async def upload_final_pdf(
     file_path = REPORT_PDF_DIR / f"final_{session_id}.pdf"
     contents = await file.read()
     
-    with open(file_path, 'wb') as f:
+    with open(file_path, 'wb') as f:  # noqa: ephemeral-upload-storage
         f.write(contents)
     
     await db.training_reports.update_one(

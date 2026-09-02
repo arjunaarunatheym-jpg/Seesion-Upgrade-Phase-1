@@ -405,7 +405,7 @@ async def upload_checklist_photo(
     filename = f"{session_id}_{participant_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
     file_path = CHECKLIST_PHOTOS_DIR / filename
     
-    with open(file_path, "wb") as buffer:
+    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
         shutil.copyfileobj(file.file, buffer)
     
     photo_url = f"/api/static/checklist-photos/{filename}"

@@ -1,0 +1,35 @@
+{
+  "summary": "Full end-to-end test of the new READ-ONLY Payment History feature (Finance Dashboard). Backend: ran /app/backend/tests/test_payment_history.py — 18/18 pytest tests passed (list, pagination, page-size, >100 records, search by invoice/receipt/company, date/method/funding/status filters, empty result, unauthorized/no-token, recent-payments still works, existing payments unchanged, payment detail, sort highest, status=Reversed). Frontend: logged in as arjuna@mddrc.com.my, navigated to Finance Dashboard, verified 'Payment History' tab (data-testid=payment-history-tab) alongside Payments tab; verified Recent Payments card still renders with new 'View All Payments' button (data-testid=view-all-payments-btn) which correctly switches to Payment History tab. Verified table has all 11 required columns (Date, Receipt #, Client/Company, Invoice #, Programme, Funding, Method, Reference, Amount, Status, Actions). Confirmed working: server-side search (debounced, resets to page 1), status filter (Reversed shows red badges), clear filters, sort (newest/highest), page size (25 -> 50), payment detail dialog (data-testid=ph-detail-body) with receipt/date/amount/method/reference/client/invoice/programme/recorded-by/timestamps, Export CSV button triggers download (payment-history-2026-09-02.csv). No data mutation observed — all endpoints are GET-only and pytest 'existing_payments_unchanged' passed. Recording form on Payments tab still renders (not submitted).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Payment History table", "issues": ["Default Status filter is 'Active' (not 'All') — reversed payments are hidden until user explicitly selects Reversed/All. Consider defaulting to 'All' so users see complete history at first glance. This is a UX suggestion, not a bug."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_payment_history.py",
+    "/app/test_reports/pytest/test_payment_history_results.xml"
+  ],
+  "action_items": [
+    "(Optional UX) Consider defaulting Payment History status filter to 'All' instead of 'Active' so users immediately see the complete historical set including Reversed entries."
+  ],
+  "critical_code_review_comments": [
+    "Feature is genuinely READ-ONLY: routes are GET-only, no writes to payments/invoices/ledger observed; pytest test_existing_payments_unchanged confirms DB state preserved.",
+    "Endpoint returns clean pagination envelope { items, page, page_size, total, total_pages, sort, filters } — good API design.",
+    "Authorization enforced correctly: non-finance role returns 403, no token returns 401 (both pytest-verified).",
+    "MongoDB indexes were pre-created (payment_date_created_desc etc.) — good for query performance on historical scans."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (18/18)", "frontend": "100% of tested flows"},
+  "test_credentials": "arjuna@mddrc.com.my / Dana102229 (super_admin, has finance perms)",
+  "seed_data_creation": "None. Test used existing 4 payments in DB (2 Active, 2 Reversed).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Payment History feature (Phase 1) fully verified — backend endpoints (/api/finance/payments/history, /history/export, /{id}/detail) and PaymentHistoryTab component both fully functional and integrated. Only observation: default status filter='Active' hides Reversed payments; may want to change to 'All' if UX feedback comes in. The Finance Dashboard has 13 tabs; use data-testid='payment-history-tab' and 'view-all-payments-btn' for future regressions. Preview URL: https://training-finance-hub-1.preview.emergentagent.com",
+  "rca of the issue": "N/A — no bugs found."
+}
