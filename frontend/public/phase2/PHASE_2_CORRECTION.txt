@@ -1,0 +1,85 @@
+Phase 2 — Consolidated Correction (Post-Review)
+================================================
+Date: 2026-02-02
+
+CORRECTION 1 — Strict Whitelist Revenue Eligibility
+---------------------------------------------------
+File: backend/services/financial_source_of_truth.py
+
+Before:
+    _is_revenue_eligible_invoice() returned True for any invoice whose
+    status was not in EXCLUDED or INFORMATIONAL sets. Legacy/unknown
+    statuses could be silently counted as revenue.
+
+After:
+    _is_revenue_eligible_invoice() is a STRICT whitelist:
+        return (not proforma) AND (normalized_status in REVENUE_ELIGIBLE_INVOICE_STATUSES)
+
+    Unknown / legacy statuses:
+      - contribute 0 to net_invoiced_value
+      - contribute 0 to outstanding_amount
+      - trigger a new UNRECOGNIZED_INVOICE_STATUS warning
+      - are labelled payment_status = "n/a_unknown"
+
+    Draft invoices:
+      - contribute 0 to net_invoiced_value
+      - contribute 0 to outstanding_amount
+      - are labelled payment_status = "n/a_draft"
+
+    If a non-eligible invoice has active payments or credit notes,
+    a NON_ELIGIBLE_INVOICE_HAS_ACTIVITY warning is emitted (records
+    are preserved — the service never writes).
+
+    New helper: _normalized_status(inv)  (lowercase, whitespace-safe).
+    New constant: KNOWN_INVOICE_STATUSES = REVENUE_ELIGIBLE ∪ EXCLUDED ∪ INFORMATIONAL.
+
+CORRECTION 2 — Router Registered in server.py
+---------------------------------------------
+File: backend/server.py
+
+Verified: finance_source_of_truth_router is imported (line 327) and
+mounted via api_router.include_router(finance_source_of_truth_router)
+(line 379). Endpoints exposed:
+    GET /api/finance/source-of-truth/invoice/{invoice_id}
+    GET /api/finance/source-of-truth/session/{session_id}
+    GET /api/finance/source-of-truth/integrity/payments
+    GET /api/finance/source-of-truth/integrity/credit-notes
+
+New TEST D verifies the routes are reachable through the actual FastAPI
+app (via ASGITransport) — not through direct router instantiation.
+
+TESTS ADDED
+-----------
+backend/tests/test_financial_source_of_truth.py — 6 new cases:
+    TEST A  test_A_draft_invoice_not_revenue
+    TEST B  test_B_unknown_status_not_revenue
+    TEST C  test_C_cancelled_and_voided_consistency
+    TEST D  test_D_router_actually_mounted
+    TEST E  test_E_non_eligible_with_payment
+    TEST E2 test_E2_cancelled_with_payment_has_two_warnings
+
+TOTAL Phase 2: 17 original + 6 new = 23 tests (all passing).
+TOTAL Phase 1 regression: 26 tests (all passing).
+
+INTEGRITY WARNING CODES (updated list)
+--------------------------------------
+- PROFORMA_UNLINKED_MATCH
+- MULTIPLE_ACTIVE_PROFORMAS
+- PAYMENT_MISSING_INVOICE
+- CN_MISSING_INVOICE
+- NET_NEGATIVE_AFTER_CN
+- OVERPAYMENT
+- VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS
+- DUPLICATE_INVOICE_NUMBER
+- UNRECOGNIZED_INVOICE_STATUS         (NEW)
+- NON_ELIGIBLE_INVOICE_HAS_ACTIVITY   (NEW)
+
+DATA SAFETY
+-----------
+NO production financial records were modified or deleted.
+NO historical financial values were rewritten.
+NO Proforma→Invoice write workflow was changed.
+NO payment write or reversal workflow was changed.
+NO credit note write workflow was changed.
+Phase 1 Payment History remains functional.
+The application was NOT redeployed.

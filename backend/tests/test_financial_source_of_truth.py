@@ -447,3 +447,129 @@ async def test_nonexistent_returns_404(app_client, finance_token, db_conn, clean
     assert r1.status_code == 404
     r2 = await app_client.get("/api/finance/source-of-truth/session/nope-nope", headers=_auth(finance_token))
     assert r2.status_code == 404
+
+
+# =============================================================================
+# CORRECTION 1 & 2 — Strict whitelist eligibility + router mount verification
+# =============================================================================
+
+@pytest.mark.asyncio
+async def test_A_draft_invoice_not_revenue(app_client, finance_token, db_conn, cleanup):
+    """TEST A — Draft invoice must contribute zero canonical revenue."""
+    session = await seed_session(db_conn)
+    inv = await seed_invoice(db_conn, session["id"], 10000.0, status="draft")
+
+    r1 = await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}", headers=_auth(finance_token))
+    body = r1.json()
+    assert body["is_revenue_eligible"] is False
+    assert body["net_invoiced_value"] == 0.0
+    assert body["outstanding_amount"] == 0.0
+    assert body["payment_status"] == "n/a_draft"
+
+    r2 = await app_client.get(f"/api/finance/source-of-truth/session/{session['id']}", headers=_auth(finance_token))
+    body2 = r2.json()
+    assert body2["invoice_count"] == 0
+    assert body2["session_revenue"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_B_unknown_status_not_revenue(app_client, finance_token, db_conn, cleanup):
+    """TEST B — Unknown legacy status must contribute zero and trigger warning."""
+    session = await seed_session(db_conn)
+    inv = await seed_invoice(db_conn, session["id"], 10000.0, status="legacy_unknown")
+
+    r1 = await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}", headers=_auth(finance_token))
+    body = r1.json()
+    assert body["is_revenue_eligible"] is False
+    assert body["net_invoiced_value"] == 0.0
+    assert body["outstanding_amount"] == 0.0
+    codes = {w["code"] for w in body["integrity_warnings"]}
+    assert "UNRECOGNIZED_INVOICE_STATUS" in codes
+    assert body["payment_status"] == "n/a_unknown"
+
+    r2 = await app_client.get(f"/api/finance/source-of-truth/session/{session['id']}", headers=_auth(finance_token))
+    body2 = r2.json()
+    assert body2["session_revenue"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_C_cancelled_and_voided_consistency(app_client, finance_token, db_conn, cleanup):
+    """TEST C — Cancelled and voided invoices contribute zero canonical revenue,
+    and per-invoice + session snapshots agree.
+    """
+    for excluded_status in ("cancelled", "voided"):
+        session = await seed_session(db_conn)
+        inv = await seed_invoice(db_conn, session["id"], 10000.0, status=excluded_status)
+
+        r1 = await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}", headers=_auth(finance_token))
+        b1 = r1.json()
+        assert b1["is_revenue_eligible"] is False, f"{excluded_status} must be non-eligible"
+        assert b1["net_invoiced_value"] == 0.0
+        assert b1["outstanding_amount"] == 0.0
+        assert b1["payment_status"] == excluded_status
+
+        r2 = await app_client.get(f"/api/finance/source-of-truth/session/{session['id']}", headers=_auth(finance_token))
+        b2 = r2.json()
+        assert b2["session_revenue"] == 0.0
+        assert b2["invoice_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_D_router_actually_mounted(app_client, finance_token, db_conn, cleanup):
+    """TEST D — Route is registered on the actual FastAPI app (server.py).
+    Verifies that both the invoice and session endpoints respond with the
+    Phase 2 canonical shape rather than 404.
+    """
+    session = await seed_session(db_conn)
+    inv = await seed_invoice(db_conn, session["id"], 500.0)
+
+    r_inv = await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}", headers=_auth(finance_token))
+    assert r_inv.status_code == 200, f"invoice route not mounted: {r_inv.status_code} {r_inv.text[:200]}"
+    body_inv = r_inv.json()
+    # Canonical Phase 2 keys must be present
+    for k in ("net_invoiced_value", "is_revenue_eligible", "payment_status", "breakdown", "integrity_warnings"):
+        assert k in body_inv, f"missing canonical key: {k}"
+
+    r_sess = await app_client.get(f"/api/finance/source-of-truth/session/{session['id']}", headers=_auth(finance_token))
+    assert r_sess.status_code == 200, f"session route not mounted: {r_sess.status_code} {r_sess.text[:200]}"
+    for k in ("session_revenue", "session_cost", "gross_profit", "invoice_count", "proforma_count", "integrity_warnings"):
+        assert k in r_sess.json()
+
+
+@pytest.mark.asyncio
+async def test_E_non_eligible_with_payment(app_client, finance_token, db_conn, cleanup):
+    """TEST E — Draft invoice with an active payment.
+    Canonical net_invoiced / outstanding must remain 0.
+    Underlying payment record must NOT be changed.
+    Integrity warning should be surfaced.
+    """
+    inv = await seed_invoice(db_conn, None, 10000.0, status="draft")
+    pay = await seed_payment(db_conn, inv["id"], 2000.0)
+
+    before_pay = await db_conn.payments.find_one({"id": pay["id"]}, {"_id": 0})
+
+    r = await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}", headers=_auth(finance_token))
+    body = r.json()
+    assert body["is_revenue_eligible"] is False
+    assert body["net_invoiced_value"] == 0.0
+    assert body["outstanding_amount"] == 0.0
+    # The paid_amount is still readable (records are preserved), but canonical
+    # net/outstanding are 0 because the invoice is non-eligible.
+    assert body["paid_amount"] == 2000.0
+    codes = {w["code"] for w in body["integrity_warnings"]}
+    assert "NON_ELIGIBLE_INVOICE_HAS_ACTIVITY" in codes
+
+    after_pay = await db_conn.payments.find_one({"id": pay["id"]}, {"_id": 0})
+    assert before_pay == after_pay, "Phase 2 must never mutate payment records"
+
+
+@pytest.mark.asyncio
+async def test_E2_cancelled_with_payment_has_two_warnings(app_client, finance_token, db_conn, cleanup):
+    """Cancelled + active payment yields BOTH NON_ELIGIBLE_INVOICE_HAS_ACTIVITY
+    and VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS."""
+    inv = await seed_invoice(db_conn, None, 5000.0, status="cancelled")
+    await seed_payment(db_conn, inv["id"], 1000.0)
+    r = await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}", headers=_auth(finance_token))
+    codes = {w["code"] for w in r.json()["integrity_warnings"]}
+    assert "NON_ELIGIBLE_INVOICE_HAS_ACTIVITY" in codes
+    assert "VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS" in codes

@@ -5,12 +5,24 @@ Phase 2 — Canonical Financial Model
    = invoices.total_amount
 
 2. INVOICE ELIGIBILITY FOR REVENUE
-   Include if:
-     document_type != "proforma"
-     AND status IN {issued, partially_paid, paid}
-   Exclude if:
-     status IN {voided, cancelled, deleted, converted, draft}
-     OR document_type == "proforma"
+   STRICT whitelist:
+     include if:
+       document_type != "proforma"
+       AND normalized_status IN {issued, partially_paid, paid}
+     exclude EVERYTHING else, including:
+       - draft
+       - voided, cancelled, deleted, converted
+       - proforma (any status)
+       - any unknown/legacy status (triggers UNRECOGNIZED_INVOICE_STATUS)
+   For a non-eligible invoice:
+     net_invoiced_value = 0
+     outstanding_amount = 0
+     payment_status = one of:
+       n/a_proforma | n/a_draft | n/a_unknown
+       voided | cancelled | deleted | converted
+     Payments and Credit Notes on such invoices are preserved (never
+     written), and NON_ELIGIBLE_INVOICE_HAS_ACTIVITY is emitted when any
+     active activity exists.
 
 3. CREDIT NOTE ADJUSTMENT
    Active statuses:   {draft, approved, issued}   (reduce net)
@@ -56,3 +68,5 @@ Phase 2 — Canonical Financial Model
     OVERPAYMENT                         paid > net invoiced
     VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS  invoice is voided/cancelled but has active payments
     DUPLICATE_INVOICE_NUMBER            same invoice_number appears more than once in a session
+    UNRECOGNIZED_INVOICE_STATUS         invoice.status is outside the known set
+    NON_ELIGIBLE_INVOICE_HAS_ACTIVITY   non-eligible invoice has active payments or credit notes

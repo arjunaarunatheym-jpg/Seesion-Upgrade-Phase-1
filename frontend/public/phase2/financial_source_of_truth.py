@@ -40,11 +40,19 @@ PROFORMA_DOC_TYPE = "proforma"
 INVOICE_DOC_TYPE = "invoice"
 
 # Invoice statuses that DO count towards recognized/net invoiced value.
+# STRICT whitelist — any status not listed here contributes 0 to net invoiced.
 REVENUE_ELIGIBLE_INVOICE_STATUSES = {"issued", "partially_paid", "paid"}
 # Invoice statuses that are explicitly excluded from revenue.
 EXCLUDED_INVOICE_STATUSES = {"voided", "cancelled", "deleted", "converted"}
 # Invoices in these statuses are informational only (not yet financial docs).
 INFORMATIONAL_INVOICE_STATUSES = {"draft"}
+# Every status the app is known to write. Anything outside this set is treated
+# as unrecognized and triggers an UNRECOGNIZED_INVOICE_STATUS warning.
+KNOWN_INVOICE_STATUSES = (
+    REVENUE_ELIGIBLE_INVOICE_STATUSES
+    | EXCLUDED_INVOICE_STATUSES
+    | INFORMATIONAL_INVOICE_STATUSES
+)
 
 # Credit-note statuses that DO reduce net invoiced value.
 ACTIVE_CN_STATUSES = {"draft", "approved", "issued"}
@@ -68,10 +76,17 @@ W_NET_NEGATIVE_AFTER_CN = "NET_NEGATIVE_AFTER_CN"
 W_OVERPAYMENT = "OVERPAYMENT"
 W_VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS = "VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS"
 W_DUPLICATE_INVOICE_NUMBER = "DUPLICATE_INVOICE_NUMBER"
+W_UNRECOGNIZED_INVOICE_STATUS = "UNRECOGNIZED_INVOICE_STATUS"
+W_NON_ELIGIBLE_INVOICE_HAS_ACTIVITY = "NON_ELIGIBLE_INVOICE_HAS_ACTIVITY"
 
 
 def _round(v: float) -> float:
     return round(float(v or 0), ROUND_DP)
+
+
+def _normalized_status(inv: Dict[str, Any]) -> str:
+    """Lowercase, whitespace-stripped status. None -> ''."""
+    return (inv.get("status") or "").strip().lower()
 
 
 def _is_proforma(inv: Dict[str, Any]) -> bool:
@@ -81,20 +96,21 @@ def _is_proforma(inv: Dict[str, Any]) -> bool:
 
 
 def _is_revenue_eligible_invoice(inv: Dict[str, Any]) -> bool:
-    """An invoice document that legitimately represents recognized value.
-    Proformas, voided, cancelled, converted, deleted are excluded.
-    Draft invoices are excluded as a conservative default (not yet issued).
+    """STRICT whitelist eligibility.
+
+    Returns True *only* when:
+        - the document is not a Proforma, AND
+        - the normalized status is explicitly listed in
+          REVENUE_ELIGIBLE_INVOICE_STATUSES.
+
+    Anything else — draft, voided, cancelled, deleted, converted, unknown
+    legacy statuses, missing status — is NOT revenue-eligible.
     """
     if not inv:
         return False
     if _is_proforma(inv):
         return False
-    status = (inv.get("status") or "").lower()
-    if status in EXCLUDED_INVOICE_STATUSES:
-        return False
-    if status in INFORMATIONAL_INVOICE_STATUSES:
-        return False
-    return True
+    return _normalized_status(inv) in REVENUE_ELIGIBLE_INVOICE_STATUSES
 
 
 def _cn_is_active(cn: Dict[str, Any]) -> bool:
@@ -190,17 +206,49 @@ class FinancialSourceOfTruth:
         document_face_value = _round(inv.get("total_amount", 0))
         is_proforma = _is_proforma(inv)
         is_revenue_eligible = _is_revenue_eligible_invoice(inv)
+        normalized_status = _normalized_status(inv)
 
-        # ---- Credit Note adjustment (only for real invoices) ----
+        # ---- Unrecognized status warning (informational, non-destructive) ----
+        if not is_proforma and normalized_status not in KNOWN_INVOICE_STATUSES:
+            warnings.append({
+                "code": W_UNRECOGNIZED_INVOICE_STATUS,
+                "message": (
+                    f"Invoice status {inv.get('status')!r} is not in the "
+                    f"known set — treated as non-revenue-eligible."
+                ),
+            })
+
+        # ---- Credit Note aggregation (always read; only applied when eligible) ----
         active_cns = [c for c in credit_notes if _cn_is_active(c)]
         voided_cns = [c for c in credit_notes if not _cn_is_active(c)]
         cn_total = _round(sum(float(c.get("amount") or 0) for c in active_cns))
 
-        # ---- Net invoiced value ----
-        # A proforma contributes 0 to net invoiced value.
-        # A voided/cancelled/converted invoice contributes 0.
-        if is_proforma or (inv.get("status") in EXCLUDED_INVOICE_STATUSES):
+        # ---- Valid payments (always read; only applied when eligible) ----
+        valid_payments = [p for p in payments if _payment_is_valid(p)]
+        reversed_payments = [p for p in payments if not _payment_is_valid(p)]
+        paid_amount = _round(sum(float(p.get("amount") or 0) for p in valid_payments))
+
+        # ---- Canonical values respect STRICT eligibility ----
+        # A non-revenue-eligible document (proforma, draft, voided, cancelled,
+        # deleted, converted, unknown status) contributes 0 to net invoiced and
+        # 0 to outstanding — regardless of any activity that may exist on it.
+        if not is_revenue_eligible:
             net_invoiced = 0.0
+            outstanding = 0.0
+            overpayment = 0.0
+            # If underlying activity exists, surface it so it can be reviewed
+            # (records are preserved — the service NEVER writes).
+            if valid_payments or active_cns:
+                warnings.append({
+                    "code": W_NON_ELIGIBLE_INVOICE_HAS_ACTIVITY,
+                    "message": (
+                        f"Invoice status={inv.get('status')!r} document_type="
+                        f"{inv.get('document_type')!r} is not revenue-eligible "
+                        f"but has {len(valid_payments)} active payment(s) and "
+                        f"{len(active_cns)} active credit note(s). "
+                        f"Records preserved; canonical net/outstanding = 0."
+                    ),
+                })
         else:
             net_invoiced = _round(document_face_value - cn_total)
             if net_invoiced < 0:
@@ -211,19 +259,6 @@ class FinancialSourceOfTruth:
                         f"({document_face_value})."
                     ),
                 })
-
-        # ---- Valid payments ----
-        valid_payments = [p for p in payments if _payment_is_valid(p)]
-        reversed_payments = [p for p in payments if not _payment_is_valid(p)]
-        paid_amount = _round(sum(float(p.get("amount") or 0) for p in valid_payments))
-
-        # ---- Outstanding & overpayment ----
-        # Net invoiced value is the target. Preserve overpayment as info.
-        if is_proforma:
-            outstanding = 0.0
-            overpayment = 0.0
-        else:
-            # Guard against silent negative — but do surface overpayment.
             outstanding = _round(max(0.0, net_invoiced - paid_amount))
             overpayment = _round(max(0.0, paid_amount - net_invoiced))
             if overpayment > 0:
@@ -233,7 +268,7 @@ class FinancialSourceOfTruth:
                 })
 
         # ---- Warning: voided invoice with active payments ----
-        if (inv.get("status") or "").lower() in {"voided", "cancelled", "deleted"} and valid_payments:
+        if normalized_status in {"voided", "cancelled", "deleted"} and valid_payments:
             warnings.append({
                 "code": W_VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS,
                 "message": (
@@ -243,7 +278,9 @@ class FinancialSourceOfTruth:
             })
 
         # ---- Payment status label ----
-        payment_status = self._derive_payment_status(is_proforma, net_invoiced, paid_amount, inv)
+        payment_status = self._derive_payment_status(
+            is_proforma, is_revenue_eligible, net_invoiced, paid_amount, inv, normalized_status,
+        )
 
         return {
             "invoice_id": inv.get("id"),
@@ -254,6 +291,7 @@ class FinancialSourceOfTruth:
             "is_proforma": is_proforma,
             "is_revenue_eligible": is_revenue_eligible,
             "status": inv.get("status"),
+            "normalized_status": normalized_status,
             "converted_from_proforma_id": inv.get("converted_from_proforma_id"),
             "converted_to_invoice_id": inv.get("converted_to_invoice_id"),
 
@@ -273,7 +311,7 @@ class FinancialSourceOfTruth:
             # Audit breakdown
             "breakdown": {
                 "gross_invoice_value": document_face_value,
-                "credit_notes_deducted": cn_total,
+                "credit_notes_deducted": cn_total if is_revenue_eligible else 0.0,
                 "net_invoiced_value": net_invoiced,
                 "valid_payments": paid_amount,
                 "outstanding": outstanding,
@@ -282,12 +320,22 @@ class FinancialSourceOfTruth:
         }
 
     @staticmethod
-    def _derive_payment_status(is_proforma: bool, net_invoiced: float, paid: float, inv: Dict[str, Any]) -> str:
+    def _derive_payment_status(
+        is_proforma: bool,
+        is_revenue_eligible: bool,
+        net_invoiced: float,
+        paid: float,
+        inv: Dict[str, Any],
+        normalized_status: str,
+    ) -> str:
         if is_proforma:
             return "n/a_proforma"
-        status = (inv.get("status") or "").lower()
-        if status in EXCLUDED_INVOICE_STATUSES:
-            return status
+        if normalized_status in EXCLUDED_INVOICE_STATUSES:
+            return normalized_status
+        if normalized_status in INFORMATIONAL_INVOICE_STATUSES:
+            return f"n/a_{normalized_status}"
+        if not is_revenue_eligible:
+            return "n/a_unknown"
         if net_invoiced <= 0:
             return "fully_credited"
         if paid <= 0:
