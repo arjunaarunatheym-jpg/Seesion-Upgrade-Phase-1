@@ -1,0 +1,106 @@
+MDDRC Training Management System — Phase 1: Full Payment History
+==================================================================
+Packaged: 2026-02-02
+Scope: server-side searchable / filterable / paginated READ-ONLY
+       Payment History view, complementing the existing Recent
+       Payments widget.
+
+FILES ADDED (5)
+---------------
+backend/add_payment_history_indexes.py
+    New idempotent script that creates the MongoDB indexes used by
+    the payment-history query patterns.
+
+backend/tests/pytest.ini
+    Pytest config enabling asyncio_mode=auto with module loop scope
+    for the Payment History tests.
+
+backend/tests/test_payment_history.py
+    18 pytest cases (all passing) covering: default newest-first
+    sort, pagination page 1 & 2 differ, page-size respected, access
+    beyond first 100 records, search by invoice/receipt/company,
+    date/method/funding filters, empty result, unauthorized (403)
+    and no-token (401), Recent Payments regression, existing-
+    payments-unchanged read-only guarantee, payment detail view,
+    sort=highest, status=reversed.
+
+frontend/src/components/finance/PaymentHistoryTab.jsx
+    New React component. Debounced search, 4 filters (date range,
+    payment method, funding source, status), 4 sorts (newest,
+    oldest, highest, lowest), page-size selector (25/50/100),
+    server-side pagination controls, per-row detail dialog, CSV
+    export, empty / loading / error states. Every interactive
+    element has a stable data-testid.
+
+test_reports/iteration_46.json
+    Testing-agent report for Phase 1. Verdict: 18/18 pytest pass,
+    100% of tested frontend flows pass, zero bugs.
+
+FILES MODIFIED (3)
+------------------
+backend/routes/finance_payments.py
+    Three NEW endpoints (all READ-ONLY, no writes to any collection):
+      GET /api/finance/payments/history
+      GET /api/finance/payments/history/export   (CSV)
+      GET /api/finance/payments/{payment_id}/detail
+    Plus helper functions _build_payment_history_query and
+    _enrich_payments_with_invoice. Import block extended with
+    Query, StreamingResponse, csv, io, math.
+    IMPORTANT: The existing GET /api/finance/payments endpoint used
+    by the "Recent Payments" dashboard widget was NOT touched.
+
+frontend/src/components/finance/PaymentsTab.jsx
+    Added a "View All Payments" button (data-testid=
+    view-all-payments-btn) to the header of the Recent Payments
+    card. Accepts a new optional prop `onViewAllPayments`. History
+    icon imported from lucide-react. No other behavioural change.
+
+frontend/src/pages/FinanceDashboard.jsx
+    Registered the new "Payment History" tab (data-testid=
+    payment-history-tab) alongside the existing "Payments" tab,
+    wired PaymentsTab.onViewAllPayments to switch to it, and
+    imported the new PaymentHistoryTab component. No other change.
+
+FILES DELETED (0)
+-----------------
+(none)
+
+FINANCIAL LOGIC CHANGES
+-----------------------
+NONE. Invoice calculations, proforma conversion, payment calc,
+session values, credit notes, revenue and P&L are unmodified.
+The Phase 1 endpoints are strictly GET-only and never write to
+payments, invoices, ledger or any other collection.
+
+DATABASE CHANGES
+----------------
+Only additive indexes, created by add_payment_history_indexes.py:
+  payments: payment_date_created_desc, payment_amount,
+            payment_method, payment_type, payment_status,
+            payment_invoice_id, payment_receipt_number,
+            payment_reference_number
+  invoices: invoice_number_idx, invoice_company_name_idx,
+            invoice_bill_to_name_idx
+Schema is unchanged. Existing data is untouched.
+
+API CONTRACT (new endpoints)
+----------------------------
+GET /api/finance/payments/history
+    Query params: q, date_from, date_to, payment_method,
+                  funding_source, status (active|reversed|all),
+                  sort (newest|oldest|highest|lowest),
+                  page (default 1), page_size (default 25, max 100)
+    Response: { items, page, page_size, total, total_pages,
+                sort, filters }
+
+GET /api/finance/payments/history/export
+    Same filters. Returns text/csv (hard cap 5000 rows).
+
+GET /api/finance/payments/{payment_id}/detail
+    Returns { payment, invoice, session, program, recorded_by_name }.
+
+AUTHORIZATION
+-------------
+All three endpoints require role in
+{admin, super_admin, finance}. Non-finance roles receive 403;
+missing token receives 401. Verified by pytest.
