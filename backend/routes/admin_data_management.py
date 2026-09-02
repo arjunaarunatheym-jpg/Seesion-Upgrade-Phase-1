@@ -367,7 +367,7 @@ async def get_attendance_admin(
             if isinstance(attendance['clock_in'], str):
                 try:
                     attendance['clock_in'] = datetime.fromisoformat(attendance['clock_in'])
-                except:
+                except Exception:
                     pass
         
         # Handle clock_out datetime conversion
@@ -375,7 +375,7 @@ async def get_attendance_admin(
             if isinstance(attendance['clock_out'], str):
                 try:
                     attendance['clock_out'] = datetime.fromisoformat(attendance['clock_out'])
-                except:
+                except Exception:
                     pass
         
         # Get participant details

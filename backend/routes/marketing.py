@@ -292,7 +292,7 @@ class QuotationPDF(FPDF):
                 try:
                     self.image(str(logo_path), x=10, y=start_y - 2, w=logo_width)
                     logo_end_x = 10 + logo_width + 5
-                except:
+                except Exception:
                     pass
         text_x = logo_end_x
         self.set_xy(text_x, start_y)
@@ -575,6 +575,7 @@ async def create_marketing_client(client_data: MarketingClientCreate, current_us
     doc["created_at"] = doc["created_at"].isoformat()
     
     await db.marketing_clients.insert_one(doc)
+    doc.pop("_id", None)
     return {"message": "Client created successfully", "client": doc}
 
 
@@ -908,7 +909,7 @@ async def update_quotation(quotation_id: str, quotation_data: dict, current_user
         created_at_str = existing.get("created_at", get_malaysia_time().isoformat())
         try:
             created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-        except:
+        except Exception:
             created_at = get_malaysia_time()
         update_fields["valid_until"] = (created_at + timedelta(days=update_fields["validity_days"])).strftime("%Y-%m-%d")
     
@@ -960,7 +961,7 @@ async def submit_quotation(quotation_id: str, current_user: User = Depends(get_c
         client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
         client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
         await notify_quotation_for_approval(quotation, client_name, current_user.full_name, marketer_email=current_user.email)
-    except:
+    except Exception:
         pass
     
     return {"message": "Quotation submitted for approval"}
@@ -991,7 +992,7 @@ async def approve_quotation(quotation_id: str, current_user: User = Depends(get_
         marketer = await db.users.find_one({"id": quotation.get("created_by")}, {"_id": 0, "email": 1})
         marketer_email = marketer.get("email") if marketer else None
         await notify_quotation_approved(quotation, client_name, current_user.full_name, marketer_email=marketer_email)
-    except:
+    except Exception:
         pass
     
     return {"message": "Quotation approved"}
@@ -1021,7 +1022,7 @@ async def reject_quotation(quotation_id: str, reason: dict = None, current_user:
         marketer = await db.users.find_one({"id": quotation.get("created_by")}, {"_id": 0, "email": 1})
         marketer_email = marketer.get("email") if marketer else None
         await notify_quotation_rejected(quotation, client_name, current_user.full_name, rejection_reason or "", marketer_email=marketer_email)
-    except:
+    except Exception:
         pass
     
     return {"message": "Quotation rejected, returned to draft"}
@@ -1090,7 +1091,7 @@ async def mark_quotation_sent(quotation_id: str, current_user: User = Depends(ge
         client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
         client_email = client.get("contact_email") if client else None
         await notify_quotation_sent(quotation, client_name, current_user.full_name, client_email=client_email, marketer_email=current_user.email)
-    except:
+    except Exception:
         pass
     
     return {"message": "Quotation marked as sent"}
@@ -1233,7 +1234,7 @@ async def record_client_response(quotation_id: str, response_data: dict, current
         # Send email notification for accepted quotation
         try:
             await notify_quotation_accepted(quotation, company_name, current_user.full_name)
-        except:
+        except Exception:
             pass
     else:
         # Quotation declined
@@ -1241,7 +1242,7 @@ async def record_client_response(quotation_id: str, response_data: dict, current
             client = await db.marketing_clients.find_one({"id": quotation.get("client_id")}, {"_id": 0})
             client_name = client.get("company_name", "Unknown Client") if client else "Unknown Client"
             await notify_quotation_declined(quotation, client_name, current_user.full_name, response_data.get("notes", ""))
-        except:
+        except Exception:
             pass
     
     return result
@@ -1385,7 +1386,7 @@ async def apply_discount_to_quotation(quotation_id: str, discount_data: dict, cu
             discount_data.get("reason", ""),
             marketer_email=current_user.email
         )
-    except:
+    except Exception:
         pass
     
     updated_quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
@@ -1752,7 +1753,7 @@ async def update_lead(lead_id: str, lead_data: LeadUpdate, current_user: User = 
         if new_stage in ["contacted", "quotation_sent"]:
             try:
                 await notify_lead_stage_change(lead, new_stage, current_user.full_name)
-            except:
+            except Exception:
                 pass
         elif new_stage == "won":
             try:
@@ -1761,13 +1762,13 @@ async def update_lead(lead_id: str, lead_data: LeadUpdate, current_user: User = 
                 if lead.get("quotation_id"):
                     quotation = await db.quotations.find_one({"id": lead.get("quotation_id")}, {"_id": 0})
                 await notify_lead_won(lead, quotation, current_user.full_name)
-            except:
+            except Exception:
                 pass
         elif new_stage == "lost":
             try:
                 lost_reason = update_data.get("lost_reason", "") or lead_data.notes if hasattr(lead_data, 'notes') else ""
                 await notify_lead_lost(lead, current_user.full_name, lost_reason)
-            except:
+            except Exception:
                 pass
     
     await db.leads.update_one({"id": lead_id}, {"$set": update_data})
@@ -2164,7 +2165,7 @@ async def get_pipeline_stats(current_user: User = Depends(get_current_user)):
                     closed = datetime.fromisoformat(lead["stage_changed_at"].replace("Z", "+00:00")) if isinstance(lead["stage_changed_at"], str) else lead["stage_changed_at"]
                     days = (closed - created).days
                     total_days_to_close += max(days, 0)
-                except:
+                except Exception:
                     pass
     
     total_leads = len(leads)
@@ -2478,7 +2479,7 @@ async def _generate_quotation_pdf(quotation_id: str, current_user: User):
     primary_color_hex = templates.get("primary_color", "#1a365d")
     try:
         primary_color_rgb = tuple(int(primary_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-    except:
+    except Exception:
         primary_color_rgb = (26, 54, 93)
     
     # Generate PDF with custom color
@@ -2494,7 +2495,7 @@ async def _generate_quotation_pdf(quotation_id: str, current_user: User):
     if isinstance(created_date, str):
         try:
             created_date = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
-        except:
+        except Exception:
             created_date = datetime.now()
     pdf.cell_safe(0, 6, created_date.strftime("%d %B %Y"), ln=True)
     pdf.ln(5)
@@ -2633,7 +2634,7 @@ async def _generate_quotation_pdf(quotation_id: str, current_user: User):
                 else:
                     valid_until_dt = datetime.strptime(valid_until, "%Y-%m-%d")
                 valid_until_str = valid_until_dt.strftime("%d %B %Y")
-            except:
+            except Exception:
                 valid_until_str = valid_until
         elif hasattr(valid_until, 'strftime'):
             valid_until_str = valid_until.strftime("%d %B %Y")
@@ -2645,7 +2646,7 @@ async def _generate_quotation_pdf(quotation_id: str, current_user: User):
                 created_dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
                 valid_until_dt = created_dt + timedelta(days=validity_days)
                 valid_until_str = valid_until_dt.strftime("%d %B %Y")
-            except:
+            except Exception:
                 pass
         elif hasattr(created_at, 'strftime'):
             valid_until_dt = created_at + timedelta(days=validity_days)

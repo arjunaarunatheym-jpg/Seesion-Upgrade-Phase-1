@@ -421,7 +421,7 @@ async def fix_session_status(
         try:
             from routes.accounting import post_session_completed_revenue
             await post_session_completed_revenue(session_id, current_user.id, current_user.full_name)
-        except:
+        except Exception:
             pass
     
     return {"message": f"Session status changed from {old_status} to {new_status}"}

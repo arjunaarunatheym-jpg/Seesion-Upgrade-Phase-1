@@ -1,6 +1,6 @@
 import re
 
-PREVIEW_URL = "https://finance-flow-pro.preview.emergentagent.com"
+PREVIEW_URL = "https://training-finance-hub-1.preview.emergentagent.com"
 EMAIL = "qa.superadmin.renumber.1785391684@mddrc.test"
 PASSWORD = "QaSuper102229"
 TARGET_ID = "9f0921c1-58e6-4218-8cf8-8aeb18367ce2"

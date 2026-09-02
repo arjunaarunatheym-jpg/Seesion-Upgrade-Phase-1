@@ -77,6 +77,7 @@ async def get_company_settings(current_user: User = Depends(get_current_user)):
     if not settings:
         settings = CompanySettings().model_dump()
         await db.company_settings.insert_one(settings)
+        settings.pop("_id", None)
     
     return settings
 
@@ -551,7 +552,7 @@ async def export_payables_excel(year: int, month: int, current_user: User = Depe
             else:
                 d = start_date
             return d.year == year and d.month == month
-        except:
+        except Exception:
             return False
     
     # Get all payables data
@@ -997,7 +998,7 @@ async def recalculate_marketing_commissions(
                         continue
                     if request.month and session_month != request.month:
                         continue
-                except:
+                except Exception:
                     pass
         
         # Calculate correct commission based on ALL invoices
@@ -1116,10 +1117,10 @@ async def get_finance_dashboard(year: Optional[int] = None, current_user: User =
         if isinstance(date_val, str):
             try:
                 return datetime.fromisoformat(date_val.replace('Z', '+00:00')).year
-            except:
+            except Exception:
                 try:
                     return int(date_val[:4])
-                except:
+                except Exception:
                     return None
         elif hasattr(date_val, 'year'):
             return date_val.year

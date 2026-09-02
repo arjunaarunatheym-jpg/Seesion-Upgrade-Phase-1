@@ -494,7 +494,7 @@ async def get_petty_cash_summary(year: int = None, current_user: User = Depends(
             if m not in by_month:
                 by_month[m] = 0
             by_month[m] += txn.get("amount", 0)
-        except:
+        except Exception:
             pass
     
     settings = await db.petty_cash_settings.find_one({}, {"_id": 0})

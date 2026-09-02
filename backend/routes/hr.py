@@ -47,7 +47,7 @@ async def debug_pay_advice(year: int, month: int, current_user: User = Depends(g
                         else:
                             sdt = datetime.strptime(sd, fmt)
                         break
-                    except:
+                    except Exception:
                         pass
                 if sdt and sdt.year == training_year and sdt.month == training_month:
                     matched_sessions.append({"id": s["id"], "name": s.get("name"), "start_date": sd})
@@ -122,7 +122,7 @@ def calculate_age_from_nric(nric: str, reference_date: str = None) -> int:
         ref = datetime.fromisoformat(reference_date) if reference_date else datetime.now()
         age = ref.year - dob.year - ((ref.month, ref.day) < (dob.month, dob.day))
         return max(18, min(age, 100))
-    except:
+    except Exception:
         return 30
 
 
@@ -134,7 +134,7 @@ def calculate_age(date_of_birth: str, reference_date: str = None) -> int:
         dob = datetime.fromisoformat(date_of_birth.replace('Z', '+00:00'))
         ref = datetime.fromisoformat(reference_date) if reference_date else datetime.now()
         return ref.year - dob.year - ((ref.month, ref.day) < (dob.month, dob.day))
-    except:
+    except Exception:
         return 30
 
 
@@ -1296,7 +1296,7 @@ async def generate_pay_advice(data: dict, current_user: User = Depends(get_curre
                     sdt = sd
                 if sdt.year == training_year and sdt.month == training_month:
                     training_session_ids.append(s["id"])
-            except:
+            except Exception:
                 pass
     
     # 1. Trainer fees
@@ -1513,13 +1513,13 @@ async def bulk_generate_pay_advice(year: int, month: int, current_user: User = D
                             else:
                                 sdt = datetime.strptime(sd, fmt)
                             break
-                        except:
+                        except Exception:
                             pass
                 else:
                     sdt = sd
                 if sdt and sdt.year == training_year and sdt.month == training_month:
                     session_ids.append(s["id"])
-            except:
+            except Exception:
                 pass
     
     if not session_ids:

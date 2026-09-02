@@ -166,7 +166,7 @@ async def get_profit_loss_report(
                 if inv_date.startswith(str(year)):
                     inv_month = int(inv_date[5:7]) if len(inv_date) >= 7 else 1
                     monthly_data[inv_month]["income"]["invoices"] += gross_revenue
-        except:
+        except Exception:
             pass
     # ========== END MULTI-INVOICE SUPPORT ==========
     
@@ -175,7 +175,7 @@ async def get_profit_loss_report(
         try:
             inc_month = int(inc.get("date", "")[5:7])
             monthly_data[inc_month]["income"]["manual"] += float(inc.get("amount", 0))
-        except:
+        except Exception:
             pass
     
     # Process payroll
@@ -187,7 +187,7 @@ async def get_profit_loss_report(
             socso_er = float(ps.get("socso_employer", 0))
             eis_er = float(ps.get("eis_employer", 0))
             monthly_data[ps_month]["expenses"]["payroll"] += gross + epf_er + socso_er + eis_er
-        except:
+        except Exception:
             pass
     
     # Process pay advice
@@ -195,7 +195,7 @@ async def get_profit_loss_report(
         try:
             pa_month = pa.get("month", 1)
             monthly_data[pa_month]["expenses"]["session_workers"] += float(pa.get("amount", 0))
-        except:
+        except Exception:
             pass
     
     # Process trainer fees
@@ -207,7 +207,7 @@ async def get_profit_loss_report(
                 continue
             tf_month = int(session_date[5:7]) if len(session_date) >= 7 else 1
             monthly_data[tf_month]["expenses"]["session_workers"] += float(tf.get("fee_amount") or 0)
-        except:
+        except Exception:
             pass
     
     # Process coordinator fees
@@ -219,7 +219,7 @@ async def get_profit_loss_report(
                 continue
             cf_month = int(session_date[5:7]) if len(session_date) >= 7 else 1
             monthly_data[cf_month]["expenses"]["session_workers"] += float(cf.get("total_fee") or 0)
-        except:
+        except Exception:
             pass
     
     # Process session expenses - ACTUALS ONLY (Improvement 2)
@@ -235,7 +235,7 @@ async def get_profit_loss_report(
             # This is expected behavior per user requirement
             amount = float(exp.get("actual_amount") or 0)
             monthly_data[exp_month]["expenses"]["session_expenses"] += amount
-        except:
+        except Exception:
             pass
     
     # Process marketing commissions
@@ -247,7 +247,7 @@ async def get_profit_loss_report(
                 continue
             mc_month = int(session_date[5:7]) if len(session_date) >= 7 else 1
             monthly_data[mc_month]["expenses"]["marketing_commissions"] += float(mc.get("calculated_amount") or 0)
-        except:
+        except Exception:
             pass
     
     # Process petty cash
@@ -255,7 +255,7 @@ async def get_profit_loss_report(
         try:
             pc_month = int(pc.get("date", "")[5:7])
             monthly_data[pc_month]["expenses"]["petty_cash"] += float(pc.get("amount", 0))
-        except:
+        except Exception:
             pass
     
     # Process manual expenses
@@ -263,7 +263,7 @@ async def get_profit_loss_report(
         try:
             exp_month = int(exp.get("date", "")[5:7])
             monthly_data[exp_month]["expenses"]["manual"] += float(exp.get("amount", 0))
-        except:
+        except Exception:
             pass
     
     # Calculate totals
@@ -417,7 +417,7 @@ async def get_profit_loss_by_programme(
                 inv_date = inv.get("created_at", "")[:10]
                 if inv_date.startswith(str(year)):
                     programme_data["_other"]["income"] += amount
-        except:
+        except Exception:
             pass
     
     trainer_fees = await db.trainer_fees.find({}, {"_id": 0}).to_list(10000)
@@ -430,7 +430,7 @@ async def get_profit_loss_by_programme(
             if prog_id not in programme_data:
                 prog_id = "_other"
             programme_data[prog_id]["expenses"]["trainer_fees"] += float(tf.get("fee_amount") or 0)
-        except:
+        except Exception:
             pass
     
     coordinator_fees = await db.coordinator_fees.find({}, {"_id": 0}).to_list(10000)
@@ -443,7 +443,7 @@ async def get_profit_loss_by_programme(
             if prog_id not in programme_data:
                 prog_id = "_other"
             programme_data[prog_id]["expenses"]["coordinator_fees"] += float(cf.get("total_fee") or 0)
-        except:
+        except Exception:
             pass
     
     marketing_comms = await db.marketing_commissions.find({"status": {"$in": ["pending", "approved", "paid"]}}, {"_id": 0}).to_list(10000)
@@ -456,7 +456,7 @@ async def get_profit_loss_by_programme(
             if prog_id not in programme_data:
                 prog_id = "_other"
             programme_data[prog_id]["expenses"]["marketing_commissions"] += float(mc.get("calculated_amount") or 0)
-        except:
+        except Exception:
             pass
     
     session_expenses = await db.session_expenses.find({}, {"_id": 0}).to_list(10000)
@@ -470,7 +470,7 @@ async def get_profit_loss_by_programme(
                 prog_id = "_other"
             amount = float(exp.get("actual_amount") or exp.get("estimated_amount") or exp.get("amount") or 0)
             programme_data[prog_id]["expenses"]["session_expenses"] += amount
-        except:
+        except Exception:
             pass
     
     total_income = 0
@@ -855,7 +855,7 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
                               "account_code": income_account, "account_name": CHART_OF_ACCOUNTS[income_account]["name"],
                               "debit": 0, "credit": amount, "tags": {"session_id": session_id, "programme": programme}})
             entry_id += 1
-        except:
+        except Exception:
             pass
     
     # 2. PAYMENTS RECEIVED - DR Bank, CR Accounts Receivable
@@ -879,7 +879,7 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
                               "account_code": "1100", "account_name": CHART_OF_ACCOUNTS["1100"]["name"],
                               "debit": 0, "credit": amount, "tags": {}})
             entry_id += 1
-        except:
+        except Exception:
             pass
     
     # 3. TRAINER FEES - DR Trainer Fees Expense, CR Trainer Payable
@@ -908,7 +908,7 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
                               "account_code": "2100", "account_name": CHART_OF_ACCOUNTS["2100"]["name"],
                               "debit": 0, "credit": amount, "tags": {"session_id": session_id, "programme": programme}})
             entry_id += 1
-        except:
+        except Exception:
             pass
     
     # 4. COORDINATOR FEES
@@ -937,7 +937,7 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
                               "account_code": "2101", "account_name": CHART_OF_ACCOUNTS["2101"]["name"],
                               "debit": 0, "credit": amount, "tags": {"session_id": session_id, "programme": programme}})
             entry_id += 1
-        except:
+        except Exception:
             pass
     
     # 5. MARKETING COMMISSIONS
@@ -966,7 +966,7 @@ async def get_general_ledger(year: int = None, month: int = None, current_user: 
                               "account_code": "2102", "account_name": CHART_OF_ACCOUNTS["2102"]["name"],
                               "debit": 0, "credit": amount, "tags": {"session_id": session_id, "programme": programme}})
             entry_id += 1
-        except:
+        except Exception:
             pass
     
     # Sort by date

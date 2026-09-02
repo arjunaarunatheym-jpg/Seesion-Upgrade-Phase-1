@@ -19,7 +19,7 @@ from datetime import datetime
 from io import BytesIO
 
 # Configuration
-BASE_URL = "https://finance-flow-pro.preview.emergentagent.com/api"
+BASE_URL = "https://training-finance-hub-1.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@example.com"
 ADMIN_PASSWORD = "admin123"
 

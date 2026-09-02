@@ -483,6 +483,7 @@ async def generate_certificate(session_id: str, participant_id: str, current_use
     }
     
     await db.certificates.insert_one(certificate)
+    certificate.pop("_id", None)
     
     return {"message": "Certificate generated", "certificate": certificate}
 

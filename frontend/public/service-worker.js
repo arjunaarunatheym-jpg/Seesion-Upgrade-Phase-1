@@ -1,4 +1,5 @@
 // Service Worker for MDDRC Training Portal PWA — Enhanced v2
+/* global clients */
 const CACHE_VERSION = 'v2';
 const STATIC_CACHE = `mddrc-static-${CACHE_VERSION}`;
 const DATA_CACHE = `mddrc-data-${CACHE_VERSION}`;

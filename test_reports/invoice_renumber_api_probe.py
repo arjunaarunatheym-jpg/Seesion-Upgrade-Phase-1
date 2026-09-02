@@ -1,7 +1,7 @@
 import os
 import requests
 
-BASE_URL = os.environ.get("BASE_URL", "https://finance-flow-pro.preview.emergentagent.com/api")
+BASE_URL = os.environ.get("BASE_URL", "https://training-finance-hub-1.preview.emergentagent.com/api")
 
 
 def login(email: str, password: str):

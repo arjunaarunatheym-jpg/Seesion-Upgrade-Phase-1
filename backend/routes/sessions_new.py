@@ -1219,7 +1219,7 @@ async def mark_session_completed(session_id: str, current_user: User = Depends(g
     try:
         updated_session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
         await notify_session_completed(updated_session)
-    except:
+    except Exception:
         pass
     
     return {
@@ -1262,7 +1262,7 @@ async def admin_mark_session_complete(session_id: str, data: dict, current_user:
     try:
         updated_session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
         await notify_session_completed(updated_session)
-    except:
+    except Exception:
         pass
     
     return {

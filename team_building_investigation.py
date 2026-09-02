@@ -23,7 +23,7 @@ import pymongo
 import os
 
 # Configuration
-BASE_URL = "https://finance-flow-pro.preview.emergentagent.com/api"
+BASE_URL = "https://training-finance-hub-1.preview.emergentagent.com/api"
 
 # Test Credentials from review request
 ADMIN_EMAIL = "arjuna@mddrc.com.my"

@@ -133,7 +133,7 @@ async def bulk_upload_test_questions(
         
         try:
             df = pd.read_excel(io.BytesIO(contents), engine='openpyxl')
-        except:
+        except Exception:
             try:
                 df = pd.read_excel(io.BytesIO(contents), engine='xlrd')
             except Exception as e:

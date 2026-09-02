@@ -23,7 +23,6 @@ from core import (
     TEMPLATE_DIR, CHECKLIST_PHOTOS_DIR
 )
 from models import User
-import os
 
 db_name = os.environ.get('DB_NAME', 'unknown')
 

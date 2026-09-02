@@ -244,10 +244,10 @@ async def get_invoices(
             if isinstance(date_val, str):
                 try:
                     return datetime.fromisoformat(date_val.replace('Z', '+00:00')).year
-                except:
+                except Exception:
                     try:
                         return int(date_val[:4])
-                    except:
+                    except Exception:
                         return None
             elif hasattr(date_val, 'year'):
                 return date_val.year
