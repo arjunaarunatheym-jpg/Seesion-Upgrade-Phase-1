@@ -1,0 +1,439 @@
+================================================================================
+PHASE 2 — FINANCIAL SOURCE OF TRUTH — FINAL REVIEW BUNDLE
+================================================================================
+Package generated : 2026-02-02
+Scope             : Independent code review for MDDRC training platform
+                    Phase 2 — Centralized READ-ONLY canonical financial
+                    calculation layer.
+Contents          : Consolidated plain-text bundle of all Phase 2 review
+                    artifacts, produced from the following source files:
+
+    /app/memory/PHASE_2_CHANGED_FILES.txt
+    /app/memory/PHASE_2_FINANCIAL_MODEL.txt
+    /app/memory/PHASE_2_INTEGRITY_FINDINGS.txt
+    /app/memory/PHASE_2_CN_STATUS_AUDIT.txt
+    /app/memory/PHASE_2_FINAL_TEST_REPORT.txt
+
+Guarantees        :
+    - NO production financial records were modified or deleted.
+    - Credit-note status audit was READ-ONLY.
+    - The Financial Source of Truth service is READ-ONLY.
+    - NO payment / invoice / proforma / credit-note write workflow was changed.
+    - The application was NOT redeployed.
+    - Phase 3 was NOT started.
+
+Sign-off status   : PENDING — awaiting independent code review.
+================================================================================
+
+
+################################################################################
+# SECTION 1 — CHANGED FILES
+# (source: /app/memory/PHASE_2_CHANGED_FILES.txt)
+################################################################################
+
+Phase 2 — Financial Source of Truth — Changed Files
+====================================================
+Date: 2026-02-02
+Scope: Centralized READ-ONLY financial calculation service. No writes,
+       no workflow changes, no data migrations, no redeploy.
+
+FILES ADDED (5)
+---------------
+backend/services/financial_source_of_truth.py
+    The single authoritative calculator. Class `FinancialSourceOfTruth`
+    with per-invoice and per-session canonical snapshots and integrity
+    scanners. Uses batched Mongo reads (no N+1). Never writes.
+
+backend/routes/finance_source_of_truth.py
+    Read-only FastAPI router exposing:
+      GET /api/finance/source-of-truth/invoice/{invoice_id}
+      GET /api/finance/source-of-truth/session/{session_id}
+      GET /api/finance/source-of-truth/integrity/payments
+      GET /api/finance/source-of-truth/integrity/credit-notes
+    Authorization: admin / super_admin / finance only.
+
+backend/tests/test_financial_source_of_truth.py
+    32 pytest cases (all passing). Covers all Phase 2 canonical rules
+    plus the strict Credit Note whitelist tests A–I. All fixtures use
+    the isolation marker "ph2_test" and are cleaned up on teardown.
+    No production data is ever touched.
+
+memory/PHASE_2_FINANCIAL_MODEL.txt
+    Canonical financial model — definitions, rules, warning codes.
+
+memory/PHASE_2_INTEGRITY_FINDINGS.txt
+    Findings map produced during the initial audit.
+
+FILES MODIFIED (2)
+------------------
+backend/routes/__init__.py
+    Added import and registration for `finance_source_of_truth_router`.
+
+backend/server.py
+    Added import (line 327) and `api_router.include_router(finance_source_of_truth_router)` (line 379).
+    Verified end-to-end via ASGITransport in tests/test_financial_source_of_truth.py::test_D_router_actually_mounted
+    and by inspecting the live /openapi.json spec of the running app.
+
+FILES DELETED (0)
+-----------------
+(none)
+
+DATABASE WRITES BY PHASE 2
+--------------------------
+NONE by the service itself.
+Test-only writes are seeded with the `ph2_test` marker and cleaned
+up automatically on teardown; no production/live records are touched.
+
+INDEXES ADDED
+-------------
+NONE required — existing indexes (payment_invoice_id, invoice_number,
+etc.) already support the batched read patterns used by this service.
+
+WORKFLOW CHANGES
+----------------
+NONE. No POST/PUT/DELETE endpoints were added, modified, or removed.
+No changes to payment recording, invoice creation, proforma conversion,
+credit-note creation, HRD Corp workflow, or session workflow.
+
+
+################################################################################
+# SECTION 2 — CANONICAL FINANCIAL MODEL
+# (source: /app/memory/PHASE_2_FINANCIAL_MODEL.txt)
+################################################################################
+
+Phase 2 — Canonical Financial Model
+====================================
+
+1. DOCUMENT FACE VALUE
+   = invoices.total_amount
+
+2. INVOICE ELIGIBILITY FOR REVENUE
+   STRICT whitelist:
+     include if:
+       document_type != "proforma"
+       AND normalized_status IN {issued, partially_paid, paid}
+     exclude EVERYTHING else, including:
+       - draft, auto_draft (informational, not yet a financial doc)
+       - voided, cancelled, deleted, converted
+       - proforma (any status)
+       - any unknown/legacy status (triggers UNRECOGNIZED_INVOICE_STATUS)
+   Known invoice statuses (KNOWN_INVOICE_STATUSES):
+     draft, auto_draft, issued, partially_paid, paid,
+     voided, cancelled, deleted, converted
+   Note: legacy status "partial" was AUDITED against the live DB and found
+   to have 0 records — no alias was added.
+   For a non-eligible invoice:
+     net_invoiced_value = 0
+     outstanding_amount = 0
+     payment_status = one of:
+       n/a_proforma | n/a_draft | n/a_auto_draft | n/a_unknown
+       voided | cancelled | deleted | converted
+     Payments and Credit Notes on such invoices are preserved (never
+     written), and NON_ELIGIBLE_INVOICE_HAS_ACTIVITY is emitted when any
+     active activity exists.
+
+3. CREDIT NOTE ADJUSTMENT
+   STRICT whitelist:
+     Active statuses (reduce net):   {draft, approved, issued}
+     Inactive statuses:              {voided, deleted, cancelled}
+     Any other status (typo, legacy unknown, missing/null/blank)
+        -> NOT active, does NOT reduce net
+        -> emits UNRECOGNIZED_CREDIT_NOTE_STATUS warning
+   Legacy audit: 0 rows with missing status in the live DB → safest
+   canonical treatment is to treat missing/null as unrecognized.
+   Underlying CN record is preserved (service never writes).
+
+4. NET INVOICED VALUE (per invoice)
+   = document_face_value − sum(active_credit_notes)
+   Proformas contribute 0.
+
+5. VALID PAYMENTS (per invoice)
+   Include payment if status != "reversed"
+
+6. PAID AMOUNT
+   = sum of valid payments attributable to the invoice
+
+7. OUTSTANDING (per invoice)
+   = max(0, net_invoiced_value − paid_amount)
+   Overpayment is preserved separately (never silently normalized).
+
+8. SESSION REVENUE
+   = sum of NET_INVOICED_VALUE across all revenue-eligible invoices in the session
+   Proformas NEVER contribute.
+   Proforma + Invoice with converted_from_proforma_id link => counted ONCE.
+   Ambiguous proforma+invoice pair with same face value and no link =>
+     counted ONCE (proforma excluded) + PROFORMA_UNLINKED_MATCH warning.
+
+9. SESSION COST
+   = trainer_fees + coordinator_fees + expenses + marketing_and_admin
+   (existing records — Phase 2 does NOT re-derive them.)
+
+10. GROSS PROFIT
+    = SESSION_REVENUE − SESSION_COST
+
+11. GROSS MARGIN %
+    = GROSS_PROFIT / SESSION_REVENUE * 100  (0 when revenue is 0)
+
+12. INTEGRITY WARNING CODES (informational, non-destructive)
+    PROFORMA_UNLINKED_MATCH             ambiguous proforma+invoice pair
+    MULTIPLE_ACTIVE_PROFORMAS           more than one non-converted proforma in a session
+    PAYMENT_MISSING_INVOICE             payment.invoice_id points to a missing invoice
+    CN_MISSING_INVOICE                  credit note.invoice_id points to a missing invoice
+    NET_NEGATIVE_AFTER_CN               credit notes exceed invoice face value
+    OVERPAYMENT                         paid > net invoiced
+    VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS  invoice is voided/cancelled but has active payments
+    DUPLICATE_INVOICE_NUMBER            same invoice_number appears more than once in a session
+    UNRECOGNIZED_INVOICE_STATUS         invoice.status is outside the known set
+    UNRECOGNIZED_CREDIT_NOTE_STATUS     credit_note.status is outside {draft,approved,issued,voided,deleted,cancelled}
+    NON_ELIGIBLE_INVOICE_HAS_ACTIVITY   non-eligible invoice has active payments or credit notes
+
+
+################################################################################
+# SECTION 3 — INTEGRITY FINDINGS (READ-ONLY AUDIT MAP)
+# (source: /app/memory/PHASE_2_INTEGRITY_FINDINGS.txt)
+################################################################################
+
+Phase 2 — Financial Integrity Findings (post-audit)
+====================================================
+
+This document is the READ-ONLY audit map. It informs future phases; no
+records were modified as part of Phase 2.
+
+1. WHERE FINANCIAL VALUES ARE CURRENTLY CALCULATED
+--------------------------------------------------
+
+FINANCIAL CONCEPT      →  CURRENT LOCATION(S)
+
+Invoice face value     →  invoices.total_amount, read in:
+                          - routes/accounting.py:496, 768
+                          - routes/finance_invoices.py:472, 727, 942, 994, 1041, 1055, 1122, 1240, 1394
+                          - routes/finance_payments.py:576, 635, 638, 670, 707, 981, 1128
+                          - routes/finance_session.py:52, 162, 222, 257, 268, 312, 313, 316, 642, 657, 658
+                          - routes/finance_payables.py:1000, 1157
+                          - routes/superadmin_portal.py:1144, 1163, 1347, 1745, 1845, 1897
+
+Outstanding / paid     →  routes/admin_kpis.py:84–89, 157, 158, 231
+                          routes/superadmin_portal.py:597–604
+                          routes/finance_payables.py:1321 (total_issued − total_collected)
+                          routes/finance_reports.py (multiple locations)
+
+Session revenue        →  routes/finance_session.py:52, 92 (invoice_total − tax_amount)
+                          routes/superadmin_portal.py:1144, 1347, 1745, 1845
+                          routes/finance_payables.py:1000–1001, 1157–1158, 1202
+
+Credit-note aggregation→  routes/accounting.py:1492, 3250
+                          routes/finance_invoices.py:278
+                          routes/admin_kpis.py:125–130
+                          routes/finance_payments.py:947–1078, 1099–1180, 1233–1354
+                          routes/superadmin_portal.py:1106, 1172
+
+Proforma detection     →  routes/finance_invoices.py:112–113, 449–581 (convert flow)
+                          routes/finance_payments.py:560–564
+                          routes/finance_session.py:174–180, 229
+
+Gross profit / P&L     →  routes/finance_reports.py:363, 374, 389, 487–488, 523, 1154, 1183, 1184, 1242
+                          routes/finance_payables.py:1202 (marketing recalculation)
+                          routes/finance_session.py:96, 105, 656–658
+
+Session cost           →  routes/finance_session.py:56–101 (aggregated live)
+                          Backed by: trainer_fees / coordinator_fees /
+                          session_expenses / marketing_commissions
+                          plus session_costing snapshot doc.
+
+
+2. READ-ONLY LEGACY INVOICE STATUS AUDIT
+----------------------------------------
+Method: aggregate over the current `invoices` collection grouping by
+(status, document_type). Zero writes performed.
+
+Result (live database at audit time):
+    status='paid'            document_type='invoice'    count=5
+    status='issued'          document_type='invoice'    count=3
+    status='draft'           document_type='invoice'    count=5
+    status='deleted'         document_type='invoice'    count=2
+    status='draft'           document_type='proforma'   count=1
+
+    status='partial'                                    count=0
+    status='partially_paid'                             count=0
+    status='auto_draft'                                 count=0
+
+Conclusion:
+    - Legacy status "partial" does NOT exist in the current database.
+      The canonical whitelist therefore stays:
+          {issued, partially_paid, paid}
+      NO backward-compatible alias `partial → partially_paid` was added.
+      Previous documentation that suggested `partial` and `partially_paid`
+      might be behaviourally equivalent has been REMOVED — the audit
+      does NOT prove that.
+
+    - `partially_paid` is used by the code path at
+      routes/finance_payments.py (payment recording) but no rows carry
+      that status in the current data snapshot. It remains reserved for
+      future use and stays in the eligibility whitelist.
+
+    - The code writes an `auto_draft` status at
+          routes/finance_invoices.py:736
+          routes/finance_invoices.py:804
+      (auto-generated drafts). No records currently carry that status,
+      but to avoid noisy `UNRECOGNIZED_INVOICE_STATUS` warnings the
+      canonical service now treats `auto_draft` as an informational
+      (non-revenue-eligible) status alongside `draft`.
+
+Statuses discovered in code paths that WRITE `invoice.status`:
+    draft, auto_draft, issued, paid, converted, cancelled, voided, deleted
+
+All of these are now in `KNOWN_INVOICE_STATUSES` for the source-of-truth
+service.
+
+
+3. PROFORMA-vs-INVOICE OBSERVATIONS (Phase 3 candidates — DEFERRED)
+-------------------------------------------------------------------
+3a. `routes/finance_invoices.py::convert_proforma_to_invoice` correctly
+    sets `converted_from_proforma_id` on the resulting invoice and marks
+    the proforma `status = "converted"`. Where the link exists, Phase 2
+    counts the pair once (single revenue).
+
+3b. Historical proformas created before this convention (if any) may
+    lack `converted_from_proforma_id`. Phase 2 surfaces this safely via
+    the `PROFORMA_UNLINKED_MATCH` warning — it does NOT auto-repair.
+    The repair belongs to Phase 3.
+
+3c. `routes/finance_payments.py::create_session_credit_note` at line 1124
+    uses `find_one({"session_id": session_id})` to pick a single invoice
+    per session. When a session has multiple invoices this is ambiguous
+    and CAN pick the wrong document.
+    STATUS: IDENTIFIED and DEFERRED to Phase 3.
+    (This corrects a previous statement that said the ambiguity is
+    "reported through the session snapshot" — no such warning is emitted
+    by the current service.)
+
+
+4. DEFERRED WORK
+----------------
+Phase 3
+    - Historical Proforma→Invoice link repair for unlinked pairs
+    - Session→Invoice cardinality repair (the find_one usage above)
+    - Optional: dedicated `AMBIGUOUS_SESSION_INVOICE_SELECTION` warning
+
+Phase 4
+    - Write-side protections for payment / invoice / credit-note edits
+      based on the canonical outstanding/paid rules.
+    - Enforce that a non-eligible invoice cannot receive new payments.
+
+Later phases
+    - Migrating frontend screens (SessionCosting, ClaimFormPrint,
+      FinanceDashboard KPIs, financial reports) to consume the new
+      canonical endpoints.
+
+NO PRODUCTION FINANCIAL LOGIC WAS CHANGED BY PHASE 2. The service is
+purely additive and read-only.
+
+
+################################################################################
+# SECTION 4 — CREDIT NOTE STATUS AUDIT (READ-ONLY)
+# (source: /app/memory/PHASE_2_CN_STATUS_AUDIT.txt)
+################################################################################
+
+Phase 2 — Credit Note Status Audit (READ-ONLY)
+===============================================
+
+Method
+------
+    db.credit_notes.aggregate([
+        {"$group": {"_id": "$status", "c": {"$sum": 1}}},
+        {"$sort":  {"c": -1}}
+    ])
+Zero writes.
+
+Result (live DB at audit time)
+------------------------------
+    status        count
+    ------------- -----
+    'voided'          3
+    'issued'          3
+                  -----
+    TOTAL             6
+
+    null / missing / blank : 0
+
+Code paths that WRITE credit_notes.status
+-----------------------------------------
+    routes/finance_payments.py:1032   compares status == 'approved'
+    routes/finance_payments.py:1055   compares status != 'draft'
+    routes/finance_payments.py:1300   compares status == 'voided'
+    routes/superadmin_portal.py:1133,1320  status != 'voided' filters
+
+Statuses observed in code:
+    draft, approved, issued, voided
+
+Conclusions
+-----------
+1. Legacy "partial" / "unknown" / null statuses DO NOT exist in the live
+   credit_notes collection.
+2. The canonical service uses a STRICT whitelist:
+     ACTIVE_CN_STATUSES   = {'draft', 'approved', 'issued'}
+     VOIDED_CN_STATUSES   = {'voided', 'deleted', 'cancelled'}
+   Anything outside these two sets (including missing / null / blank) is
+   NON-active and surfaced via UNRECOGNIZED_CREDIT_NOTE_STATUS.
+3. Because 0 legacy CN rows have a missing status, the safest canonical
+   treatment (missing status → unrecognized, does NOT reduce net) is
+   applied without any backward-compat alias.
+4. No production credit-note record was modified or deleted during this
+   audit.
+
+
+################################################################################
+# SECTION 5 — FINAL TEST REPORT
+# (source: /app/memory/PHASE_2_FINAL_TEST_REPORT.txt)
+################################################################################
+
+Phase 2 — Final Test Report
+============================
+
+Source revision under test
+--------------------------
+    /app/backend/server.py
+    SHA-256: 4ef86d2cf6e7c8402d65af7974601408619ab0546a877fafcd43def06cfc505d
+    (Router import line 327; api_router.include_router line 379.)
+
+Phase 2 suite  (tests/test_financial_source_of_truth.py)
+--------------------------------------------------------
+    Run     : 32
+    Passed  : 32
+    Failed  :  0
+    Includes correction tests:
+        test_D_router_actually_mounted            PASSED
+        test_A_draft_invoice_not_revenue          PASSED
+        test_B_unknown_status_not_revenue         PASSED
+        test_C_cancelled_and_voided_consistency   PASSED
+        test_E_non_eligible_with_payment          PASSED
+        test_E2_cancelled_with_payment_has_two_warnings PASSED
+        test_CN_A_draft_reduces_net               PASSED
+        test_CN_B_approved_reduces_net            PASSED
+        test_CN_C_issued_reduces_net              PASSED
+        test_CN_D_voided_does_not_reduce_net      PASSED
+        test_CN_E_cancelled_does_not_reduce_net   PASSED
+        test_CN_F_unknown_status_does_not_reduce_net       PASSED
+        test_CN_G_unknown_status_emits_warning    PASSED
+        test_CN_H_unknown_cn_record_unchanged     PASSED
+        test_CN_I_missing_status_treated_safely   PASSED
+
+Phase 1 regression  (tests/test_payment_history.py)
+---------------------------------------------------
+    Run     : 26
+    Passed  : 26
+    Failed  :  0
+
+Confirmations
+-------------
+    NO PRODUCTION FINANCIAL RECORDS WERE MODIFIED OR DELETED.
+    THE CREDIT NOTE STATUS AUDIT WAS READ-ONLY.
+    THE FINANCIAL SOURCE OF TRUTH SERVICE REMAINS READ-ONLY.
+    NO PAYMENT, INVOICE, PROFORMA OR CREDIT NOTE WRITE WORKFLOW WAS CHANGED.
+    THE APPLICATION WAS NOT REDEPLOYED.
+    PHASE 3 WAS NOT STARTED.
+
+
+================================================================================
+END OF BUNDLE
+================================================================================
