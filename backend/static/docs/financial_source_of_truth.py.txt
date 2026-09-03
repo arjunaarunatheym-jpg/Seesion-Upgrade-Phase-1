@@ -540,6 +540,40 @@ class FinancialSourceOfTruth:
             })
             warnings.extend(snap["integrity_warnings"])
 
+        # ---- Proforma snapshots (integrity-only; NEVER contribute to totals) ----
+        # Proformas are NEVER revenue by definition. Their canonical snapshot
+        # already returns net_invoiced_value = 0 and outstanding_amount = 0.
+        # We compute their snapshots here solely to surface any integrity
+        # warnings attached to them (e.g. NON_ELIGIBLE_INVOICE_HAS_ACTIVITY
+        # if a payment is attached to a proforma, or UNRECOGNIZED_CREDIT_NOTE_STATUS
+        # if a proforma carries an unknown-status credit note).
+        # Financial values are DELIBERATELY NOT added to any session total.
+        # This is separate from the session-level PROFORMA_UNLINKED_MATCH and
+        # MULTIPLE_ACTIVE_PROFORMAS warnings which are computed above and are
+        # NOT emitted by _compute_invoice_snapshot — no duplication is possible.
+        proforma_summaries = []
+        for pf in proformas:
+            snap = self._compute_invoice_snapshot(
+                pf,
+                payments_map.get(pf.get("id"), []),
+                cn_map.get(pf.get("id"), []),
+            )
+            proforma_summaries.append({
+                "invoice_id": snap["invoice_id"],
+                "invoice_number": snap["invoice_number"],
+                "status": snap["status"],
+                "normalized_status": snap["normalized_status"],
+                "document_type": snap["document_type"],
+                "document_face_value": snap["document_face_value"],
+                "payment_status": snap["payment_status"],
+                "valid_payment_count": snap["valid_payment_count"],
+                "active_credit_note_count": snap["active_credit_note_count"],
+                # Canonical contribution — always 0 for proformas:
+                "net_invoiced_value": 0.0,
+                "outstanding_amount": 0.0,
+            })
+            warnings.extend(snap["integrity_warnings"])
+
         # ---- Session cost & gross profit ----
         cost_breakdown = await self._compute_session_cost(session_id)
         session_cost = cost_breakdown["total"]
@@ -574,6 +608,7 @@ class FinancialSourceOfTruth:
             # Audit
             "invoices": invoice_snapshots,
             "excluded_invoice_summaries": excluded_invoice_summaries,
+            "proforma_summaries": proforma_summaries,
             "breakdown": {
                 "gross_invoice_value": _round(gross_invoice_value),
                 "credit_notes_deducted": _round(credit_note_total),

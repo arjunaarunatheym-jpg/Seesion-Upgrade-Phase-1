@@ -950,3 +950,144 @@ async def test_HARDENING_cn_count_unknown_is_unrecognized_and_warns(
     assert b["unrecognized_credit_note_count"] == 1
     codes = {w["code"] for w in b["integrity_warnings"]}
     assert "UNRECOGNIZED_CREDIT_NOTE_STATUS" in codes
+
+# =============================================================================
+# FINAL PROFORMA INTEGRITY HARDENING — session-level warning propagation
+# =============================================================================
+
+@pytest.mark.asyncio
+async def test_HARDENING_proforma_with_active_payment_surfaces_warning(
+    app_client, finance_token, db_conn, cleanup,
+):
+    """TEST 1 — Session + RM10,000 Proforma + RM2,000 active payment.
+    Session canonical totals MUST remain 0 (Proforma is never revenue),
+    but the session integrity_warnings MUST include
+    NON_ELIGIBLE_INVOICE_HAS_ACTIVITY surfaced from the Proforma.
+    """
+    session = await seed_session(db_conn)
+    pf = await seed_invoice(
+        db_conn, session["id"], 10000.0,
+        document_type="proforma", status="issued",
+    )
+    await seed_payment(db_conn, pf["id"], 2000.0)
+
+    r = await app_client.get(
+        f"/api/finance/source-of-truth/session/{session['id']}",
+        headers=_auth(finance_token),
+    )
+    assert r.status_code == 200
+    body = r.json()
+
+    # Proforma contributes ZERO to every canonical session total.
+    assert body["session_revenue"] == 0.0
+    assert body["net_invoiced_value"] == 0.0
+    assert body["paid_amount"] == 0.0
+    assert body["outstanding_amount"] == 0.0
+    assert body["gross_invoice_value"] == 0.0
+
+    # Counts — no active invoice, exactly one proforma.
+    assert body["invoice_count"] == 0
+    assert body["proforma_count"] == 1
+
+    # Proforma is exposed for audit only; financial values still 0.
+    assert len(body["proforma_summaries"]) == 1
+    summary = body["proforma_summaries"][0]
+    assert summary["invoice_id"] == pf["id"]
+    assert summary["document_type"] == "proforma"
+    assert summary["payment_status"] == "n/a_proforma"
+    assert summary["net_invoiced_value"] == 0.0
+    assert summary["outstanding_amount"] == 0.0
+
+    # The integrity warning attached to the proforma MUST reach the session.
+    codes = {w["code"] for w in body["integrity_warnings"]}
+    assert "NON_ELIGIBLE_INVOICE_HAS_ACTIVITY" in codes
+
+    # Exactly one such warning — not duplicated by any other loop.
+    non_eligible = [
+        w for w in body["integrity_warnings"]
+        if w["code"] == "NON_ELIGIBLE_INVOICE_HAS_ACTIVITY"
+    ]
+    assert len(non_eligible) == 1
+
+
+@pytest.mark.asyncio
+async def test_HARDENING_proforma_with_unknown_status_cn_surfaces_warning(
+    app_client, finance_token, db_conn, cleanup,
+):
+    """TEST 2 — Session + Proforma + Credit Note with unrecognized status.
+    Proforma contributes zero financial value.
+    UNRECOGNIZED_CREDIT_NOTE_STATUS MUST appear at session level.
+    Underlying CN record MUST remain unchanged.
+    """
+    session = await seed_session(db_conn)
+    pf = await seed_invoice(
+        db_conn, session["id"], 10000.0,
+        document_type="proforma", status="issued",
+    )
+    cn = await seed_credit_note(db_conn, pf["id"], 250.0, status="mystery_xyz")
+    before_cn = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+
+    r = await app_client.get(
+        f"/api/finance/source-of-truth/session/{session['id']}",
+        headers=_auth(finance_token),
+    )
+    assert r.status_code == 200
+    body = r.json()
+
+    # Proforma still zero-revenue.
+    assert body["session_revenue"] == 0.0
+    assert body["net_invoiced_value"] == 0.0
+    assert body["credit_note_total"] == 0.0
+    assert body["invoice_count"] == 0
+    assert body["proforma_count"] == 1
+
+    codes = {w["code"] for w in body["integrity_warnings"]}
+    assert "UNRECOGNIZED_CREDIT_NOTE_STATUS" in codes
+
+    # Underlying CN record must be untouched.
+    after_cn = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+    assert before_cn == after_cn, "Phase 2 must NEVER mutate credit-note records"
+
+
+@pytest.mark.asyncio
+async def test_HARDENING_clean_proforma_produces_no_false_positive(
+    app_client, finance_token, db_conn, cleanup,
+):
+    """TEST 3 — Session + normal Proforma with no suspicious activity.
+    Proforma still contributes zero revenue.
+    No NON_ELIGIBLE_INVOICE_HAS_ACTIVITY / VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS /
+    UNRECOGNIZED_INVOICE_STATUS / UNRECOGNIZED_CREDIT_NOTE_STATUS should be
+    fabricated for a clean proforma.
+    """
+    session = await seed_session(db_conn)
+    await seed_invoice(
+        db_conn, session["id"], 7500.0,
+        document_type="proforma", status="issued",
+    )
+
+    r = await app_client.get(
+        f"/api/finance/source-of-truth/session/{session['id']}",
+        headers=_auth(finance_token),
+    )
+    assert r.status_code == 200
+    body = r.json()
+
+    assert body["session_revenue"] == 0.0
+    assert body["net_invoiced_value"] == 0.0
+    assert body["paid_amount"] == 0.0
+    assert body["outstanding_amount"] == 0.0
+    assert body["invoice_count"] == 0
+    assert body["proforma_count"] == 1
+    assert len(body["proforma_summaries"]) == 1
+
+    forbidden_codes = {
+        "NON_ELIGIBLE_INVOICE_HAS_ACTIVITY",
+        "VOIDED_INVOICE_HAS_ACTIVE_PAYMENTS",
+        "UNRECOGNIZED_INVOICE_STATUS",
+        "UNRECOGNIZED_CREDIT_NOTE_STATUS",
+    }
+    codes = {w["code"] for w in body["integrity_warnings"]}
+    assert not (codes & forbidden_codes), (
+        f"Clean proforma must not fabricate warnings; got: {codes & forbidden_codes}"
+    )
+
