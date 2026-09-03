@@ -1,0 +1,172 @@
+Phase 2 — FINAL HARDENING Report
+=================================
+Date: 2026-02-02
+
+Scope: Three hardening items applied on top of the previously-signed-off
+Phase 2 source-of-truth. NO redeployment. NO production data modified.
+NO Phase 3 work.
+
+
+1. EXACT FILES CHANGED
+----------------------
+    backend/services/financial_source_of_truth.py
+        - _compute_invoice_snapshot()
+            * Added strict Credit Note categorization:
+                  active_cns          (status in ACTIVE_CN_STATUSES)
+                  inactive_cns        (status in VOIDED_CN_STATUSES)
+                  unrecognized_cns    (status outside KNOWN_CN_STATUSES)
+                  voided_only_cns     (status == "voided" — STRICT)
+            * Return dict now exposes:
+                  credit_note_count             (== active count)
+                  active_credit_note_count      (NEW)
+                  inactive_credit_note_count    (NEW)
+                  unrecognized_credit_note_count(NEW)
+                  voided_credit_note_count      (STRICT: status=="voided" only)
+        - _compute_session_snapshot()
+            * After aggregating active invoices, iterate `excluded_invoices`
+              through `_compute_invoice_snapshot` for INTEGRITY-ONLY.
+            * Extend session `integrity_warnings` with per-invoice warnings
+              from excluded invoices (deduplicated by the per-invoice
+              snapshot which never emits the same warning twice for one
+              invoice).
+            * DO NOT add any excluded-invoice financial values to session
+              totals (revenue / paid / outstanding / net / gross all stay 0
+              for those invoices).
+            * Expose `excluded_invoice_summaries` (audit-only view; every
+              summary carries net_invoiced_value=0 and outstanding_amount=0).
+
+    backend/tests/test_financial_source_of_truth.py
+        - Added hard TEST-DB SAFETY GUARD at the very top of the module,
+          BEFORE any `server`/`core` import.
+        - Updated existing `test_10_multiple_credit_notes` to assert the
+          new strict CN count fields.
+        - Updated `app_client` fixture to fail fast if the FastAPI app is
+          not bound to the isolated test DB.
+        - Added 9 hardening tests (see section 5 below).
+
+    (No changes to server.py, routes/__init__.py, or the Phase 2 route file.)
+
+
+2. EXACT SESSION-WARNING PROPAGATION LOGIC
+------------------------------------------
+    for inv in excluded_invoices:
+        snap = self._compute_invoice_snapshot(inv, payments, credit_notes)
+        excluded_invoice_summaries.append({
+            ...   # audit-only fields
+            "net_invoiced_value": 0.0,      # DELIBERATELY 0
+            "outstanding_amount": 0.0,      # DELIBERATELY 0
+        })
+        warnings.extend(snap["integrity_warnings"])
+
+    - Excluded invoices NEVER contribute to gross_invoice_value,
+      credit_note_total, net_invoiced_value, paid_amount, outstanding_amount,
+      or session_revenue.
+    - Each per-invoice snapshot only produces each warning ONCE (verified by
+      test_HARDENING_session_excluded_invoice_does_not_duplicate_warnings).
+
+
+3. EXACT TEST-DB ISOLATION MECHANISM
+------------------------------------
+    a) At module import time, BEFORE any application module is imported:
+           TEST_DB_NAME = os.environ.get("TEST_DB_NAME")
+                       or f"{DB_NAME}_phase2_test"
+    b) A recognizer function requires the name to contain '_phase2_test',
+       or start with 'test_', or end with '_test' / '-test'.
+    c) If the resolved TEST_DB_NAME is not recognized, or equals the
+       production DB_NAME, the module raises RuntimeError and pytest
+       collection aborts — no fixtures can execute.
+    d) `os.environ["DB_NAME"] = TEST_DB_NAME` is set BEFORE `server` is
+       imported, so `core.db` binds to the isolated test DB.
+    e) A runtime check inside the `app_client` fixture asserts that
+       `core.db.name == TEST_DB_NAME`; if some earlier test file imported
+       core with a different DB_NAME, the suite refuses to run.
+    f) The production `.env` file is NEVER modified. Only the pytest
+       process's environment variable is set.
+
+    Production execution prevention (proof):
+        - Direct attempt with TEST_DB_NAME="driving_training_db":
+              raises RuntimeError with "not a recognized test database".
+        - Direct attempt with an arbitrary name like "random_prod_db":
+              also raises RuntimeError.
+        - Setting TEST_DB_NAME == DB_NAME (case-insensitive) raises a
+              dedicated RuntimeError refusing to touch production.
+
+
+4. EXACT CREDIT-NOTE COUNT SEMANTICS
+------------------------------------
+    active_credit_note_count       — status in {draft, approved, issued}
+    inactive_credit_note_count     — status in {voided, cancelled, deleted}
+    unrecognized_credit_note_count — status outside KNOWN_CN_STATUSES
+                                     (also emits UNRECOGNIZED_CREDIT_NOTE_STATUS)
+    voided_credit_note_count       — STRICT: status == "voided" ONLY
+                                     (retained for backward compatibility)
+    credit_note_count              — alias for active_credit_note_count
+
+    Financial rule UNCHANGED: only ACTIVE_CN_STATUSES reduce net invoiced
+    value. Nothing else does.
+
+
+5. PHASE 2 TEST RUN
+-------------------
+    Command: pytest tests/test_financial_source_of_truth.py -x -q
+    Run     : 41
+    Passed  : 41
+    Failed  :  0
+
+    Newly added hardening tests (9):
+        test_HARDENING_session_cancelled_invoice_with_payment_surfaces_warnings
+        test_HARDENING_session_unknown_status_invoice_surfaces_warning
+        test_HARDENING_session_excluded_invoice_does_not_duplicate_warnings
+        test_HARDENING_app_and_fixtures_use_isolated_test_db
+        test_HARDENING_test_db_name_is_recognized
+        test_HARDENING_cn_count_issued_is_active
+        test_HARDENING_cn_count_voided_is_voided
+        test_HARDENING_cn_count_cancelled_is_inactive_but_not_voided
+        test_HARDENING_cn_count_unknown_is_unrecognized_and_warns
+
+
+6. PHASE 1 REGRESSION
+---------------------
+    Command: pytest tests/test_payment_history.py -x -q
+    Run     : 26
+    Passed  : 26
+    Failed  :  0
+
+
+7. EXACT TEST DATABASE NAME USED
+--------------------------------
+    driving_training_db_phase2_test
+
+    (Derived automatically from the production DB_NAME
+     "driving_training_db" + "_phase2_test" suffix.)
+
+
+8. PRODUCTION-DB WRITE CONFIRMATION
+-----------------------------------
+    Post-run scan of the production DB "driving_training_db":
+
+        sessions      ph2_test docs = 0
+        invoices      ph2_test docs = 0
+        payments      ph2_test docs = 0
+        credit_notes  ph2_test docs = 0
+        users         ph2_test docs = 0
+
+    => The production database received ZERO test fixture writes.
+
+
+9. PRODUCTION-RECORD MODIFICATION CONFIRMATION
+----------------------------------------------
+    NO production financial record was modified, created, or deleted.
+    The service layer remains READ-ONLY; only the isolated test DB
+    "driving_training_db_phase2_test" received (and cleaned up)
+    fixture rows.
+
+
+10. PHASE 3 STATUS
+------------------
+    NOT STARTED.
+    No Proforma→Invoice repair, no session→invoice cardinality repair,
+    no historical data migration, no workflow changes.
+
+
+NEXT STEP: WAIT FOR INDEPENDENT REVIEW BEFORE REDEPLOYMENT.
