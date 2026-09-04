@@ -493,7 +493,6 @@ const AccountingTab = ({ companySettings }) => {
     <div class="footer">Generated on ${new Date().toLocaleString('en-MY')} | ${settings.company_name || ''}</div>
     </body></html>`;
     downloadPdf(_pdfHtml, 'Accounting');
-    setTimeout(() => w.print(), 400);
   };
 
   const months = [

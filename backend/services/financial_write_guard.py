@@ -40,8 +40,12 @@ class InvoiceLifecycleState:
     TERMINAL = EXCLUDED_INVOICE_STATUSES  # voided, cancelled, deleted, converted
 
     #: Financial fields that MUST NOT be edited once the invoice is
-    #: LOCKED_ACTIVE or TERMINAL.
+    #: LOCKED_ACTIVE or TERMINAL. Phase 3A Section B: ``status`` is a
+    #: material lifecycle field — arbitrary status mutation via a generic
+    #: PUT is prohibited. SuperAdmin lifecycle repair uses the dedicated
+    #: controlled workflows.
     LOCKED_FIELDS = frozenset({
+        "status",
         "total_amount",
         "subtotal",
         "tax_amount",
@@ -358,7 +362,12 @@ class FinancialWriteGuard:
         self,
         invoice_id: Optional[str],
     ) -> Dict[str, Any]:
-        """Manual CN creation requires a valid, non-terminal real invoice."""
+        """Phase 3A Section F: normal Credit Note creation is allowed ONLY
+        against a real invoice whose status is issued / partially_paid / paid.
+
+        Rejects: draft, auto_draft, finance_review, approved, proforma,
+        converted, cancelled, voided, deleted, missing invoice.
+        """
         if not invoice_id:
             raise FinancialSafetyError(
                 "CN_INVOICE_REQUIRED", "invoice_id is required to create a Credit Note.",
@@ -379,6 +388,15 @@ class FinancialWriteGuard:
             raise FinancialSafetyError(
                 "CN_AGAINST_TERMINAL_INVOICE",
                 f"Credit Notes cannot be created against a {status!r} invoice.",
+                http_status=400,
+            )
+        if status not in InvoiceLifecycleState.LOCKED_ACTIVE:
+            # Pre-issue (draft/auto_draft/finance_review/approved) is REJECTED
+            # — CNs are only meaningful against a real financial document.
+            raise FinancialSafetyError(
+                "CN_AGAINST_NON_ISSUED_INVOICE",
+                f"Credit Notes can only be created against issued invoices "
+                f"(got {status!r}).",
                 http_status=400,
             )
         return inv

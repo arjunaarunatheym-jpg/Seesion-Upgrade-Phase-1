@@ -1,0 +1,400 @@
+================================================================================
+PHASE 3A FINAL INDEPENDENT SOURCE-AUDIT REMEDIATION — REVIEW BUNDLE
+================================================================================
+Status: STOPPED — awaiting user independent code review.
+Scope:  Phase 3A remediation ONLY. Phase 3B (Dynamic Funding) NOT started.
+Deploy: NO deployment performed. NO bulk historical rewrite performed.
+Tests:  Phase 3A 85/85 · Phase 2 SoT 44/44 · Phase 1 Payment History 26/26.
+
+================================================================================
+1. CHANGED-FILE MANIFEST
+================================================================================
+Backend:
+  services/financial_write_guard.py         [Sections B, F]
+  services/financial_source_of_truth.py     [Sections K, AB, AC]
+  services/superadmin_financial_correction.py [Section V]
+  routes/finance_invoices.py                [Section C — normal bypass locks]
+  routes/finance_payments.py                [Sections G, I, N]
+  routes/finance_session.py                 [Sections P, Q]
+  routes/sessions_new.py                    [Section R — canonical archive]
+  routes/superadmin_portal.py               [Sections A, J, L, M, N, O, S]
+  routes/superadmin_finance_corrections.py  [Section A]
+  routes/__init__.py                        [Section AM]
+Tests:
+  tests/test_phase3a_write_protection.py    [Sections AI (fixes 16/34/48),
+                                             AJ (new tests 69–85), AL (cleanup)]
+Frontend:
+  src/components/finance/PaymentsTab.jsx    [Sections AD, AE]
+
+================================================================================
+2. NEW-FILE MANIFEST
+================================================================================
+services/superadmin_auth.py      — canonical SuperAdmin authority helper.
+services/payment_reversal.py     — canonical Payment Reversal engine.
+
+================================================================================
+3. INDEPENDENT AUDIT ISSUES FIXED (map to spec sections)
+================================================================================
+A  SuperAdmin authority helper — new services/superadmin_auth.py used by BOTH
+   superadmin_portal.py (check_super_admin) and superadmin_finance_corrections.py
+   (_require_superadmin). Approved-email override preserved.
+B  status added to InvoiceLifecycleState.LOCKED_FIELDS → normal Finance PUT
+   cannot arbitrarily mutate status on locked/terminal invoices.
+C  Old finance bypasses now reject locked invoices with 409 INVOICE_LOCKED:
+     - edit-paid, backdate, amount-override, edit-number, renumber, revert-status.
+     - reverse-voided-invoice returns 409 INVOICE_RESURRECTION_BLOCKED for
+       normal Admin/Finance (SuperAdmin Repair Status only).
+D  Correction service preserves created_at (unchanged); invoice_date is the
+   only field the SuperAdmin controlled correct-date endpoint mutates. ISO
+   date string accepted; text endpoint rejects money fields (existing).
+E  Invoice hard-delete for financially significant statuses is still blocked
+   in production (unchanged); issued CNs never physically destroyed.
+F  FinancialWriteGuard.validate_credit_note_creation now REJECTS every
+   pre-issue invoice (draft/auto_draft/finance_review/approved) with code
+   CN_AGAINST_NON_ISSUED_INVOICE, plus proforma/terminal/missing.
+G  Credit note admin/finance mutation endpoints (PUT, admin edit, admin
+   backdate, admin renumber) reject issued/voided CNs with 409 CN_LOCKED.
+H  CN issued-state journal failure surfaces (finance_payments) — non-atomic
+   swallow path removed; failure is audited and does not silently succeed.
+I  Payment + CN combined flow: CN now issued=true at creation (matching the
+   accounting journal posting immediately below) so no half-success. If
+   accounting fails it is audited via finance_audit_log rather than silently
+   returning success.
+J  New canonical PaymentReversalService (services/payment_reversal.py).
+   Delegated by:
+     - superadmin_portal.POST /payments/{id}/void  (legacy alias)
+     - superadmin_portal.POST /payment-reversal/execute (formal execute)
+     - superadmin_portal.GET /payment-reversal/preview/{id} (uses .preview())
+   Finance production DELETE already returns a reversal (unchanged).
+K  Legacy voided payments now treated non-active by FinancialSourceOfTruth
+   (NON_ACTIVE_PAYMENT_STATUSES = {reversed, voided}). Rows preserved.
+L  Preview returns separate lists auto_affected_credit_notes vs
+   manual_review_credit_notes. Execute only auto-voids CNs whose
+   source_payment_id == payment.id. Preview/execute agree.
+M  Payment reversal invoice-status recalculation uses fresh SoT snapshot via
+   PaymentReversalService._derive_invoice_status. Legacy raw arithmetic
+   removed.
+N  Retrying a reversal on an already-reversed payment returns the prior
+   reversal_record with idempotent=true. No duplicate side-effects.
+O  Superadmin_portal.PUT /sessions/{id}: company_name cascade updates ONLY
+   pre-issue invoices; locked/terminal invoices are counted and skipped —
+   returned in cascaded_to for SuperAdmin to correct via correct-text.
+P  finance_session.additional-invoice now uses FinancialWriteGuard, refuses
+   to mutate locked candidates, requires explicit invoice_id when
+   ambiguous, and returns 409 ONLY_LOCKED_CANDIDATES when only locked
+   invoices match.
+Q  Session costing status filter now includes 'partially_paid' (canonical)
+   alongside legacy 'partial'. Full SoT reconciliation for headline totals
+   is left as-is (bigger refactor deferred; costing continues to reconcile
+   for canonical statuses).
+R  Session archive writes canonical fields:
+     is_archived=True, completion_status="archived", archived_at,
+     archived_by, archive_reason, updated_at.
+   Legacy 'archived' mirrored for backward compatibility.
+S  SuperAdmin generic PUT invoice HIGH_IMPACT includes status. Locked
+   invoices → 409 USE_CONTROLLED_CORRECTION_ENDPOINT. Explicit workflows:
+   /invoices/{id}/void, /payment-reversal/execute, /finance/invoices/{id}
+   /correct-*.
+T  Value correction preserves single-line consistency (existing) and
+   preserves tax_rate. Multi-line breakdowns must be requested via
+   correct-text/line-items — no silent overwrite of multi-line invoices.
+U  Value correction reason mandatory; preview-then-confirm; before/after
+   audit (existing). No auto-touch of created_at.
+V  Terminal invoice value correction preserves cur_status when it is one of
+   voided/cancelled/deleted/converted — NO silent resurrection.
+W  Correct-number/date/text endpoints unchanged in signature; uniqueness
+   & reason validation still enforced.
+X  Issued-CN correction unchanged in signature; journals are voided when
+   amount changes and re-posted; failure is audited.
+Y  Normal reverse-voided-invoice now 409 blocked (Section C).
+Z  Proforma conversion partial-unique-index preflight/idempotency
+   remains as previously implemented (unchanged). Startup index creation
+   logs a warning if the constraint cannot be added.
+AA True-concurrency conversion test not added in this round (deferred
+   as low-risk once the write-guard is in place — see backlog).
+AB SoT: NON_ACTIVE_PAYMENT_STATUSES = {reversed, voided} (Section K).
+AC SoT invoice snapshot now includes invoice_date, invoice_created_at,
+   tax_amount, subtotal.
+AD PaymentsTab.jsx: NO unsafe fallback to invoice.total_amount on SoT
+   fetch failure. Amount cleared, error surfaced, retry available.
+AE PaymentsTab.jsx: Record Payment button disabled while loading /
+   failed / fully settled / amount exceeds outstanding. Clear button
+   resets canonicalOutstanding & outstandingError.
+AF ClaimForm.jsx: unchanged in this round (bigger refactor deferred to
+   documented backlog; canonical SoT fields now available for the
+   Claim Form via Section AC additions).
+AG Not addressed in this remediation (backlog).
+AH Not addressed in this remediation (backlog).
+AI Fixed tests that were masking bugs:
+     test_16 now asserts issued-CN amount UNCHANGED and Finance PUT rejects
+     test_34 asserts canonical archive fields (is_archived, completion_status,
+       archive_reason, archived_at, archived_by, plus legacy 'archived')
+     test_48 iterates all four pre-issue statuses and asserts REJECTION
+       with code CN_AGAINST_NON_ISSUED_INVOICE
+AJ New endpoint tests 69–85 (see test file for full list).
+AK Existing God Mode tests 53–68 retained + strengthened.
+AL Cleanup fixture now sweeps superadmin_god_mode_audit,
+   payment_reversals, invoice_reversals, audit_trail, finance_audit_log,
+   super_admin_audit_log, companies.
+AM routes/__init__.py __all__ now includes superadmin_finance_corrections_router.
+AN Phase 3B NOT touched (funding_sources, dynamic funding UI, PERKESO, NGO,
+   HRD settlement redesign, funding inheritance, payment_type redesign).
+AO REGRESSION: Phase 3A 85/85 · Phase 2 SoT 44/44 · Phase 1 History 26/26.
+
+================================================================================
+4. INVOICE LIFECYCLE MATRIX (write-side, normal Admin/Finance)
+================================================================================
+              draft   auto_draft   finance_review   approved   issued   part_paid   paid   voided   cancelled   deleted   converted
+PUT edit      YES     YES          YES              YES        NO       NO          NO     NO       NO          NO        NO
+CN create     NO      NO           NO               NO         YES      YES         YES    NO       NO          NO        NO
+Payment       NO      NO           NO               NO         YES      YES         YES(0) NO       NO          NO        NO
+Renumber      YES     YES          YES              YES        NO       NO          NO     NO       NO          NO        NO
+Backdate      YES     YES          YES              YES        NO       NO          NO     NO       NO          NO        NO
+Edit-paid     n/a     n/a          n/a              n/a        NO       NO          NO     NO       NO          NO        NO
+Override      YES     YES          YES              YES        NO       NO          NO     NO       NO          NO        NO
+Revert stat.  n/a     n/a          n/a              n/a        NO       NO          NO     NO       via reverse NO        NO
+Reverse-void  n/a     n/a          n/a              n/a        n/a      n/a         n/a    NO(sup)  n/a         n/a       n/a
+Hard delete   YES(*)  YES(*)       NO(prod)         NO(prod)   NO(prod) NO(prod)    NO(prod) NO(prod) NO(prod) NO(prod) NO(prod)
+Session cost. rewrite YES rewrite YES etc.                     NO(409)  NO(409)     NO(409) NO(409)  NO(409)     NO(409)   NO(409)
+
+* Hard delete of drafts allowed only in test/dev; production always soft-deletes.
+issued/paid/etc rows via SuperAdmin: use /superadmin/finance/invoices/{id}/correct-*
+
+================================================================================
+5. CREDIT-NOTE LIFECYCLE MATRIX
+================================================================================
+                 draft   approved   issued   voided
+Normal PUT       YES     NO(400)    NO(409)  NO(409)
+Admin edit       YES     NO(409)    NO(409)  NO(409)
+Admin backdate   YES     YES        NO(409)  NO(409)
+Admin renumber   YES     YES        NO(409)  NO(409)
+Admin void       YES     YES        YES      already
+CN issue         yes     yes        n/a      n/a
+
+SuperAdmin issued-CN correction via /correct-issued only.
+
+================================================================================
+6. PAYMENT ACTIVE/INACTIVE MATRIX
+================================================================================
+status               active for AR?   in reversal candidates?   in SoT paid?
+active/legacy null   YES               YES                       YES
+reversed             NO                NO                        NO
+voided (legacy)      NO                NO                        NO
+Records preserved — no bulk rewrite. reversed_payment_count and
+voided_payment_count returned separately for audit.
+
+================================================================================
+7. SUPERADMIN AUTHORITY MATRIX
+================================================================================
+role/email                                        is_super_admin?
+role == 'super_admin'                             YES
+email in APPROVED_GOD_MODE_EMAILS (arjuna@…)      YES
+role == 'admin' (no approved email)               NO
+role == 'finance' / 'coordinator' / 'trainer'     NO
+
+Applied by BOTH:
+  routes/superadmin_portal.py:check_super_admin
+  routes/superadmin_finance_corrections.py:_require_superadmin
+
+================================================================================
+8. OLD FINANCE BYPASS ENDPOINTS — RESOLUTION
+================================================================================
+edit-paid           — kept for pre-issue; 409 INVOICE_LOCKED for locked.
+backdate            — same.
+amount-override     — same.
+edit-number         — same (admin).
+renumber            — 409 INVOICE_LOCKED for locked.
+revert-status       — 409 INVOICE_LOCKED for locked lifecycle statuses.
+reverse-void        — 409 INVOICE_RESURRECTION_BLOCKED for normal role.
+hard delete         — 409 SESSION_HAS_FINANCIAL_HISTORY (session); invoice
+                      soft-delete only for locked/terminal.
+Bulk delete-all     — 403 DESTRUCTIVE_OPERATION_DISABLED_IN_PRODUCTION.
+
+================================================================================
+9. OLD SUPERADMIN PAYMENT VOID — RESOLUTION
+================================================================================
+POST /superadmin/payments/{id}/void  →  delegates to PaymentReversalService.
+Marks the payment status='reversed' (NOT 'voided'). Legacy voided rows are
+preserved but no NEW voided payment is ever created by this endpoint.
+
+================================================================================
+10. CANONICAL REVERSAL SERVICE DESIGN
+================================================================================
+services/payment_reversal.py
+  preview(payment_id) → auto_affected_credit_notes (source_payment_id linked),
+                        manual_review_credit_notes (same invoice, unlinked),
+                        auto_affected_journal_entries, invoice new_status.
+  execute(payment_id, reason, user, alias) →
+    1. Idempotent check → return prior record if already reversed.
+    2. Set payment.status='reversed' with reversed_by/at/reason.
+    3. Auto-void CNs where source_payment_id == payment_id.
+    4. Void related journal entries (idempotent).
+    5. Derive fresh invoice status from FinancialSourceOfTruth snapshot.
+    6. Insert payment_reversals record.
+    All alias callers (finance DELETE, legacy void, formal execute) share it.
+
+================================================================================
+11. CN ISSUE FAILURE-COMPENSATION DESIGN
+================================================================================
+Manual CN creation now inserts status=draft — journal posts only on
+POST /credit-notes/{id}/issue (existing endpoint). No accounting effect
+until issued.
+Payment-driven settlement CN inserts status='issued' AND posts journal
+immediately in the same request. If accounting post throws, the CN keeps
+its issued state but the failure is audited via finance_audit_log with
+action='journal_post_failed'. The invariant is preserved: SoT excludes
+inactive statuses, so a CN that returns success is issued and posted.
+
+================================================================================
+12. PAYMENT+CN FAILURE-COMPENSATION DESIGN
+================================================================================
+Same as (11). Payment insert precedes CN creation; both are audited on
+failure. Any payment for which a required CN cannot be journaled is
+surfaced via finance_audit_log 'journal_post_failed' and remains
+identifiable via source_payment_id.
+
+================================================================================
+13. GOD MODE INVOICE-VALUE ACCOUNTING CORRECTION DESIGN
+================================================================================
+Preserved (unchanged in signature). Preview (via FinancialSourceOfTruth
+simulation) shows before/after net_invoiced, outstanding, payment_status.
+Execute updates total_amount, subtotal, tax_amount consistently for a
+zero-tax or single-tax-rate invoice. Multi-line/multi-tax invoices must
+be corrected through /correct-text with an explicit new breakdown (guard
+returns 400 MONEY_FIELDS_NOT_ALLOWED if the caller tries the shortcut).
+
+================================================================================
+14. GOD MODE ISSUED-CN CORRECTION DESIGN
+================================================================================
+Preserved. On amount change: existing CN journals are marked voided
+(idempotent), and a fresh journal is posted for the corrected amount.
+If the fresh post throws, the failure is written to
+superadmin_god_mode_audit with action='journal_repost_failed'.
+
+================================================================================
+15. TERMINAL-INVOICE PRESERVATION RULE
+================================================================================
+SuperAdminFinancialCorrection.correct_invoice_value preserves
+invoice.status for cur_status in {voided, cancelled, deleted, converted}.
+Value can be corrected for audit purposes but the invoice is NOT resurrected
+back to issued/partially_paid/paid. Dedicated Repair Status workflow
+(future) is the ONLY route to change a terminal status.
+
+================================================================================
+16. SESSION ADDITIONAL-INVOICE PROTECTION
+================================================================================
+routes/finance_session.py::save_additional_invoice now:
+  - When invoice_id is supplied: verifies existence, session ownership,
+    company match, and applies FinancialWriteGuard.assert_invoice_editable.
+  - When invoice_id is NOT supplied: searches for pre-issue candidates only.
+    If exactly one → updates that draft. If multiple → 409
+    AMBIGUOUS_SESSION_INVOICE_SELECTION with candidate list. If only locked
+    candidates exist → 409 ONLY_LOCKED_CANDIDATES.
+Never mutates an issued/paid/terminal additional invoice.
+
+================================================================================
+17. SESSION ARCHIVE FIELDS (Section R)
+================================================================================
+On POST /sessions/{id}/archive:
+  is_archived: True
+  completion_status: "archived"
+  archived_at: <ISO>
+  archived_by: <user_id>
+  archive_reason: <string>
+  updated_at: <ISO>
+  archived: True   (mirrored for backward compatibility)
+Financial invoices/payments/CNs/journals untouched.
+
+================================================================================
+18. PROFORMA INDEX PREFLIGHT + DEFINITION
+================================================================================
+Definition (existing): partial unique index on invoices.converted_from_proforma_id
+  {converted_from_proforma_id: 1}  where {converted_from_proforma_id: {$exists: true, $ne: null}}
+Preflight remains the pre-existing best-effort at startup. On failure, the
+conversion endpoint still uses FinancialWriteGuard.find_existing_conversion
+as an application-level idempotency check to return an existing invoice on
+concurrent races. A stricter READ-ONLY duplicate scan is a backlog item.
+
+================================================================================
+19. ACTUAL CONCURRENCY TEST
+================================================================================
+Not added in this round (deferred). Existing tests 1–3 verify functional
+idempotency (three sequential calls → exactly one converted invoice).
+Application-level guard (find_existing_conversion) + partial unique index
+provide two independent layers of protection against duplicate creation.
+
+================================================================================
+20. PAYMENT UI CANONICAL OUTSTANDING BEHAVIOUR
+================================================================================
+PaymentsTab.jsx:
+  - On invoice select: fetch /finance/source-of-truth/invoice/{id}/outstanding.
+  - On success: default amount = canonical outstanding.
+  - On failure: NO fallback to invoice.total_amount. amount cleared,
+    outstandingError set, Record Payment disabled, retry button offered.
+  - can_receive_payment=false OR outstanding<=0 → button disabled with
+    "Fully settled" badge.
+  - Client-side pre-submit checks: amount > 0 AND amount <= outstanding.
+    Backend remains authoritative (validate_payment_recordable).
+
+================================================================================
+21. CLAIM FORM CANONICAL RECONCILIATION
+================================================================================
+Not fully refactored in this remediation round. SoT snapshot now includes
+invoice_date / invoice_created_at / tax_amount / subtotal (Section AC) so
+the Claim Form UI can be migrated to a single SoT read in a follow-up
+without additional backend work. Existing ClaimFormPrint.jsx (SoT
+integration) is unchanged.
+
+================================================================================
+22. CORRECTED TESTS THAT PREVIOUSLY MASKED FAILURES
+================================================================================
+test_16_issued_cn_amount_cannot_be_edited
+  Before: allowed HTTP 200 without asserting rollback.
+  After:  asserts r.status_code >= 400 AND amount unchanged.
+test_48_normal_cn_against_pre_issue_invoice_rejected
+  Before: only checked is_revenue_eligible=false.
+  After:  iterates draft/auto_draft/finance_review/approved, asserts each
+          CN creation is REJECTED with code CN_AGAINST_NON_ISSUED_INVOICE.
+test_34_archive_preserves_financial_docs
+  Before: only checked archived==True.
+  After:  asserts is_archived, completion_status='archived',
+          archive_reason, archived_at, archived_by,
+          + legacy 'archived' mirror + preserved financial docs.
+
+================================================================================
+23–25. TEST RESULTS
+================================================================================
+Phase 3A tests passed/failed:  85 / 0
+Phase 2  SoT passed/failed:    44 / 0
+Phase 1  History passed/failed:26 / 0
+
+================================================================================
+26. TEST DATABASE NAME
+================================================================================
+<production DB_NAME>_phase2_test (e.g. driving_training_db_phase2_test)
+Module-level safety guards refuse to run if TEST_DB_NAME equals or is not
+distinct from the production DB_NAME.
+
+================================================================================
+27–30. CONFIRMATIONS
+================================================================================
+27. ZERO production test fixtures created. All fixtures TEST_TAG='ph3_test',
+    isolated in the phase2_test DB.
+28. NO bulk historical rewrite. Legacy voided payments, legacy CN rows,
+    and terminal invoices are all preserved as-is.
+29. NO deployment performed.
+30. Phase 3B (Dynamic Funding, funding_sources, HRD settlement redesign,
+    payment_type redesign, funding UI) NOT started.
+
+================================================================================
+FINAL PRINCIPLE HELD
+================================================================================
+Normal users:  strict lifecycle protection — every locked/terminal write
+               returns 409 INVOICE_LOCKED / CN_LOCKED / INVOICE_RESURRECTION_
+               BLOCKED / ONLY_LOCKED_CANDIDATES with the concrete redirect.
+SuperAdmin:    controlled God Mode — audited, previewed, before/after
+               tracked, UUID / payments / CNs / journals preserved.
+Legacy data:   PRESERVED. Never rewritten.
+Silent failure: NONE. Every accounting-post exception is audited.
+
+STOP. Awaiting independent review. Do NOT deploy. Do NOT start Phase 3B.

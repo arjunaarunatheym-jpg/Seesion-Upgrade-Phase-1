@@ -1099,6 +1099,23 @@ async def update_credit_note(cn_id: str, update_data: dict, current_user: User =
     if not credit_note:
         raise HTTPException(status_code=404, detail="Credit note not found")
     
+    # Phase 3A Section G: issued and voided CNs are locked historical
+    # documents — normal Finance/Admin PUT MUST NOT mutate material fields.
+    # Approved CN was already blocked below; extend to issued/voided.
+    cn_status = (credit_note.get("status") or "").lower()
+    if cn_status in {"issued", "voided"}:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "CN_LOCKED",
+                "message": (
+                    f"Credit Note is in status {cn_status!r}; amount/number/"
+                    "date/text cannot be edited via the normal endpoint. Use "
+                    "/api/superadmin/finance/credit-notes/{id}/correct-issued."
+                ),
+                "cn_status": cn_status,
+            },
+        )
     if credit_note.get("status") == "approved":
         raise HTTPException(status_code=400, detail="Cannot modify approved credit note")
     
@@ -1276,6 +1293,13 @@ async def backdate_credit_note(
     credit_note = await db.credit_notes.find_one({"id": cn_id}, {"_id": 0})
     if not credit_note:
         raise HTTPException(status_code=404, detail="Credit note not found")
+    # Phase 3A Section G: backdate blocked on issued/voided CNs.
+    cn_status = (credit_note.get("status") or "").lower()
+    if cn_status in {"issued", "voided"}:
+        raise HTTPException(status_code=409, detail={
+            "code": "CN_LOCKED",
+            "message": f"Cannot backdate a {cn_status} credit note via the normal endpoint.",
+        })
     
     company_name = credit_note.get("company_name", "Unknown")
     amount = credit_note.get("amount", 0)
@@ -1335,6 +1359,23 @@ async def edit_credit_note_admin(
     credit_note = await db.credit_notes.find_one({"id": cn_id}, {"_id": 0})
     if not credit_note:
         raise HTTPException(status_code=404, detail="Credit note not found")
+
+    # Phase 3A Section G: admin edit endpoint may only touch DRAFT CNs.
+    # Issued/voided → SuperAdmin controlled correction only.
+    cn_status = (credit_note.get("status") or "").lower()
+    if cn_status in {"issued", "voided", "approved"}:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "CN_LOCKED",
+                "message": (
+                    f"Credit Note is in status {cn_status!r}; admin edit is "
+                    "prohibited. Use /api/superadmin/finance/credit-notes/"
+                    "{id}/correct-issued for controlled corrections."
+                ),
+                "cn_status": cn_status,
+            },
+        )
     
     record_ref = f"{credit_note.get('cn_number')} - {credit_note.get('company_name', 'Unknown')}"
     
@@ -1470,6 +1511,13 @@ async def edit_credit_note_number(
     credit_note = await db.credit_notes.find_one({"id": cn_id}, {"_id": 0})
     if not credit_note:
         raise HTTPException(status_code=404, detail="Credit note not found")
+    # Phase 3A Section G: renumber blocked on issued/voided CNs.
+    cn_status = (credit_note.get("status") or "").lower()
+    if cn_status in {"issued", "voided"}:
+        raise HTTPException(status_code=409, detail={
+            "code": "CN_LOCKED",
+            "message": f"Cannot renumber a {cn_status} credit note via the normal endpoint.",
+        })
     
     old_number = credit_note.get("cn_number")
     new_number = f"CN/MDDRC/{year}/{str(month).zfill(2)}/{str(sequence).zfill(4)}"

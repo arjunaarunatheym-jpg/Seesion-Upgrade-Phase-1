@@ -1171,24 +1171,33 @@ async def archive_session(session_id: str, request: dict, current_user: User = D
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    if session.get("archived"):
+    # Phase 3A Section R: canonical archive flags. is_archived and
+    # completion_status='archived' are the authoritative fields; legacy
+    # 'archived' is mirrored for backward compatibility only.
+    if session.get("is_archived") or session.get("completion_status") == "archived":
         raise HTTPException(status_code=400, detail="Session is already archived")
 
     now = get_malaysia_time()
     await db.sessions.update_one(
         {"id": session_id},
         {"$set": {
-            "archived": True,
+            # Canonical:
+            "is_archived": True,
+            "completion_status": "archived",
             "archived_at": now.isoformat(),
             "archived_by": current_user.id,
             "archive_reason": reason,
             "updated_at": now.isoformat(),
+            # Legacy mirror (do not break older code paths):
+            "archived": True,
         }},
     )
     return {
         "message": "Session archived. All financial records have been preserved.",
         "session_id": session_id,
         "archived_at": now.isoformat(),
+        "is_archived": True,
+        "completion_status": "archived",
     }
 
 

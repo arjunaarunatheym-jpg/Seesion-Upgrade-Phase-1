@@ -130,5 +130,6 @@ __all__ = [
     'certificate_verify_router',
     'admin_fee_router',
     'finance_source_of_truth_router',
+    'superadmin_finance_corrections_router',
     'get_all_routers',
 ]

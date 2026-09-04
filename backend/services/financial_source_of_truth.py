@@ -74,6 +74,10 @@ VOIDED_CN_STATUSES = {"voided", "deleted", "cancelled"}
 KNOWN_CN_STATUSES = ACTIVE_CN_STATUSES | PENDING_CN_STATUSES | VOIDED_CN_STATUSES
 
 REVERSED_PAYMENT_STATUS = "reversed"
+# Phase 3A Section AB/K: legacy 'voided' payments are also non-active. Both
+# statuses are preserved on disk (never rewritten) but excluded from paid /
+# outstanding / active-reversal-candidate calculations.
+NON_ACTIVE_PAYMENT_STATUSES = {"reversed", "voided"}
 
 # Rounding — 2 decimals is the app-wide convention for MYR.
 ROUND_DP = 2
@@ -154,9 +158,12 @@ def _cn_status_is_known(cn: Dict[str, Any]) -> bool:
 
 
 def _payment_is_valid(p: Dict[str, Any]) -> bool:
+    """Phase 3A Section AB/K: exclude 'reversed' AND 'voided' payments from
+    canonical active-payment calculations. Legacy voided rows are preserved
+    on disk — never rewritten."""
     if not p:
         return False
-    return (p.get("status") or "").lower() != REVERSED_PAYMENT_STATUS
+    return (p.get("status") or "").lower() not in NON_ACTIVE_PAYMENT_STATUSES
 
 
 # =============================================================================
@@ -288,6 +295,9 @@ class FinancialSourceOfTruth:
 
         # ---- Valid payments (always read; only applied when eligible) ----
         valid_payments = [p for p in payments if _payment_is_valid(p)]
+        # Reversed vs voided counts kept separately for audit (Section K).
+        reversed_only = [p for p in payments if (p.get("status") or "").lower() == REVERSED_PAYMENT_STATUS]
+        voided_only = [p for p in payments if (p.get("status") or "").lower() == "voided"]
         reversed_payments = [p for p in payments if not _payment_is_valid(p)]
         paid_amount = _round(sum(float(p.get("amount") or 0) for p in valid_payments))
 
@@ -370,11 +380,21 @@ class FinancialSourceOfTruth:
             "voided_credit_note_count": len(voided_only_cns),
             "net_invoiced_value": net_invoiced,
             "paid_amount": paid_amount,
-            "reversed_payment_count": len(reversed_payments),
+            "reversed_payment_count": len(reversed_only),
+            "voided_payment_count": len(voided_only),
+            "inactive_payment_count": len(reversed_payments),
             "valid_payment_count": len(valid_payments),
             "outstanding_amount": outstanding,
             "overpayment_amount": overpayment,
             "payment_status": payment_status,
+
+            # Phase 3A Section AC: harmless read-only display metadata for
+            # Claim Form / receipts. NEVER used to alter canonical financial
+            # values above.
+            "invoice_date": inv.get("invoice_date"),
+            "invoice_created_at": inv.get("created_at"),
+            "tax_amount": _round(inv.get("tax_amount") or 0),
+            "subtotal": _round(inv.get("subtotal") or 0),
 
             # Audit breakdown
             "breakdown": {
@@ -663,9 +683,10 @@ class FinancialSourceOfTruth:
     # Standalone integrity scans (read-only) — used for tests 12, 13.
     # -------------------------------------------------------------------------
     async def find_payment_integrity_warnings(self, sample_size: int = 5000) -> List[Dict[str, Any]]:
-        """Return payments whose invoice_id references a missing invoice."""
+        """Return payments whose invoice_id references a missing invoice.
+        Phase 3A Section AB: excludes both reversed and voided payments."""
         payments = await self.db.payments.find(
-            {"status": {"$ne": REVERSED_PAYMENT_STATUS}},
+            {"status": {"$nin": list(NON_ACTIVE_PAYMENT_STATUSES)}},
             {"_id": 0, "id": 1, "invoice_id": 1, "receipt_number": 1, "amount": 1},
         ).limit(sample_size).to_list(sample_size)
         invoice_ids = list({p.get("invoice_id") for p in payments if p.get("invoice_id")})

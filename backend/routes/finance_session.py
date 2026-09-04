@@ -43,7 +43,10 @@ async def get_session_costing(session_id: str, current_user: User = Depends(get_
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    ELIGIBLE_STATUSES = ["issued", "partial", "paid"]
+    # PHASE 3A Section Q: use canonical status set. Legacy 'partial' is
+    # obsolete — canonical is 'partially_paid'. Keep 'partial' for
+    # backward-compat reads of very old records if any still exist.
+    ELIGIBLE_STATUSES = ["issued", "partial", "partially_paid", "paid"]
     invoices = await db.invoices.find({
         "session_id": session_id,
         "status": {"$in": ELIGIBLE_STATUSES}
@@ -303,20 +306,79 @@ async def save_additional_invoice(session_id: str, invoice_data: dict, current_u
     now = get_malaysia_time()
     invoice_id = invoice_data.get("invoice_id")
 
+    # PHASE 3A Section P: additional-invoice writes must respect the invoice
+    # lifecycle just like save_session_invoice. Never arbitrarily pick a
+    # find_one({"session_id", "company_id"}) result and mutate it — that can
+    # rewrite a locked issued/paid invoice.
+    from services.financial_write_guard import FinancialWriteGuard
+    guard = FinancialWriteGuard(db)
+    PRE_ISSUE = ("draft", "auto_draft", "finance_review", "approved")
+
     if invoice_id:
-        update_dict = {
+        target = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+        if not target:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+        if target.get("session_id") != session_id:
+            raise HTTPException(status_code=400, detail="Invoice does not belong to this session")
+        if target.get("company_id") != company_id:
+            raise HTTPException(status_code=400, detail="Invoice belongs to a different company")
+        # Route through the canonical write guard for locked-field protection.
+        proposed = {
             "company_id": company_id,
             "company_name": company.get("name"),
             "total_amount": invoice_data.get("total_amount", 0),
             "tax_rate": invoice_data.get("tax_rate", 0),
             "tax_amount": invoice_data.get("tax_amount", 0),
-            "updated_at": now.isoformat()
         }
+        try:
+            guard.assert_invoice_editable(target, proposed)
+        except Exception:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "INVOICE_LOCKED",
+                    "message": (
+                        f"Invoice {invoice_id} is in status "
+                        f"{target.get('status')!r} — the additional-invoice endpoint "
+                        "cannot rewrite locked financial documents. Use "
+                        "/api/superadmin/finance/invoices/{id}/correct-value for "
+                        "controlled corrections."
+                    ),
+                    "invoice_id": invoice_id,
+                    "invoice_status": target.get("status"),
+                },
+            )
+        update_dict = {**proposed, "updated_at": now.isoformat()}
         await db.invoices.update_one({"id": invoice_id}, {"$set": update_dict})
         return {"message": "Additional invoice updated", "invoice_id": invoice_id}
     else:
-        existing = await db.invoices.find_one({"session_id": session_id, "company_id": company_id}, {"_id": 0})
-        if existing:
+        # No explicit invoice_id — search ONLY for a safe pre-issue candidate.
+        pre_issue_candidates = await db.invoices.find(
+            {"session_id": session_id, "company_id": company_id,
+             "status": {"$in": list(PRE_ISSUE)}},
+            {"_id": 0},
+        ).to_list(10)
+        locked_candidates = await db.invoices.find(
+            {"session_id": session_id, "company_id": company_id,
+             "status": {"$nin": list(PRE_ISSUE) + ["deleted"]}},
+            {"_id": 0, "id": 1, "invoice_number": 1, "status": 1, "total_amount": 1},
+        ).to_list(10)
+
+        if len(pre_issue_candidates) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "AMBIGUOUS_SESSION_INVOICE_SELECTION",
+                    "message": "Multiple pre-issue additional invoices exist; supply invoice_id explicitly.",
+                    "candidates": [
+                        {"id": c["id"], "invoice_number": c.get("invoice_number"),
+                         "status": c.get("status")}
+                        for c in pre_issue_candidates
+                    ],
+                },
+            )
+        if len(pre_issue_candidates) == 1:
+            existing = pre_issue_candidates[0]
             update_dict = {
                 "total_amount": invoice_data.get("total_amount", 0),
                 "tax_rate": invoice_data.get("tax_rate", 0),
@@ -325,6 +387,22 @@ async def save_additional_invoice(session_id: str, invoice_data: dict, current_u
             }
             await db.invoices.update_one({"id": existing["id"]}, {"$set": update_dict})
             return {"message": "Additional invoice updated", "invoice_id": existing["id"]}
+
+        # No pre-issue candidate but locked ones exist → refuse to touch them.
+        if locked_candidates:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ONLY_LOCKED_CANDIDATES",
+                    "message": (
+                        "Only issued/paid/terminal additional invoices exist "
+                        "for this company on this session — they cannot be "
+                        "mutated. Create a new draft or use SuperAdmin "
+                        "controlled correction endpoints."
+                    ),
+                    "candidates": locked_candidates,
+                },
+            )
 
         reuse_number = invoice_data.get("reuse_invoice_number")
         if reuse_number:

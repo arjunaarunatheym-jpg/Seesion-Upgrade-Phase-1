@@ -46,23 +46,26 @@ const PaymentsTab = ({
     ...initialPaymentForm,
     invoice_id: selectedInvoiceId || ''
   });
-  // PHASE 3A (Section 26): canonical outstanding for the selected invoice.
+  // PHASE 3A (Section AD/AE): canonical outstanding for the selected invoice.
   const [canonicalOutstanding, setCanonicalOutstanding] = useState(null);
+  const [outstandingError, setOutstandingError] = useState(null);
+  const [outstandingLoading, setOutstandingLoading] = useState(false);
 
   // Filter pending invoices for payment
   const pendingInvoices = invoices.filter(inv => inv.status === 'issued' || inv.status === 'partially_paid');
 
   // Handle invoice selection and auto-fill amount from CANONICAL outstanding.
   const handleInvoiceSelect = async (invoiceId) => {
-    const invoice = invoices.find(inv => inv.id === invoiceId);
     setPaymentForm({ ...paymentForm, invoice_id: invoiceId, amount: '' });
     setCanonicalOutstanding(null);
+    setOutstandingError(null);
     if (!invoiceId) return;
+    setOutstandingLoading(true);
     try {
       const r = await axiosInstance.get(`/finance/source-of-truth/invoice/${invoiceId}/outstanding`);
       const c = r.data || {};
       setCanonicalOutstanding(c);
-      // Default to canonical outstanding, NOT invoice.total_amount.
+      // Default to canonical outstanding, NEVER invoice.total_amount.
       const defaultAmount = Number(c.outstanding_amount || 0);
       setPaymentForm(prev => ({
         ...prev,
@@ -70,21 +73,37 @@ const PaymentsTab = ({
         amount: defaultAmount > 0 ? defaultAmount : ''
       }));
     } catch (err) {
-      // Fallback to face value only if the SoT endpoint is unavailable.
-      if (invoice) {
-        setPaymentForm(prev => ({
-          ...prev,
-          invoice_id: invoiceId,
-          amount: invoice.total_amount || ''
-        }));
-      }
+      // Phase 3A: NO unsafe fallback to invoice.total_amount. Backend is
+      // authoritative. Clear the amount, disable submission, surface the
+      // error and allow the user to retry the invoice select.
+      setOutstandingError('Unable to verify outstanding amount from server. Please retry.');
+      setPaymentForm(prev => ({ ...prev, invoice_id: invoiceId, amount: '' }));
+    } finally {
+      setOutstandingLoading(false);
     }
   };
 
+  // Reset canonicalOutstanding + error when the form is cleared.
+  const clearForm = () => {
+    setPaymentForm(initialPaymentForm);
+    setCanonicalOutstanding(null);
+    setOutstandingError(null);
+  };
+
+  const paymentDisabled = (
+    !paymentForm.invoice_id ||
+    outstandingLoading ||
+    !!outstandingError ||
+    (canonicalOutstanding && Number(canonicalOutstanding.outstanding_amount || 0) <= 0) ||
+    !paymentForm.amount ||
+    Number(paymentForm.amount) <= 0 ||
+    (canonicalOutstanding && Number(paymentForm.amount) > Number(canonicalOutstanding.outstanding_amount || 0) + 0.01)
+  );
+
   // Record payment API call
   const handleRecordPayment = async () => {
-    if (!paymentForm.invoice_id || !paymentForm.amount) {
-      toast.error("Please select invoice and enter amount");
+    if (paymentDisabled) {
+      toast.error(outstandingError || "Select an invoice and enter a valid amount within outstanding.");
       return;
     }
 
@@ -115,6 +134,8 @@ const PaymentsTab = ({
         toast.success("Payment recorded successfully");
       }
       setPaymentForm(initialPaymentForm);
+      setCanonicalOutstanding(null);
+      setOutstandingError(null);
       onRefresh();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to record payment");
@@ -554,14 +575,30 @@ const PaymentsTab = ({
           )}
           
           <div className="flex gap-2">
-            <Button onClick={handleRecordPayment} className="bg-green-600 hover:bg-green-700 flex-1">
+            <Button
+              onClick={handleRecordPayment}
+              disabled={paymentDisabled}
+              className="bg-green-600 hover:bg-green-700 flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
+              data-testid="record-payment-btn"
+            >
               <CreditCard className="w-4 h-4 mr-2" />
               Record Payment
             </Button>
-            <Button variant="outline" onClick={() => setPaymentForm(initialPaymentForm)}>
+            <Button variant="outline" onClick={clearForm} data-testid="clear-payment-form-btn">
               Clear
             </Button>
           </div>
+          {outstandingError && (
+            <p className="text-xs text-red-600 mt-2" data-testid="outstanding-error-hint">
+              {outstandingError}
+              <Button variant="ghost" size="sm" className="ml-1 h-auto p-1 text-xs" onClick={() => handleInvoiceSelect(paymentForm.invoice_id)}>
+                Retry
+              </Button>
+            </p>
+          )}
+          {outstandingLoading && (
+            <p className="text-xs text-slate-500 mt-2" data-testid="outstanding-loading-hint">Verifying canonical outstanding…</p>
+          )}
         </CardContent>
       </Card>
 

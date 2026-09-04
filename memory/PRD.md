@@ -117,3 +117,31 @@ Comprehensive training management platform for Malaysian Defensive Driving and R
 - Delete CertificateAdjuster.jsx (dead code)
 - Extract HTML generators from MarketingDashboard.jsx (~1700 lines) to utils
 - Mobile responsiveness audit on older Admin/Coordinator tables
+
+## Phase 3A Remediation — 2026-02 (STOPPED for independent review)
+- Consolidated Phase 3A source-audit remediation completed (41 items).
+- Added canonical SuperAdmin auth helper (`services/superadmin_auth.py`) used
+  by BOTH legacy portal and new correction endpoints (Section A).
+- Added canonical Payment Reversal engine (`services/payment_reversal.py`)
+  delegated by legacy /payments/{id}/void, formal /payment-reversal/execute,
+  and preview. Idempotent, source_payment_id scoped, SoT-derived status.
+- FinancialWriteGuard now treats `status` as a locked lifecycle field;
+  Credit Notes may be created ONLY against issued/partially_paid/paid.
+- FinancialSourceOfTruth: legacy voided payments treated non-active
+  (excluded from paid + outstanding). Added invoice_date/created_at/
+  tax_amount/subtotal to invoice snapshot for display.
+- All old finance bypass endpoints (edit-paid, backdate, override,
+  edit-number, renumber, revert-status, reverse-void) reject
+  locked/terminal invoices with concrete 409 codes.
+- Terminal invoices are never resurrected by value correction.
+- Session archive writes canonical `is_archived` + `completion_status`
+  = 'archived' + archive_reason/archived_at/archived_by (legacy `archived`
+  mirrored).
+- Superadmin session cascade only rewrites pre-issue invoices.
+- Payment UI: unsafe fallback to invoice.total_amount removed; button
+  disabled while loading/failed/fully-settled/over-outstanding.
+- Fixed masking tests 16 / 34 / 48. Added new endpoint-level tests 69–85.
+- Regression: Phase 3A 85/85 · Phase 2 SoT 44/44 · Phase 1 History 26/26.
+- NO deployment. NO Phase 3B work started. NO bulk historical rewrite.
+- Review bundle: `/app/memory/PHASE_3A_REMEDIATION_REVIEW_BUNDLE.txt`.
+

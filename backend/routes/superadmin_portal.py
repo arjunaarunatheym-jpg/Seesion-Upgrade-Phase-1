@@ -25,6 +25,7 @@ import csv
 
 from core import db, get_current_user, get_malaysia_time
 from models import User
+from services.superadmin_auth import is_super_admin
 
 router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 
@@ -32,12 +33,17 @@ router = APIRouter(prefix="/superadmin", tags=["superadmin"])
 # ============ ACCESS CONTROL ============
 
 def check_super_admin(user: User):
-    """Check if user has super admin access"""
-    # Allow specific email OR super_admin role
-    allowed_emails = ["arjuna@mddrc.com.my"]
-    if user.email in allowed_emails or user.role == "super_admin":
-        return True
-    return False
+    """Phase 3A Section A: single canonical SuperAdmin authority check.
+
+    Delegates to :func:`services.superadmin_auth.is_super_admin` so the
+    legacy portal endpoints and the new controlled correction endpoints
+    can never diverge. The rule is:
+
+    - role == 'super_admin' allowed
+    - user.email in APPROVED_GOD_MODE_EMAILS allowed (approved owner override)
+    - everyone else denied
+    """
+    return is_super_admin(user)
 
 
 # ============ AUDIT LOGGING ============
@@ -341,17 +347,36 @@ async def update_session(
     await db.sessions.update_one({"id": session_id}, {"$set": update_fields})
     
     # CASCADE: If company_name is being updated, propagate to related records
+    # PHASE 3A (Section O): only pre-issue invoices participate in cascade.
+    # Issued / partially_paid / paid / terminal invoices are locked historical
+    # documents — a session edit MUST NOT rewrite their snapshot. If the
+    # issued invoice snapshot is genuinely wrong, SuperAdmin must use the
+    # dedicated /superadmin/finance/invoices/{id}/correct-text controlled
+    # endpoint (audited, before/after preserved).
     cascaded_updates = []
     if "company_name" in update_fields:
         new_company_name = update_fields["company_name"]
-        
-        # 1. Update all invoices linked to this session
+
+        # 1. Only pre-issue invoices — never rewrite locked/terminal.
+        PRE_ISSUE = ["draft", "auto_draft", "finance_review", "approved"]
         invoice_result = await db.invoices.update_many(
-            {"session_id": session_id},
+            {"session_id": session_id, "status": {"$in": PRE_ISSUE}},
             {"$set": {"company_name": new_company_name, "bill_to_name": new_company_name}}
         )
         if invoice_result.modified_count > 0:
-            cascaded_updates.append(f"{invoice_result.modified_count} invoice(s)")
+            cascaded_updates.append(f"{invoice_result.modified_count} pre-issue invoice(s)")
+
+        # Report how many locked invoices were skipped so the SuperAdmin can
+        # correct them individually via the controlled endpoints.
+        locked_skipped = await db.invoices.count_documents({
+            "session_id": session_id,
+            "status": {"$nin": PRE_ISSUE + ["deleted"]},
+        })
+        if locked_skipped > 0:
+            cascaded_updates.append(
+                f"{locked_skipped} locked/terminal invoice(s) NOT rewritten — "
+                "use /superadmin/finance/invoices/{id}/correct-text to correct each"
+            )
         
         # 2. Update the original lead record if lead_id exists
         lead_id = session.get("lead_id")
@@ -501,13 +526,13 @@ async def update_invoice(
     # SuperAdmin can still correct these — but ONLY through the controlled
     # dedicated endpoints (correct-number/value/date/text) so that impact
     # preview, before/after audit, and relationship preservation are applied.
+    # Section S: `status` is now a HIGH_IMPACT field — arbitrary lifecycle
+    # mutation via the generic PUT is prohibited on locked invoices; the
+    # dedicated void/reversal/repair endpoints must be used instead.
     from services.superadmin_financial_correction import (
         high_impact_touched, HIGH_IMPACT_INVOICE_FIELDS,
     )
     touched = high_impact_touched(invoice, update_fields)
-    # `status` is already handled above by the BLOCKED_DOWNGRADES check —
-    # ignore it here to avoid double-blocking the allowed transitions.
-    touched = [f for f in touched if f != "status"]
     if touched:
         raise HTTPException(
             status_code=409,
@@ -516,7 +541,9 @@ async def update_invoice(
                 "message": (
                     "Locked invoice has high-impact fields in this request. "
                     f"Use the dedicated SuperAdmin correction endpoints for {touched}. "
-                    "See /api/superadmin/finance/invoices/{invoice_id}/correct-* endpoints."
+                    "For lifecycle changes use /invoices/{id}/void or "
+                    "/payment-reversal/execute; for material data use "
+                    "/api/superadmin/finance/invoices/{id}/correct-* endpoints."
                 ),
                 "fields": touched,
                 "invoice_status": invoice.get("status"),
@@ -602,46 +629,20 @@ async def void_payment(
     reason: str = Query(..., min_length=10),
     current_user: User = Depends(get_current_user)
 ):
-    """Void a payment"""
+    """Phase 3A Section J/K: legacy alias — delegates to the canonical
+    payment reversal engine. The payment is reversed (status='reversed'),
+    NOT set to 'voided' — legacy voided rows are preserved on disk but new
+    reversals use the canonical status.
+    """
     if not check_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Super Admin access required")
-    
-    payment = await db.payments.find_one({"id": payment_id}, {"_id": 0})
-    if not payment:
+
+    from services.payment_reversal import PaymentReversalService
+    svc = PaymentReversalService(db)
+    result = await svc.execute(payment_id, reason=reason, user=current_user, alias="legacy_void")
+    if result.get("error") == "PAYMENT_NOT_FOUND":
         raise HTTPException(status_code=404, detail="Payment not found")
-    
-    if payment.get("status") == "voided":
-        raise HTTPException(status_code=400, detail="Payment already voided")
-    
-    await db.payments.update_one({"id": payment_id}, {"$set": {
-        "status": "voided",
-        "voided_by": current_user.id,
-        "voided_at": get_malaysia_time().isoformat(),
-        "void_reason": reason
-    }})
-    
-    # Update invoice amount_paid if needed
-    if payment.get("invoice_id"):
-        invoice = await db.invoices.find_one({"id": payment["invoice_id"]}, {"_id": 0})
-        if invoice:
-            new_amount_paid = (invoice.get("amount_paid", 0) or 0) - payment.get("amount", 0)
-            new_status = "issued" if new_amount_paid < invoice.get("total_amount", 0) else invoice.get("status")
-            await db.invoices.update_one({"id": payment["invoice_id"]}, {"$set": {
-                "amount_paid": max(0, new_amount_paid),
-                "status": new_status
-            }})
-    
-    await log_super_admin_action(
-        action="payment_voided",
-        entity_type="payment",
-        entity_id=payment_id,
-        performed_by=current_user,
-        before_value={"amount": payment.get("amount")},
-        after_value={"status": "voided"},
-        reason=reason
-    )
-    
-    return {"message": "Payment voided"}
+    return result
 
 
 # ============ QUOTATIONS MANAGEMENT ============
@@ -1111,95 +1112,22 @@ async def preview_payment_reversal(
     payment_id: str,
     current_user: User = Depends(get_current_user)
 ):
-    """Preview what will be affected by reversing a payment (Step 1 of formal flow)"""
+    """Phase 3A Section L: preview via the canonical reversal service.
+    Returns auto_affected_credit_notes (source_payment_id linked) separately
+    from manual_review_credit_notes (same invoice, not linked)."""
     if not check_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Super Admin access required")
-
-    payment = await db.payments.find_one({"id": payment_id}, {"_id": 0})
-    if not payment:
+    from services.payment_reversal import PaymentReversalService
+    result = await PaymentReversalService(db).preview(payment_id)
+    if result.get("error") == "PAYMENT_NOT_FOUND":
         raise HTTPException(status_code=404, detail="Payment not found")
+    return result
 
-    if payment.get("status") == "reversed":
-        raise HTTPException(status_code=400, detail="Payment is already reversed")
-
-    invoice = None
-    if payment.get("invoice_id"):
-        invoice = await db.invoices.find_one({"id": payment["invoice_id"]}, {"_id": 0})
-
-    # Find linked credit notes (same invoice, created around same time or linked by payment)
-    linked_credit_notes = []
-    if payment.get("invoice_id"):
-        credit_notes = await db.credit_notes.find(
-            {"invoice_id": payment["invoice_id"], "status": {"$ne": "voided"}},
-            {"_id": 0}
-        ).to_list(100)
-        for cn in credit_notes:
-            linked_credit_notes.append({
-                "id": cn["id"],
-                "cn_number": cn.get("cn_number"),
-                "amount": cn.get("amount", 0),
-                "percentage": cn.get("percentage"),
-                "status": cn.get("status"),
-                "reason": cn.get("reason"),
-                "created_at": cn.get("created_at")
-            })
-
-    # Find linked journal entries
-    linked_journals = []
-    # Payment journal
-    payment_journals = await db.journal_entries.find(
-        {"source_id": payment_id, "source_module": "payment", "status": {"$ne": "voided"}},
-        {"_id": 0, "id": 1, "journal_no": 1, "description": 1, "total_debit": 1, "status": 1}
-    ).to_list(10)
-    linked_journals.extend(payment_journals)
-
-    # Credit note journals
-    for cn in linked_credit_notes:
-        cn_journals = await db.journal_entries.find(
-            {"source_id": cn["id"], "source_module": "credit_note", "status": {"$ne": "voided"}},
-            {"_id": 0, "id": 1, "journal_no": 1, "description": 1, "total_debit": 1, "status": 1}
-        ).to_list(10)
-        linked_journals.extend(cn_journals)
-
-    # Determine invoice status change
-    other_payments = await db.payments.find(
-        {"invoice_id": payment.get("invoice_id"), "id": {"$ne": payment_id}, "status": {"$ne": "reversed"}},
-        {"_id": 0}
-    ).to_list(100)
-    other_paid = sum(p.get("amount", 0) for p in other_payments)
-    invoice_total = invoice.get("total_amount", 0) if invoice else 0
-
-    new_invoice_status = "issued" if other_paid < invoice_total else "paid"
-
-    return {
-        "payment": {
-            "id": payment["id"],
-            "amount": payment.get("amount", 0),
-            "payment_date": payment.get("payment_date"),
-            "payment_method": payment.get("payment_method"),
-            "receipt_number": payment.get("receipt_number"),
-            "notes": payment.get("notes"),
-            "created_at": payment.get("created_at"),
-            "status": payment.get("status", "active")
-        },
-        "invoice": {
-            "id": invoice["id"],
-            "invoice_number": invoice.get("invoice_number"),
-            "company_name": invoice.get("company_name") or invoice.get("bill_to_name"),
-            "total_amount": invoice.get("total_amount", 0),
-            "current_status": invoice.get("status"),
-            "new_status_after_reversal": new_invoice_status
-        } if invoice else None,
-        "linked_credit_notes": linked_credit_notes,
-        "linked_journal_entries": linked_journals,
-        "summary": {
-            "payment_amount": payment.get("amount", 0),
-            "credit_notes_to_void": len(linked_credit_notes),
-            "credit_notes_total": sum(cn["amount"] for cn in linked_credit_notes),
-            "journals_to_void": len(linked_journals),
-            "invoice_status_change": f"{invoice.get('status', '?')} → {new_invoice_status}" if invoice else "N/A"
-        }
-    }
+    from services.payment_reversal import PaymentReversalService
+    result = await PaymentReversalService(db).preview(payment_id)
+    if result.get("error") == "PAYMENT_NOT_FOUND":
+        raise HTTPException(status_code=404, detail="Payment not found")
+    return result
 
 
 @router.post("/payment-reversal/execute")
@@ -1207,245 +1135,53 @@ async def execute_payment_reversal(
     request: PaymentReversalRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Execute a payment reversal with full audit trail (Step 2 of formal flow)"""
+    """Phase 3A Section J/M/N: audited execute delegating to the canonical
+    reversal engine. Idempotent — retrying returns the prior record."""
     if not check_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Super Admin access required")
-
     if not request.confirm:
         raise HTTPException(status_code=400, detail="Please confirm the reversal by setting confirm=true")
 
-    payment = await db.payments.find_one({"id": request.payment_id}, {"_id": 0})
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment not found")
-
-    if payment.get("status") == "reversed":
-        raise HTTPException(status_code=400, detail="Payment is already reversed")
-
-    now = get_malaysia_time()
-    reversal_id = str(uuid.uuid4())
-    actions_taken = []
-
-    # ========== 1. REVERSE THE PAYMENT ==========
-    old_payment_status = payment.get("status", "active")
-    await db.payments.update_one(
-        {"id": request.payment_id},
-        {"$set": {
-            "status": "reversed",
-            "reversed_by": current_user.id,
-            "reversed_by_name": current_user.full_name,
-            "reversed_at": now.isoformat(),
-            "reversal_reason": request.reason,
-            "reversal_id": reversal_id,
-            "updated_at": now.isoformat()
-        }}
-    )
-    actions_taken.append(f"Payment RM {payment.get('amount', 0):,.2f} reversed")
-
-    await log_super_admin_action(
-        action="payment_reversed",
-        entity_type="payment",
-        entity_id=request.payment_id,
-        performed_by=current_user,
-        before_value={"status": old_payment_status, "amount": payment.get("amount")},
-        after_value={"status": "reversed"},
-        reason=request.reason
-    )
-
-    # Also log to the finance audit trail
+    from services.payment_reversal import PaymentReversalService
     from routes.finance_payments import create_audit_trail_entry
-    invoice = None
-    if payment.get("invoice_id"):
-        invoice = await db.invoices.find_one({"id": payment["invoice_id"]}, {"_id": 0})
 
-    company_name = invoice.get("company_name", "Unknown") if invoice else "Unknown"
-    await create_audit_trail_entry(
-        action="Payment Reversed (Super Admin)",
-        record_reference=f"{company_name} - RM {payment.get('amount', 0):,.2f} ({payment.get('receipt_number', '')})",
-        entity_type="payment",
-        entity_id=request.payment_id,
-        changed_by=current_user,
-        reason=request.reason,
-        field_changed="status",
-        from_value=old_payment_status,
-        to_value="reversed"
+    svc = PaymentReversalService(db)
+    result = await svc.execute(
+        request.payment_id, reason=request.reason, user=current_user, alias="formal_execute",
     )
-
-    # ========== 2. VOID LINKED CREDIT NOTES ==========
-    # PHASE 3A (Section L): only auto-void CNs EXPLICITLY linked to this payment
-    # via source_payment_id. Legacy CNs on the same invoice with no explicit
-    # link are NOT auto-voided; they are surfaced as a manual-review warning.
-    voided_credit_notes = []
-    unlinked_credit_notes_needing_review = []
-    if payment.get("invoice_id"):
-        credit_notes_on_invoice = await db.credit_notes.find(
-            {"invoice_id": payment["invoice_id"], "status": {"$ne": "voided"}},
-            {"_id": 0}
-        ).to_list(100)
-
-        for cn in credit_notes_on_invoice:
-            if cn.get("source_payment_id") != request.payment_id:
-                # Not linked to THIS payment — do NOT auto-void.
-                unlinked_credit_notes_needing_review.append({
-                    "id": cn.get("id"),
-                    "cn_number": cn.get("cn_number"),
-                    "amount": cn.get("amount"),
-                    "status": cn.get("status"),
-                    "source_payment_id": cn.get("source_payment_id"),
-                })
-                continue
-
-            old_cn_status = cn.get("status")
-            await db.credit_notes.update_one(
-                {"id": cn["id"]},
-                {"$set": {
-                    "status": "voided",
-                    "voided_by": current_user.id,
-                    "voided_at": now.isoformat(),
-                    "void_reason": f"Payment reversal: {request.reason}",
-                    "reversal_id": reversal_id,
-                    "updated_at": now.isoformat()
-                }}
-            )
-            voided_credit_notes.append(cn["id"])
-            actions_taken.append(f"Credit Note {cn.get('cn_number')} voided (RM {cn.get('amount', 0):,.2f})")
-
-            await log_super_admin_action(
-                action="credit_note_voided_by_reversal",
-                entity_type="credit_note",
-                entity_id=cn["id"],
-                performed_by=current_user,
-                before_value={"status": old_cn_status, "amount": cn.get("amount")},
-                after_value={"status": "voided"},
-                reason=f"Payment reversal: {request.reason}"
-            )
-
-            await create_audit_trail_entry(
-                action="Credit Note Voided (Payment Reversal)",
-                record_reference=f"{cn.get('cn_number')} - RM {cn.get('amount', 0):,.2f}",
-                entity_type="credit_note",
-                entity_id=cn["id"],
-                changed_by=current_user,
-                reason=f"Payment reversal: {request.reason}",
-                field_changed="status",
-                from_value=old_cn_status,
-                to_value="voided"
-            )
-        if unlinked_credit_notes_needing_review:
-            actions_taken.append(
-                f"{len(unlinked_credit_notes_needing_review)} legacy credit note(s) on the "
-                f"same invoice were NOT auto-voided (no source_payment_id link). "
-                f"Please review them manually."
-            )
-
-    # ========== 3. VOID RELATED JOURNAL ENTRIES ==========
-    voided_journals = []
-    # Payment journal entries
-    payment_journals = await db.journal_entries.find(
-        {"source_id": request.payment_id, "source_module": "payment", "status": {"$ne": "voided"}},
-        {"_id": 0}
-    ).to_list(10)
-
-    for je in payment_journals:
-        await db.journal_entries.update_one(
-            {"id": je["id"]},
-            {"$set": {
-                "status": "voided",
-                "voided_by": current_user.id,
-                "voided_by_name": current_user.full_name,
-                "voided_at": now.isoformat(),
-                "void_reason": f"Payment reversal: {request.reason}",
-                "reversal_id": reversal_id,
-                "updated_at": now.isoformat()
-            }}
+    if result.get("error") == "PAYMENT_NOT_FOUND":
+        raise HTTPException(status_code=404, detail="Payment not found")
+    # Best-effort dual-audit (keep prior finance audit trail entries).
+    if not result.get("idempotent"):
+        payment = await db.payments.find_one({"id": request.payment_id}, {"_id": 0})
+        invoice = await db.invoices.find_one(
+            {"id": payment.get("invoice_id")}, {"_id": 0}
+        ) if payment and payment.get("invoice_id") else None
+        company_name = (invoice.get("company_name") or invoice.get("bill_to_name") or "Unknown") if invoice else "Unknown"
+        await log_super_admin_action(
+            action="payment_reversed",
+            entity_type="payment",
+            entity_id=request.payment_id,
+            performed_by=current_user,
+            before_value={"status": "active", "amount": payment.get("amount") if payment else None},
+            after_value={"status": "reversed"},
+            reason=request.reason,
         )
-        voided_journals.append(je["id"])
-        actions_taken.append(f"Journal {je.get('journal_no')} voided")
-
-    # Credit note journal entries
-    for cn_id in voided_credit_notes:
-        cn_journals = await db.journal_entries.find(
-            {"source_id": cn_id, "source_module": "credit_note", "status": {"$ne": "voided"}},
-            {"_id": 0}
-        ).to_list(10)
-
-        for je in cn_journals:
-            await db.journal_entries.update_one(
-                {"id": je["id"]},
-                {"$set": {
-                    "status": "voided",
-                    "voided_by": current_user.id,
-                    "voided_by_name": current_user.full_name,
-                    "voided_at": now.isoformat(),
-                    "void_reason": f"Credit note reversal: {request.reason}",
-                    "reversal_id": reversal_id,
-                    "updated_at": now.isoformat()
-                }}
+        try:
+            await create_audit_trail_entry(
+                action="Payment Reversed (Super Admin)",
+                record_reference=f"{company_name} - RM {float(payment.get('amount') or 0):,.2f}",
+                entity_type="payment",
+                entity_id=request.payment_id,
+                changed_by=current_user,
+                reason=request.reason,
+                field_changed="status",
+                from_value="active",
+                to_value="reversed",
             )
-            voided_journals.append(je["id"])
-            actions_taken.append(f"Journal {je.get('journal_no')} voided (credit note)")
-
-    # ========== 4. REVERT INVOICE STATUS ==========
-    if invoice:
-        other_payments = await db.payments.find(
-            {"invoice_id": invoice["id"], "id": {"$ne": request.payment_id}, "status": {"$ne": "reversed"}},
-            {"_id": 0}
-        ).to_list(100)
-        other_paid = sum(p.get("amount", 0) for p in other_payments)
-        invoice_total = invoice.get("total_amount", 0)
-
-        new_status = "issued" if other_paid < invoice_total else "paid"
-        old_invoice_status = invoice.get("status")
-
-        if old_invoice_status != new_status:
-            await db.invoices.update_one(
-                {"id": invoice["id"]},
-                {"$set": {"status": new_status, "updated_at": now.isoformat()}}
-            )
-            actions_taken.append(f"Invoice {invoice.get('invoice_number')} status: {old_invoice_status} → {new_status}")
-
-            await log_super_admin_action(
-                action="invoice_status_reverted_by_reversal",
-                entity_type="invoice",
-                entity_id=invoice["id"],
-                performed_by=current_user,
-                before_value={"status": old_invoice_status},
-                after_value={"status": new_status},
-                reason=f"Payment reversal: {request.reason}"
-            )
-
-    # ========== 5. CREATE REVERSAL RECORD ==========
-    reversal_record = {
-        "id": reversal_id,
-        "payment_id": request.payment_id,
-        "payment_amount": payment.get("amount", 0),
-        "receipt_number": payment.get("receipt_number"),
-        "invoice_id": payment.get("invoice_id"),
-        "invoice_number": invoice.get("invoice_number") if invoice else None,
-        "company_name": company_name,
-        "voided_credit_notes": voided_credit_notes,
-        "voided_journal_entries": voided_journals,
-        "reason": request.reason,
-        "actions_taken": actions_taken,
-        "reversed_by": current_user.id,
-        "reversed_by_name": current_user.full_name,
-        "reversed_at": now.isoformat()
-    }
-    await db.payment_reversals.insert_one(reversal_record)
-    reversal_record.pop("_id", None)
-
-    return {
-        "message": "Payment reversed successfully",
-        "reversal_id": reversal_id,
-        "actions_taken": actions_taken,
-        "unlinked_credit_notes_needing_review": unlinked_credit_notes_needing_review,
-        "summary": {
-            "payment_reversed": f"RM {payment.get('amount', 0):,.2f}",
-            "credit_notes_voided": len(voided_credit_notes),
-            "credit_notes_needing_manual_review": len(unlinked_credit_notes_needing_review),
-            "journals_voided": len(voided_journals),
-            "invoice_status": new_status if invoice else "N/A"
-        }
-    }
+        except Exception:
+            pass
+    return result
 
 
 @router.get("/payment-reversals")
@@ -1484,7 +1220,7 @@ async def get_payments_for_reversal(
         raise HTTPException(status_code=403, detail="Super Admin access required")
 
     payments = await db.payments.find(
-        {"status": {"$ne": "reversed"}},
+        {"status": {"$nin": ["reversed", "voided"]}},
         {"_id": 0}
     ).sort("created_at", -1).to_list(500)
 

@@ -249,20 +249,27 @@ class SuperAdminFinancialCorrection:
             }}
         )
         # Recompute canonical status from fresh snapshot.
+        # Phase 3A Section V: TERMINAL statuses (voided/cancelled/deleted/
+        # converted) MUST NOT be silently resurrected by a value correction.
         snap = await self.sot.get_invoice_snapshot(invoice_id)
         new_status_candidate = None
-        if snap:
+        cur_status = (inv.get("status") or "").lower()
+        TERMINAL = {"voided", "cancelled", "deleted", "converted"}
+        if cur_status in TERMINAL:
+            # Preserve terminal status. Reason recorded in audit; if the
+            # SuperAdmin genuinely needs to revive the invoice, they must
+            # use a dedicated Repair Status workflow.
+            new_status_candidate = cur_status
+        elif snap and cur_status in ("issued", "partially_paid", "paid"):
             outstanding = float(snap["outstanding_amount"])
             paid = float(snap["paid_amount"])
             net = float(snap["net_invoiced_value"])
-            cur_status = (inv.get("status") or "").lower()
-            if cur_status in ("issued", "partially_paid", "paid"):
-                if outstanding <= 0.005 and paid > 0:
-                    new_status_candidate = "paid"
-                elif 0 < paid < net:
-                    new_status_candidate = "partially_paid"
-                elif paid == 0:
-                    new_status_candidate = "issued"
+            if outstanding <= 0.005 and paid > 0:
+                new_status_candidate = "paid"
+            elif 0 < paid < net:
+                new_status_candidate = "partially_paid"
+            elif paid == 0:
+                new_status_candidate = "issued"
         if new_status_candidate and new_status_candidate != inv.get("status"):
             await self.db.invoices.update_one(
                 {"id": invoice_id},

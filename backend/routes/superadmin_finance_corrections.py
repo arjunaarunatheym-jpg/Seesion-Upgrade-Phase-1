@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from core import db, get_current_user, User
 from services.financial_write_guard import FinancialSafetyError
+from services.superadmin_auth import require_super_admin
 from services.superadmin_financial_correction import (
     SuperAdminFinancialCorrection,
     CORRECTION_TYPES,
@@ -29,8 +30,10 @@ router = APIRouter(prefix="/superadmin/finance", tags=["superadmin-finance-corre
 
 
 def _require_superadmin(user: User) -> None:
-    if user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="SuperAdmin only")
+    """Phase 3A Section A: delegate to the single canonical helper so
+    role == 'super_admin' AND approved-email overrides stay in sync with
+    the legacy SuperAdmin portal."""
+    require_super_admin(user)
 
 
 def _svc() -> SuperAdminFinancialCorrection:

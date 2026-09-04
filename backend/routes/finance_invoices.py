@@ -167,6 +167,35 @@ async def create_audit_trail_entry(
     return entry
 
 
+# Phase 3A Section C: normal Admin/Finance bypass endpoints (edit-paid,
+# backdate, renumber, override, edit-number, void via generic route,
+# reverse-void) must NEVER mutate a locked/terminal financial document.
+# SuperAdmin corrections go through /api/superadmin/finance/invoices/*.
+LOCKED_LIFECYCLE_STATUSES = frozenset({
+    "issued", "partially_paid", "paid", "voided",
+    "cancelled", "deleted", "converted",
+})
+
+
+def _reject_bypass_on_locked_invoice(invoice: dict, action_name: str):
+    cur = (invoice.get("status") or "").lower()
+    if cur in LOCKED_LIFECYCLE_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "INVOICE_LOCKED",
+                "message": (
+                    f"Invoice is in status {cur!r}; the normal Admin/Finance "
+                    f"'{action_name}' bypass is no longer permitted. Use "
+                    "/api/superadmin/finance/invoices/{id}/correct-* controlled "
+                    "endpoints instead."
+                ),
+                "invoice_status": cur,
+                "action": action_name,
+            },
+        )
+
+
 # ============ CORE INVOICE ENDPOINTS ============
 @router.get("/invoices")
 async def get_invoices(
@@ -662,13 +691,34 @@ async def cancel_invoice(invoice_id: str, reason: str = "", current_user: User =
 
 @router.post("/invoices/{invoice_id}/revert-status")
 async def revert_invoice_status(invoice_id: str, target_status: str = "auto_draft", reason: str = "", current_user: User = Depends(get_current_user)):
-    """Revert invoice status (Admin only) - used to undo cancellations"""
+    """Revert invoice status (Admin only) - used to undo cancellations.
+
+    PHASE 3A (Section C): normal Admin/Finance revert works ONLY for
+    invoices whose CURRENT status is 'cancelled'. Reverting an issued /
+    paid / voided invoice is prohibited — use the formal SuperAdmin
+    Reversal / Repair Status workflows instead.
+    """
     if current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Only admins can revert invoice status")
     
     invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+
+    cur_status = (invoice.get("status") or "").lower()
+    if cur_status in {"issued", "partially_paid", "paid", "voided", "deleted", "converted"}:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "INVOICE_LOCKED",
+                "message": (
+                    f"Cannot revert invoice status from {cur_status!r} via the "
+                    "normal admin endpoint. Use the SuperAdmin Payment Reversal / "
+                    "Invoice Reversal / Repair Status workflow instead."
+                ),
+                "invoice_status": cur_status,
+            },
+        )
     
     allowed_targets = ["auto_draft", "draft", "finance_review"]
     if target_status not in allowed_targets:
@@ -833,6 +883,23 @@ async def reverse_voided_invoice(
     
     if invoice.get("status") != "voided":
         raise HTTPException(status_code=400, detail="Only voided invoices can be reversed")
+
+    # Phase 3A Section C / Section Y: normal Admin/Finance may NOT resurrect
+    # a voided invoice back to draft — this rewrites financial history.
+    # Only the SuperAdmin controlled Repair Status workflow may do that.
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "INVOICE_RESURRECTION_BLOCKED",
+            "message": (
+                "Resurrecting a voided invoice back to draft is prohibited "
+                "for normal Admin/Finance. Use the SuperAdmin controlled "
+                "Repair Status workflow (audited) if this is genuinely "
+                "required."
+            ),
+            "invoice_status": invoice.get("status"),
+        },
+    )
     
     await create_audit_trail_entry(
         action="Invoice Void Reversed",
@@ -896,6 +963,7 @@ async def renumber_invoice(invoice_id: str, request: RenumberInvoiceRequest, cur
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     old_number = inv.get("invoice_number")
+    _reject_bypass_on_locked_invoice(inv, "renumber")
     new_number = request.new_invoice_number.strip()
     if old_number == new_number:
         raise HTTPException(status_code=400, detail="New number is the same as current")
@@ -978,6 +1046,7 @@ async def edit_invoice_number(
         raise HTTPException(status_code=404, detail="Invoice not found")
     
     old_invoice_number = invoice["invoice_number"]
+    _reject_bypass_on_locked_invoice(invoice, "edit-number")
     new_invoice_number = f"INV/MDDRC/{request.year}/{request.month:02d}/{request.sequence:04d}"
     
     existing = await db.invoices.find_one({
@@ -1089,6 +1158,7 @@ async def edit_paid_invoice(
     company_name = invoice.get("company_name", "Unknown")
     total_amount = invoice.get("total_amount", 0)
     record_ref = f"{company_name} - RM {total_amount:,.2f}"
+    _reject_bypass_on_locked_invoice(invoice, "edit-paid")
     
     update_data = {"updated_at": get_malaysia_time().isoformat()}
     changes = []
@@ -1170,6 +1240,7 @@ async def backdate_invoice(
     company_name = invoice.get("company_name", "Unknown")
     total_amount = invoice.get("total_amount", 0)
     record_ref = f"{company_name} - RM {total_amount:,.2f}"
+    _reject_bypass_on_locked_invoice(invoice, "backdate")
     
     old_created_at = invoice.get("created_at")
     if isinstance(old_created_at, datetime):
@@ -1288,6 +1359,7 @@ async def override_invoice_validation(
     company_name = invoice.get("company_name", "Unknown")
     old_amount = invoice.get("total_amount", 0)
     record_ref = f"{company_name} - RM {old_amount:,.2f}"
+    _reject_bypass_on_locked_invoice(invoice, "amount-override")
     
     await create_audit_trail_entry(
         action="Invoice Amount Override",

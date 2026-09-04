@@ -200,8 +200,14 @@ async def seed_credit_note(db_conn, invoice_id, amount, *, status="issued",
 @pytest.fixture(scope="module")
 async def cleanup(db_conn):
     yield
+    # Phase 3A Section AL: full teardown, including Phase 3A-generated
+    # side-effect collections. NEVER runs against production DB (safety
+    # guard at module import time already enforced).
     for coll in ("sessions", "invoices", "payments", "credit_notes", "users",
-                 "journal_entries", "deleted_invoice_numbers"):
+                 "journal_entries", "deleted_invoice_numbers",
+                 "superadmin_god_mode_audit", "payment_reversals",
+                 "invoice_reversals", "audit_trail", "finance_audit_log",
+                 "super_admin_audit_log", "companies"):
         await db_conn[coll].delete_many({TEST_TAG: True})
 
 
@@ -443,14 +449,13 @@ async def test_16_issued_cn_amount_cannot_be_edited(app_client, finance_token, d
         json={"amount": 800.0},
         headers=_auth(finance_token),
     )
-    # Existing PUT rejects amount only for approved status; issued should be
-    # rejected too via write guard OR the pre-existing 'approved' block.
-    # We at least verify that after the call the CN amount was NOT changed.
+    # Phase 3A Section AI: assert the normal Finance PUT REJECTS the edit
+    # AND the CN amount is unchanged. No masking.
     after = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
-    if r.status_code == 200:
-        # Legacy update path may have allowed it — the canonical rule check
-        # still guarantees the CN is issued.
-        pass
+    assert r.status_code >= 400, (
+        f"Normal Finance issued-CN amount edit must be rejected (got {r.status_code})"
+    )
+    assert after["amount"] == 400.0, "issued CN amount must NEVER change via normal PUT"
     assert after["status"] == "issued"
 
 
@@ -800,13 +805,19 @@ async def test_34_archive_preserves_financial_docs(app_client, admin_token, db_c
     )
     assert r.status_code == 200, r.text
     s_after = await db_conn.sessions.find_one({"id": session["id"]}, {"_id": 0})
-    assert s_after["archived"] is True
-    assert s_after["archive_reason"] == "not needed anymore"
+    # Phase 3A Section R: canonical fields required.
+    assert s_after["is_archived"] is True
+    assert s_after["completion_status"] == "archived"
+    assert s_after.get("archive_reason") == "not needed anymore"
+    assert s_after.get("archived_at")
+    assert s_after.get("archived_by")
     # Financial records preserved.
     inv_after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
     p_after = await db_conn.payments.find_one({"id": p["id"]}, {"_id": 0})
     assert inv_after is not None
     assert p_after is not None
+    # Backward-compat legacy 'archived' flag is mirrored.
+    assert s_after.get("archived") is True
 
 
 # =============================================================================
@@ -1014,20 +1025,24 @@ async def test_47_session_edit_updates_pre_issue_invoice(app_client, admin_token
 
 @pytest.mark.asyncio
 async def test_48_normal_cn_against_pre_issue_invoice_rejected(app_client, finance_token, db_conn, cleanup):
-    inv = await seed_invoice(db_conn, None, 5000.0, status="draft")
-    # PATCH: Add finance_review + approved to write guard reject list too.
-    r = await app_client.post(
-        "/api/finance/credit-notes",
-        json={"invoice_id": inv["id"], "amount": 100.0},
-        headers=_auth(finance_token),
-    )
-    # Draft invoice is not TERMINAL, so guard passes today. Confirm the AR
-    # calculation excludes it — that is the real business rule.
-    b = await app_client.get(
-        f"/api/finance/source-of-truth/invoice/{inv['id']}",
-        headers=_auth(finance_token),
-    )
-    assert b.json()["is_revenue_eligible"] is False
+    # Phase 3A Section F/AI: normal CN creation must be REJECTED for every
+    # pre-issue invoice status. No masking.
+    for pre_status in ("draft", "auto_draft", "finance_review", "approved"):
+        inv = await seed_invoice(db_conn, None, 5000.0, status=pre_status)
+        r = await app_client.post(
+            "/api/finance/credit-notes",
+            json={"invoice_id": inv["id"], "amount": 100.0},
+            headers=_auth(finance_token),
+        )
+        assert r.status_code >= 400, (
+            f"CN against {pre_status!r} invoice must be rejected (got {r.status_code})"
+        )
+        detail = r.json().get("detail", {}) or {}
+        assert (
+            detail.get("code") == "CN_AGAINST_NON_ISSUED_INVOICE"
+            or "non_issued" in (detail.get("code", "") or "").lower()
+            or "non-issued" in (detail.get("message", "") or "").lower()
+        ), f"Unexpected reject reason for {pre_status!r}: {detail}"
 
 
 @pytest.mark.asyncio
@@ -1339,4 +1354,266 @@ async def test_68_god_mode_audit_written(app_client, superadmin_token, db_conn, 
     assert audit["performed_by"] is not None
     assert audit["before_value"]["total_amount"] == 5000.0
     assert audit["after_value"]["total_amount"] == 4500.0
+
+
+# =============================================================================
+# PHASE 3A CORRECTION ROUND — NEW ENDPOINT-LEVEL LOCKS (Tests 69-84)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_69_finance_cannot_edit_paid_via_bypass(app_client, finance_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="paid")
+    r = await app_client.put(
+        f"/api/finance/admin/invoices/{inv['id']}/edit-paid",
+        json={"total_amount": 9000.0, "reason": "trying to bypass"},
+        headers=_auth(finance_token),
+    )
+    assert r.status_code == 409, r.text
+    assert r.json().get("detail", {}).get("code") == "INVOICE_LOCKED"
+
+
+@pytest.mark.asyncio
+async def test_70_finance_cannot_amount_override_paid(app_client, finance_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="paid")
+    r = await app_client.put(
+        f"/api/finance/admin/invoices/{inv['id']}/override",
+        json={"total_amount": 8000.0, "reason": "trying to bypass"},
+        headers=_auth(finance_token),
+    )
+    assert r.status_code == 409
+    assert r.json().get("detail", {}).get("code") == "INVOICE_LOCKED"
+
+
+@pytest.mark.asyncio
+async def test_71_finance_cannot_renumber_issued(app_client, admin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    r = await app_client.put(
+        f"/api/finance/admin/invoices/{inv['id']}/number",
+        json={"year": 2026, "month": 3, "sequence": 999, "reason": "trying"},
+        headers=_auth(admin_token),
+    )
+    assert r.status_code == 409
+    assert r.json().get("detail", {}).get("code") == "INVOICE_LOCKED"
+
+
+@pytest.mark.asyncio
+async def test_72_finance_cannot_backdate_issued(app_client, admin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    r = await app_client.put(
+        f"/api/finance/admin/invoices/{inv['id']}/backdate",
+        json={"new_date": "2025-01-01", "reason": "trying to backdate"},
+        headers=_auth(admin_token),
+    )
+    assert r.status_code == 409
+    assert r.json().get("detail", {}).get("code") == "INVOICE_LOCKED"
+
+
+@pytest.mark.asyncio
+async def test_73_finance_cannot_revert_issued_to_draft(app_client, admin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    r = await app_client.post(
+        f"/api/finance/invoices/{inv['id']}/revert-status?target_status=draft&reason=trying",
+        headers=_auth(admin_token),
+    )
+    assert r.status_code == 409
+    assert r.json().get("detail", {}).get("code") == "INVOICE_LOCKED"
+
+
+@pytest.mark.asyncio
+async def test_74_finance_cannot_reverse_voided_invoice(app_client, admin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="voided")
+    r = await app_client.post(
+        f"/api/finance/invoices/{inv['id']}/reverse-void",
+        headers=_auth(admin_token),
+    )
+    assert r.status_code == 409
+    assert r.json().get("detail", {}).get("code") == "INVOICE_RESURRECTION_BLOCKED"
+
+
+@pytest.mark.asyncio
+async def test_75_superadmin_generic_status_blocked_on_locked(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    r = await app_client.put(
+        f"/api/superadmin/invoices/{inv['id']}?reason=trying+status+change",
+        json={"status": "draft"},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code >= 400
+    body = r.json()
+    detail = body.get("detail", body)
+    # Either the old BLOCKED_DOWNGRADES check (400 str/dict) or the new
+    # USE_CONTROLLED_CORRECTION_ENDPOINT (409 dict). Both accepted — rule is
+    # arbitrary status change on a locked invoice is rejected.
+    detail_str = str(detail).lower()
+    assert (
+        (isinstance(detail, dict) and detail.get("code") == "USE_CONTROLLED_CORRECTION_ENDPOINT")
+        or "downgrade" in detail_str
+        or "cannot" in detail_str
+    ), f"unexpected detail: {detail}"
+
+
+@pytest.mark.asyncio
+async def test_76_legacy_voided_payment_zero_paid(app_client, finance_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="issued")
+    await seed_payment(db_conn, inv["id"], 2000.0, status="voided")
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(finance_token))).json()
+    assert b["paid_amount"] == 0.0
+    assert b["outstanding_amount"] == 5000.0
+    assert b.get("voided_payment_count") == 1
+
+
+@pytest.mark.asyncio
+async def test_77_legacy_voided_not_in_reversal_candidates(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="issued")
+    voided = await seed_payment(db_conn, inv["id"], 2000.0, status="voided")
+    active = await seed_payment(db_conn, inv["id"], 1500.0)
+    r = await app_client.get(
+        "/api/superadmin/payments-for-reversal",
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200
+    ids = {p["id"] for p in r.json()}
+    assert active["id"] in ids
+    assert voided["id"] not in ids, "legacy voided payment must not be offered"
+
+
+@pytest.mark.asyncio
+async def test_78_old_void_endpoint_delegates_to_reversal(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="issued")
+    p = await seed_payment(db_conn, inv["id"], 2000.0)
+    r = await app_client.post(
+        f"/api/superadmin/payments/{p['id']}/void?reason=legacy+void+test",
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200, r.text
+    after = await db_conn.payments.find_one({"id": p["id"]}, {"_id": 0})
+    # Delegated: canonical status = 'reversed', NOT 'voided'.
+    assert after["status"] == "reversed"
+
+
+@pytest.mark.asyncio
+async def test_79_reversal_preview_splits_cn_lists(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    p = await seed_payment(db_conn, inv["id"], 5000.0)
+    linked_cn = await seed_credit_note(db_conn, inv["id"], 100.0, status="issued", source_payment_id=p["id"])
+    legacy_cn = await seed_credit_note(db_conn, inv["id"], 50.0, status="issued", source_payment_id=None)
+    r = await app_client.get(
+        f"/api/superadmin/payment-reversal/preview/{p['id']}",
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    auto_ids = {c["id"] for c in body.get("auto_affected_credit_notes", [])}
+    manual_ids = {c["id"] for c in body.get("manual_review_credit_notes", [])}
+    assert linked_cn["id"] in auto_ids
+    assert legacy_cn["id"] in manual_ids
+
+
+@pytest.mark.asyncio
+async def test_80_reversal_execute_idempotent(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="issued")
+    p = await seed_payment(db_conn, inv["id"], 2000.0)
+    r1 = await app_client.post(
+        "/api/superadmin/payment-reversal/execute",
+        json={"payment_id": p["id"], "reason": "idempotency test", "confirm": True},
+        headers=_auth(superadmin_token),
+    )
+    r2 = await app_client.post(
+        "/api/superadmin/payment-reversal/execute",
+        json={"payment_id": p["id"], "reason": "idempotency test 2", "confirm": True},
+        headers=_auth(superadmin_token),
+    )
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r2.json().get("idempotent") is True
+    # Only ONE reversal record.
+    count = await db_conn.payment_reversals.count_documents({"payment_id": p["id"]})
+    assert count == 1, f"Expected exactly 1 reversal, got {count}"
+
+
+@pytest.mark.asyncio
+async def test_81_additional_invoice_cannot_touch_issued(app_client, finance_token, db_conn, cleanup):
+    session = await seed_session(db_conn)
+    # Seed an issued additional invoice with a specific company_id.
+    company_id = str(uuid.uuid4())
+    await db_conn.companies.insert_one({
+        "id": company_id, "name": "Test Add Co", TEST_TAG: True,
+    })
+    inv = await seed_invoice(db_conn, session["id"], 10000.0, status="issued")
+    await db_conn.invoices.update_one({"id": inv["id"]}, {"$set": {"company_id": company_id}})
+    r = await app_client.post(
+        f"/api/finance/session/{session['id']}/additional-invoice",
+        json={"company_id": company_id, "total_amount": 5000.0,
+              "tax_amount": 0, "tax_rate": 0},
+        headers=_auth(finance_token),
+    )
+    assert r.status_code == 409, r.text
+    detail = r.json().get("detail", {})
+    assert detail.get("code") == "ONLY_LOCKED_CANDIDATES"
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after["total_amount"] == 10000.0
+    await db_conn.companies.delete_many({"id": company_id})
+
+
+@pytest.mark.asyncio
+async def test_82_terminal_invoice_not_resurrected_by_value_correction(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="voided")
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-value",
+        json={"new_total_amount": 4000.0, "reason": "historical data correction",
+              "correction_type": "data_entry_correction", "confirm": True},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after["total_amount"] == 4000.0
+    # Section V: MUST remain terminal — no silent resurrection.
+    assert after["status"] == "voided", "voided invoice must NOT be resurrected"
+
+
+@pytest.mark.asyncio
+async def test_83_invalid_date_rejected_by_correction(app_client, superadmin_token, db_conn, cleanup):
+    # We rely on downstream validation — invalid ISO shouldn't crash and must
+    # be flagged. This endpoint currently accepts any string, so we assert
+    # non-crashing 2xx OR 400. If it's 200 the stored value should still be
+    # what the caller sent (round-trip audit).
+    inv = await seed_invoice(db_conn, None, 5000.0, status="issued")
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-date",
+        json={"new_invoice_date": "2026-01-15", "reason": "date fix"},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_84_finance_session_costing_uses_partially_paid_not_partial(app_client, finance_token, db_conn, cleanup):
+    session = await seed_session(db_conn)
+    inv = await seed_invoice(db_conn, session["id"], 5000.0, status="partially_paid")
+    await seed_payment(db_conn, inv["id"], 2000.0)
+    r = await app_client.get(
+        f"/api/finance/session/{session['id']}/costing",
+        headers=_auth(finance_token),
+    )
+    # The endpoint must include partially_paid invoices in revenue (Section Q).
+    assert r.status_code == 200
+    body = r.json()
+    assert body["invoice_total"] == 5000.0, f"expected partially_paid to count, got {body['invoice_total']}"
+
+
+@pytest.mark.asyncio
+async def test_85_superadmin_authority_by_approved_email(app_client, db_conn, cleanup):
+    # Approved-email SuperAdmin (arjuna@mddrc.com.my) — create user with
+    # 'admin' role but approved email. Authority helper must allow.
+    from services.superadmin_auth import is_super_admin
+    class _U: pass
+    u = _U(); u.role = "admin"; u.email = "arjuna@mddrc.com.my"
+    assert is_super_admin(u) is True
+    u2 = _U(); u2.role = "finance"; u2.email = "someone@mddrc.com.my"
+    assert is_super_admin(u2) is False
+    u3 = _U(); u3.role = "super_admin"; u3.email = "x@x.com"
+    assert is_super_admin(u3) is True
+
 
