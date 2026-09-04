@@ -58,12 +58,20 @@ KNOWN_INVOICE_STATUSES = (
 )
 
 # Credit-note statuses that DO reduce net invoiced value (STRICT whitelist).
-ACTIVE_CN_STATUSES = {"draft", "approved", "issued"}
+# PHASE 3A INTENTIONAL CHANGE: only "issued" credit notes reduce canonical
+# net invoiced value. Draft & approved CNs are pending — they no longer
+# reduce AR until they reach the "issued" state (which is also where the
+# accounting journal is posted). Phase 2 tests that specifically assert
+# "draft/approved reduces net" are intentionally updated to reflect the
+# new business rule.
+ACTIVE_CN_STATUSES = {"issued"}
+# Credit-note statuses that are recognized but DO NOT reduce net invoiced.
+PENDING_CN_STATUSES = {"draft", "approved"}
 # Credit-note statuses that DO NOT reduce net invoiced value.
 VOIDED_CN_STATUSES = {"voided", "deleted", "cancelled"}
 # Every status the app is known to write for credit notes. Anything outside
 # this set triggers an UNRECOGNIZED_CREDIT_NOTE_STATUS warning.
-KNOWN_CN_STATUSES = ACTIVE_CN_STATUSES | VOIDED_CN_STATUSES
+KNOWN_CN_STATUSES = ACTIVE_CN_STATUSES | PENDING_CN_STATUSES | VOIDED_CN_STATUSES
 
 REVERSED_PAYMENT_STATUS = "reversed"
 
@@ -129,11 +137,11 @@ def _cn_is_active(cn: Dict[str, Any]) -> bool:
     """STRICT whitelist: a Credit Note reduces net invoiced value ONLY when
     its normalized status is explicitly in ACTIVE_CN_STATUSES.
 
-    Anything else — voided, deleted, cancelled, unknown/typo statuses,
-    missing/null/blank statuses — does NOT reduce net invoiced value.
-    Legacy audit (Phase 2) found zero rows with missing status, so the
-    safest canonical treatment is applied: unknown/missing status is
-    inactive and surfaced via UNRECOGNIZED_CREDIT_NOTE_STATUS.
+    PHASE 3A: ACTIVE_CN_STATUSES == {"issued"}. Draft and approved CNs are
+    PENDING and no longer reduce canonical net invoiced value (they emit no
+    warning — they are simply informational and awaiting issue). Anything
+    else — voided, deleted, cancelled, unknown/typo statuses, missing/null/
+    blank statuses — also does NOT reduce net invoiced value.
     """
     if not cn:
         return False
@@ -245,14 +253,16 @@ class FinancialSourceOfTruth:
             })
 
         # ---- Credit Note aggregation (always read; only applied when eligible) ----
-        # STRICT categorization (Phase 2 final hardening):
-        #   active        -> status in ACTIVE_CN_STATUSES    (reduces net)
-        #   inactive      -> status in VOIDED_CN_STATUSES    (does NOT reduce net)
-        #   unrecognized  -> status outside KNOWN_CN_STATUSES(does NOT reduce net,
-        #                                                     emits warning)
+        # STRICT categorization (Phase 3A):
+        #   active        -> status == "issued"                    (reduces net)
+        #   pending       -> status in {draft, approved}           (does NOT reduce)
+        #   inactive      -> status in {voided, cancelled, deleted}(does NOT reduce)
+        #   unrecognized  -> status outside KNOWN_CN_STATUSES      (does NOT reduce,
+        #                                                           emits warning)
         # `voided_credit_note_count` is retained for backward compatibility but
-        # now counts ONLY status == "voided" — NOT "cancelled"/"deleted"/unknown.
+        # counts ONLY status == "voided" — NOT "cancelled"/"deleted"/unknown.
         active_cns = [c for c in credit_notes if _cn_is_active(c)]
+        pending_cns = [c for c in credit_notes if _cn_normalized_status(c) in PENDING_CN_STATUSES]
         inactive_cns = [c for c in credit_notes if _cn_normalized_status(c) in VOIDED_CN_STATUSES]
         unrecognized_cns = [c for c in credit_notes if not _cn_status_is_known(c)]
         voided_only_cns = [c for c in credit_notes if _cn_normalized_status(c) == "voided"]
@@ -353,6 +363,7 @@ class FinancialSourceOfTruth:
             "credit_note_total": cn_total,
             "credit_note_count": len(active_cns),
             "active_credit_note_count": len(active_cns),
+            "pending_credit_note_count": len(pending_cns),
             "inactive_credit_note_count": len(inactive_cns),
             "unrecognized_credit_note_count": len(unrecognized_cns),
             # Backward-compat: retained but STRICT — status == "voided" only.

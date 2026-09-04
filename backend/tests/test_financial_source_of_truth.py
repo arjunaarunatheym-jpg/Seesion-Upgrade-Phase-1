@@ -647,24 +647,34 @@ async def test_E2_cancelled_with_payment_has_two_warnings(app_client, finance_to
 
 @pytest.mark.asyncio
 async def test_CN_A_draft_reduces_net(app_client, finance_token, db_conn, cleanup):
-    """CN with status='draft' MUST reduce net invoiced value."""
+    """PHASE 3A CHANGE: CN with status='draft' MUST NOT reduce net invoiced value.
+    Only 'issued' credit notes reduce canonical net (see FinancialWriteGuard /
+    CreditNoteLifecycleState). Draft CNs are pending — editable but no AR effect.
+    """
     inv = await seed_invoice(db_conn, None, 10000.0)
     await seed_credit_note(db_conn, inv["id"], 300.0, status="draft")
     b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
                               headers=_auth(finance_token))).json()
-    assert b["credit_note_total"] == 300.0
-    assert b["net_invoiced_value"] == 9700.0
+    assert b["credit_note_total"] == 0.0, "draft CN must not reduce net (Phase 3A)"
+    assert b["net_invoiced_value"] == 10000.0
+    assert b["pending_credit_note_count"] == 1
+    assert b["active_credit_note_count"] == 0
 
 
 @pytest.mark.asyncio
 async def test_CN_B_approved_reduces_net(app_client, finance_token, db_conn, cleanup):
-    """CN with status='approved' MUST reduce net invoiced value."""
+    """PHASE 3A CHANGE: CN with status='approved' MUST NOT reduce net invoiced value.
+    Approved CNs are pending — the approval decision is recorded but AR remains
+    unchanged until the CN is 'issued'.
+    """
     inv = await seed_invoice(db_conn, None, 10000.0)
     await seed_credit_note(db_conn, inv["id"], 250.0, status="approved")
     b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
                               headers=_auth(finance_token))).json()
-    assert b["credit_note_total"] == 250.0
-    assert b["net_invoiced_value"] == 9750.0
+    assert b["credit_note_total"] == 0.0, "approved CN must not reduce net (Phase 3A)"
+    assert b["net_invoiced_value"] == 10000.0
+    assert b["pending_credit_note_count"] == 1
+    assert b["active_credit_note_count"] == 0
 
 
 @pytest.mark.asyncio

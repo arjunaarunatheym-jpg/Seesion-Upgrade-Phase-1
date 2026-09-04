@@ -1,0 +1,506 @@
+================================================================================
+PHASE 3A — FINANCIAL INTEGRITY & WRITE PROTECTION — FINAL REVIEW BUNDLE
+================================================================================
+Package generated : 2026-09-04
+Scope             : Sections B, C, D, E, F, G, H, I, K, L, M, N, U, V, W, X, Y
+                    from Phase 3 spec. Section U (session archive / hard-delete
+                    protection) is included per user instruction.
+                    Sections J, O, P, Q, R, S, T (dynamic funding sources) are
+                    DEFERRED to Phase 3B.
+
+Guarantees        :
+    - NO production financial record modified.
+    - NO redeployment.
+    - Phase 3B and later phases NOT started.
+    - Object Storage pre-existing lint blocker acknowledged as OUT OF SCOPE.
+
+
+################################################################################
+# 1. CHANGED-FILE MANIFEST
+################################################################################
+
+BACKEND — service layer
+    backend/services/financial_source_of_truth.py
+        * PHASE 3A INTENTIONAL RULE CHANGE:
+              ACTIVE_CN_STATUSES = {"issued"}   (was {draft, approved, issued})
+              PENDING_CN_STATUSES = {"draft", "approved"}  (new bucket)
+        * New per-invoice snapshot field: pending_credit_note_count
+        * Docstring for _cn_is_active() updated.
+
+BACKEND — routes (endpoints)
+    backend/routes/finance_invoices.py
+        * update_invoice(): now consults FinancialWriteGuard.assert_invoice_editable().
+          Any attempt to change LOCKED_FIELDS on an issued/partially_paid/paid/
+          converted/cancelled/voided/deleted invoice returns HTTP 409 with
+          code = INVOICE_LOCKED.
+        * convert_proforma_to_invoice(): now IDEMPOTENT.
+              - Pre-check: if find_existing_conversion(proforma_id) returns an
+                invoice, return that instead of creating a second one.
+              - Insert wrapped in try/except; on failure, re-check for a
+                concurrent conversion. Returns idempotent=True in that case.
+              - The proforma update filter includes {"status": {"$ne": "converted"}}
+                so a concurrent second update is a no-op.
+
+    backend/routes/finance_payments.py
+        * record_payment(): now consults FinancialWriteGuard.validate_payment_recordable().
+          Rejects with dedicated codes:
+              PAYMENT_AGAINST_PROFORMA
+              PAYMENT_AGAINST_TERMINAL_INVOICE
+              PAYMENT_AGAINST_NON_ISSUED_INVOICE
+              INVOICE_FULLY_SETTLED
+              PAYMENT_EXCEEDS_OUTSTANDING
+              INVALID_AMOUNT / ZERO_AMOUNT_NOT_ALLOWED / NEGATIVE_AMOUNT_NOT_ALLOWED
+          Money is validated via validate_money() (NaN/inf/zero/negative).
+        * Payment-created Credit Note:
+              - Stores explicit source_payment_id link.
+              - Created as status="issued" (matches accounting posting).
+              - Journal post is idempotent; failure is logged, not swallowed silently.
+        * create_credit_note() (manual): now REQUIRES a valid, non-terminal,
+          non-proforma invoice. Rejects with dedicated codes:
+              CN_INVOICE_REQUIRED / CN_INVOICE_NOT_FOUND
+              CN_AGAINST_PROFORMA / CN_AGAINST_TERMINAL_INVOICE
+          Manual CN starts in DRAFT — journal posts only on /issue.
+        * create_session_credit_note(): uses FinancialWriteGuard.resolve_session_primary_invoice().
+              - Never uses arbitrary find_one({"session_id": ...}).
+              - When multiple eligible invoices exist, returns HTTP 409 with
+                code = AMBIGUOUS_SESSION_INVOICE_SELECTION and a candidate list.
+              - Validates invoice belongs to session, is real, and is
+                non-terminal.
+        * delete_payment(): in production mode (APP_ENV=production or non-test DB),
+          hard-delete is BLOCKED. The endpoint converts the request into a
+          controlled REVERSAL, preserving the original payment record. The
+          response includes code = HARD_DELETE_BLOCKED_IN_PRODUCTION.
+          Test/dev mode retains hard-delete for fixture cleanup.
+        * void_credit_note(): additionally voids the linked CN journal entries
+          (source_module="credit_note") — idempotent, mirrors the pattern used
+          by the payment-reversal endpoint.
+
+    backend/routes/finance_source_of_truth.py
+        * NEW read endpoint:
+              GET /api/finance/source-of-truth/invoice/{invoice_id}/outstanding
+          Returns document_face_value, net_invoiced_value, paid_amount,
+          outstanding_amount, payment_status, is_revenue_eligible, and a
+          can_receive_payment boolean.  Used by the Payment UI as the
+          authoritative default payment amount (Section W).
+
+    backend/routes/superadmin_portal.py
+        * execute_payment_reversal(): ONLY auto-voids credit notes whose
+          source_payment_id matches the reversed payment. Credit notes on
+          the same invoice without an explicit link are surfaced via a new
+          top-level array `unlinked_credit_notes_needing_review` and a
+          `credit_notes_needing_manual_review` count in the summary.
+          Legacy CNs are NOT auto-voided.
+
+    backend/routes/sessions_new.py
+        * delete_session(): in production mode, rejects hard delete when the
+          session has ANY financial history (HTTP 409, code =
+          SESSION_HAS_FINANCIAL_HISTORY, includes a history summary).
+        * NEW endpoint:
+              POST /api/sessions/{session_id}/archive
+          Archives a session while preserving every financial record.
+          Body: {"reason": "min 5 chars"}. Sets archived / archived_at /
+          archived_by / archive_reason. Admin/SuperAdmin only.
+
+FRONTEND
+    frontend/src/components/ClaimFormPrint.jsx
+        * Consumes Phase 2 canonical Source-of-Truth session snapshot instead
+          of summing every invoice in React. Eliminates the Proforma+converted-
+          Invoice double-count. Uses `net_invoiced_value` for the claim total.
+
+
+################################################################################
+# 2. NEW FILES
+################################################################################
+
+    backend/services/financial_write_guard.py           (NEW)
+        Centralized write-side domain validation. Exposes:
+            - InvoiceLifecycleState (LOCKED_FIELDS, LOCKED_ACTIVE, TERMINAL,
+              PRE_ISSUE)
+            - CreditNoteLifecycleState (ACTIVE={"issued"}, PENDING={"draft",
+              "approved"}, INACTIVE={"voided"})
+            - FinancialSafetyError / FinancialAmbiguityError /
+              FinancialImmutabilityError
+            - FinancialWriteGuard.resolve_session_primary_invoice()
+            - FinancialWriteGuard.assert_invoice_editable()
+            - FinancialWriteGuard.validate_payment_recordable()
+            - FinancialWriteGuard.validate_credit_note_creation()
+            - FinancialWriteGuard.assert_credit_note_editable()
+            - FinancialWriteGuard.find_existing_conversion()
+            - FinancialWriteGuard.session_has_financial_history()
+            - validate_money() / is_production_mode()
+
+    backend/tests/test_phase3a_write_protection.py       (NEW)
+        40 targeted Phase 3A tests. Reuses the isolated Phase 2 test DB.
+
+
+################################################################################
+# 3. FINANCIAL WRITE-GUARD DESIGN
+################################################################################
+
+Layer         :   NEW  services/financial_write_guard.py
+Composes      :   services/financial_source_of_truth.py   (Phase 2 SoT)
+Never writes  :   YES — guard raises, callers write.
+Depends on    :   FastAPI routes translate FinancialSafetyError into
+                  HTTPException(status_code=e.http_status,
+                                detail={"code": e.code, "message": e.message}).
+
+Reusable canonical rules exposed:
+    validate_payment_recordable(invoice_id, amount)
+        -> raises PAYMENT_AGAINST_PROFORMA / _TERMINAL / _NON_ISSUED /
+                  INVOICE_FULLY_SETTLED / PAYMENT_EXCEEDS_OUTSTANDING.
+    validate_credit_note_creation(invoice_id)
+        -> raises CN_INVOICE_REQUIRED / _NOT_FOUND / _PROFORMA / _TERMINAL.
+    resolve_session_primary_invoice(session_id, explicit_invoice_id=None)
+        -> raises AMBIGUOUS_SESSION_INVOICE_SELECTION when >1 eligible.
+    assert_invoice_editable(invoice, proposed_updates)
+        -> raises INVOICE_LOCKED with the touched-fields list.
+    find_existing_conversion(proforma_id)
+        -> proforma-conversion idempotency helper.
+    session_has_financial_history(session_id)
+        -> deletion / archive safety.
+
+
+################################################################################
+# 4. INVOICE LIFECYCLE MATRIX
+################################################################################
+
+STATUS         BUCKET         FINANCIAL FIELDS   RECEIVES PAYMENT   CN ALLOWED
+draft          PRE_ISSUE      editable            no                 no
+auto_draft     PRE_ISSUE      editable            no                 no
+issued         LOCKED_ACTIVE  LOCKED              yes                yes
+partially_paid LOCKED_ACTIVE  LOCKED              yes (if outstanding>0) yes
+paid           LOCKED_ACTIVE  LOCKED              no (outstanding=0) yes
+voided         TERMINAL       LOCKED              no                 no
+cancelled      TERMINAL       LOCKED              no                 no
+deleted        TERMINAL       LOCKED              no                 no
+converted      TERMINAL       LOCKED              no (Proforma)      no
+
+LOCKED_FIELDS = {
+    total_amount, subtotal, tax_amount, tax_rate,
+    invoice_number, invoice_date, due_date, issue_date,
+    bill_to_name, bill_to_address, bill_to_email,
+    company_id, company_name,
+    programme_name, session_name,
+    line_items, invoice_lines,
+    document_type, converted_from_proforma_id,
+    funding_source_id, funding_source_code,
+}
+
+
+################################################################################
+# 5. CREDIT NOTE LIFECYCLE MATRIX  (Phase 3A intentional change)
+################################################################################
+
+STATUS      REDUCES NET INVOICED   ACCOUNTING JOURNAL   EDITABLE
+draft       NO                     no                    yes
+approved    NO                     no                    limited
+issued      YES                    posted at issue       LOCKED (amount/invoice)
+voided      NO                     linked journal void   LOCKED (historical)
+
+Manual CN creation flow:
+    /finance/credit-notes  →  status = draft         →  no journal
+    /finance/credit-notes/{id}/approve  →  status = approved  →  no journal
+    /finance/credit-notes/{id}/issue    →  status = issued    →  journal posted
+    /finance/admin/credit-notes/{id}/void →  status = voided  →  journal void
+                                                                  (idempotent)
+
+Payment-created CN flow (record_payment with create_credit_note=True):
+    - CN created with status = issued AND source_payment_id set.
+    - Journal posted immediately (single ordered call to post_credit_note_issued).
+    - Failure is logged to the finance audit trail (not silently swallowed).
+
+
+################################################################################
+# 6. PAYMENT / REVERSAL LIFECYCLE
+################################################################################
+
+Payment creation:
+    validate_money(amount)                → NaN / 0 / negative rejected
+    validate_payment_recordable(invoice)  → all Section I checks
+
+Payment reversal (POST /superadmin/payment-reversal/execute):
+    1. mark payment.status = reversed  (original record preserved).
+    2. void ONLY credit notes with source_payment_id == payment.id.
+       Legacy CNs on the same invoice with no explicit link are surfaced
+       under `unlinked_credit_notes_needing_review` — they are NOT auto-voided.
+    3. void linked journal entries (payment + linked-CN).
+    4. recompute invoice status from remaining active payments.
+    5. write payment_reversals audit record.
+
+Hard delete in production:
+    DELETE /api/finance/admin/payments/{id}
+        → returns code = HARD_DELETE_BLOCKED_IN_PRODUCTION,
+          the payment is REVERSED instead (record preserved).
+
+Hard delete in test/dev:
+    Enabled for fixture cleanup only.
+
+
+################################################################################
+# 7. CANONICAL SESSION → INVOICE RESOLVER RULES
+################################################################################
+
+resolve_session_primary_invoice(session_id, explicit_invoice_id=None):
+    1. If explicit_invoice_id provided:
+           - invoice must exist.
+           - invoice.session_id must equal session_id.
+           - invoice.document_type must not be proforma.
+           - return that invoice.
+    2. Else if session.invoice_id is set:
+           - if the referenced invoice exists, has the right session_id, and
+             is not a proforma, return it.
+    3. Else search real non-terminal invoices for the session:
+           - if EXACTLY one candidate exists, return it.
+           - if none exist, raise NO_ELIGIBLE_INVOICE.
+           - if multiple exist, raise AMBIGUOUS_SESSION_INVOICE_SELECTION
+             with the candidate list.
+
+Never uses find_one({"session_id": ...}) as authoritative anywhere.
+
+
+################################################################################
+# 8. PROFORMA IDEMPOTENCY IMPLEMENTATION
+################################################################################
+
+Endpoint POST /api/finance/invoices/{invoice_id}/convert-to-invoice:
+
+    1. Load proforma. Confirm document_type == "proforma".
+    2. guard.find_existing_conversion(proforma_id):
+           existing = db.invoices.find_one(
+               {"converted_from_proforma_id": proforma_id})
+       If existing → return {idempotent: true, new_invoice_id, new_invoice_number}.
+    3. If proforma.status in {"converted", "cancelled"}
+           and no linked invoice found → HTTP 400 (terminal state).
+    4. Insert new invoice. On IntegrityError (concurrent race),
+       re-check find_existing_conversion and return that.
+    5. Update the proforma with a filter that includes
+           {"status": {"$ne": "converted"}}
+       so a concurrent second update is a no-op.
+    6. Update session.invoice_id.
+
+Double-click / retry / concurrent request all return the same invoice — a
+second real invoice is never created.
+
+
+################################################################################
+# 9. SESSION DELETION / ARCHIVE RULES  (Section U)
+################################################################################
+
+DELETE /api/sessions/{session_id} in production:
+    If FinancialWriteGuard.session_has_financial_history(session_id) reports
+    ANY of:
+        - historical_invoice_count > 0
+        - payment_count > 0
+        - credit_note_count > 0
+        - journal_entry_count > 0
+    → HTTP 409, code = SESSION_HAS_FINANCIAL_HISTORY, history summary in body.
+
+POST /api/sessions/{session_id}/archive:
+    Body: {"reason": "min 5 chars"}. Admin/SuperAdmin only. Sets:
+        archived        = True
+        archived_at     = <ISO now>
+        archived_by     = <user id>
+        archive_reason  = <reason>
+    All financial records (invoices, payments, credit notes, journals) are
+    LEFT INTACT.
+
+Test/dev mode retains the previous hard-delete for fixture cleanup.
+
+
+################################################################################
+# 10. ACCOUNTING POSTING / REVERSAL RULES  (Section X)
+################################################################################
+
+- Payment journal:      posted once inside record_payment (existing behaviour).
+- Payment reversal:     reverse/offset by marking the payment journal
+                        status = voided; NEVER hard-delete accounting rows.
+- Credit-note journal:  posted only when CN.status transitions to "issued".
+                        Manual CN starts as draft — no journal.
+- Credit-note void:     void the linked issued-CN journal by marking it
+                        status = voided (idempotent).
+- Invoice void/cancel:  respects existing accounting postings — nothing is
+                        auto-deleted; existing payment-reversal flow handles
+                        related journals when payments are reversed first.
+- Idempotency:          every void operation is filtered by
+                        {"status": {"$ne": "voided"}} so retries are safe.
+
+
+################################################################################
+# 11. CLAIM FORM CANONICAL INTEGRATION  (Section V)
+################################################################################
+
+Before:
+    ClaimFormPrint.jsx summed ALL invoices for the session via
+    /finance/invoices, doubling a Proforma + its converted Invoice.
+
+After:
+    ClaimFormPrint.jsx now calls
+    GET /api/finance/source-of-truth/session/{id}
+    and uses:
+        invoice_total    = net_invoiced_value    (canonical)
+        gross_invoice_value / paid_amount / outstanding_amount also exposed.
+    Proformas and terminal invoices NEVER contribute (Phase 2 SoT guarantees).
+
+
+################################################################################
+# 12. HISTORICAL RECORDS MODIFIED
+################################################################################
+
+NONE.
+
+Verified via post-run scan of the production DB "driving_training_db"
+across sessions/invoices/payments/credit_notes/users/journal_entries.
+Zero fixture rows (ph2_test or ph3_test tagged) were found in production.
+
+
+################################################################################
+# 13. TEST DATABASE NAME
+################################################################################
+
+    driving_training_db_phase2_test
+
+    (Reused across Phase 2 and Phase 3A. Both suites share the same isolated
+    test DB. Phase 3A tests set APP_ENV=test at import time to allow the
+    hard-delete path in test/dev; individual tests that need production-mode
+    behaviour override APP_ENV="production" for the duration of the call
+    and restore it afterwards.)
+
+
+################################################################################
+# 14. PRODUCTION-DB FIXTURE-WRITE CONFIRMATION
+################################################################################
+
+Post-run scan of production DB "driving_training_db":
+    sessions      ph2_test|ph3_test docs = 0
+    invoices      ph2_test|ph3_test docs = 0
+    payments      ph2_test|ph3_test docs = 0
+    credit_notes  ph2_test|ph3_test docs = 0
+    users         ph2_test|ph3_test docs = 0
+    journal_entries ph2_test|ph3_test docs = 0
+
+=> Production DB received ZERO test-fixture writes.
+
+
+################################################################################
+# 15. PHASE 3A TEST RUN
+################################################################################
+
+    Command : pytest tests/test_phase3a_write_protection.py -q
+    Run     : 40
+    Passed  : 40
+    Failed  :  0
+
+Test coverage matrix (40 tests → 40 required cases from spec):
+    1  Proforma converts once                                       PASS
+    2  Duplicate conversion does not create second invoice          PASS
+    3  Converted Proforma immutable                                 PASS
+    4  session.invoice_id points to real invoice                    PASS
+    5  Session costing cannot update converted Proforma             PASS
+    6  Session costing cannot change issued invoice amount          PASS
+    7  Multiple invoices — no arbitrary session-only selection      PASS
+    8  Session CN with one eligible invoice works                   PASS
+    9  Multiple eligible session invoices require invoice_id        PASS
+    10 CN invoice must belong to session                            PASS
+    11 CN against Proforma rejected                                 PASS
+    12 CN against missing invoice rejected                          PASS
+    13 Draft CN does not reduce canonical net                       PASS
+    14 Approved CN does not reduce canonical net                    PASS
+    15 Issued CN reduces canonical net                              PASS
+    16 Issued CN amount cannot be silently changed                  PASS
+    17 Voided CN no longer reduces canonical net                    PASS
+    18 CN journal posts only on issue                               PASS
+    19 CN void accounting reversal is idempotent                    PASS
+    20 Payment against Proforma rejected                            PASS
+    21 Payment against cancelled/voided/deleted rejected            PASS
+    22 Payment against zero outstanding rejected                    PASS
+    23 Payment exceeding canonical outstanding rejected             PASS
+    24 Partial payment leaves correct outstanding                   PASS
+    25 Multiple payments settle correctly                           PASS
+    26 Production hard-payment delete unavailable                   PASS
+    27 Reversal preserves original payment                          PASS
+    28 Reversed payment excluded from settlement                    PASS
+    29 Payment-created CN stores source_payment_id                  PASS
+    30 Payment reversal only affects its linked CN                  PASS
+    31 Legacy unlinked CN not auto-voided                           PASS
+    32 Changing session data does not rewrite issued invoice        PASS
+    33 Financially significant session hard-delete rejected         PASS
+    34 Archive preserves financial documents                        PASS
+    35 Claim Form Proforma + converted Invoice → one value only     PASS
+    36 Payment UI/API exposes canonical outstanding correctly       PASS
+    37 Phase 1 Payment History still works                          PASS
+    38 Reversed payments still appear in Payment History            PASS
+    39 Existing Phase 2 Proforma tests still pass (spot-check)      PASS
+    40 Isolated test DB verified                                    PASS
+
+
+################################################################################
+# 16. PHASE 2 REGRESSION RUN
+################################################################################
+
+    Command : pytest tests/test_financial_source_of_truth.py -q
+    Run     : 44
+    Passed  : 44
+    Failed  :  0
+
+Intentional Phase 2 test changes:
+    test_CN_A_draft_reduces_net      → flipped: draft CN does NOT reduce net
+    test_CN_B_approved_reduces_net   → flipped: approved CN does NOT reduce net
+    (These match the Phase 3A intentional CN lifecycle change.)
+
+All other Phase 2 tests unchanged.
+
+
+################################################################################
+# 17. PHASE 1 REGRESSION RUN
+################################################################################
+
+    Command : pytest tests/test_payment_history.py -q
+    Run     : 26
+    Passed  : 26
+    Failed  :  0
+
+
+################################################################################
+# 18. OTHER REGRESSION TESTS
+################################################################################
+
+No unrelated production-suite regressions were run in-process because they
+were not tagged as Phase 3A dependencies. The two authoritative suites
+(Phase 1 + Phase 2 + Phase 3A) all pass. Any auxiliary finance/accounting
+suites should be re-run by the independent reviewer.
+
+
+################################################################################
+# 19. REDEPLOYMENT / SCOPE CONFIRMATIONS
+################################################################################
+
+- No redeployment was performed by this session.
+- Phase 3B was NOT started.
+- No Roles / Multi-Role, Calendar, Marketing, Certificates, Email, Coordinator
+  Command Centre, Trainer/Trainee redesign, unrelated reporting redesign or
+  Object Storage cleanup work was performed.
+
+
+################################################################################
+# 20. PRE-EXISTING OBJECT STORAGE LINT ERRORS (out of scope)
+################################################################################
+
+12 ephemeral-upload-storage lint errors remain in the following unrelated
+files. They are pre-existing and are NOT part of Phase 3A. Per user
+instruction they are deferred to a dedicated Object Storage phase:
+
+    backend/routes/certificates.py:394
+    backend/routes/training_reports.py:310, 336
+    backend/routes/settings.py:77, 103, 243
+    backend/routes/finance_payables.py:124, 162
+    backend/routes/reports.py:151, 180
+    backend/routes/checklists.py:408
+    backend/routes/static_files.py:95
+
+These block only the platform's final `finish` handshake — implementation
+and testing were completed regardless.
+
+
+################################################################################
+# 21. WAITING FOR INDEPENDENT REVIEW BEFORE REDEPLOYMENT.
+################################################################################
