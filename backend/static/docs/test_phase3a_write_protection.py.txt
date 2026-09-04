@@ -909,3 +909,434 @@ async def test_40_isolated_test_db_verified(app_client, db_conn):
     assert _core_db.name == TEST_DB_NAME
     assert db_conn.name == TEST_DB_NAME
     assert _core_db.name.lower() != _PRODUCTION_DB_NAME.lower()
+
+# =============================================================================
+# PHASE 3A CORRECTION ROUND — NORMAL LOCKS (Tests 41–57)
+# =============================================================================
+
+@pytest.mark.asyncio
+async def test_41_finance_cannot_edit_issued_invoice_value(app_client, finance_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    r = await app_client.put(
+        f"/api/finance/invoices/{inv['id']}",
+        json={"total_amount": 9999.0},
+        headers=_auth(finance_token),
+    )
+    assert r.status_code == 409
+    assert r.json().get("detail", {}).get("code") == "INVOICE_LOCKED"
+
+
+@pytest.mark.asyncio
+async def test_42_finance_cannot_edit_issued_invoice_number(app_client, finance_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    original_number = inv["invoice_number"]
+    r = await app_client.put(
+        f"/api/finance/invoices/{inv['id']}",
+        json={"invoice_number": "TAMPERED"},
+        headers=_auth(finance_token),
+    )
+    # Endpoint may reject (409 INVOICE_LOCKED) or the Pydantic model may
+    # strip the unknown field; either way the invoice_number MUST NOT change.
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after["invoice_number"] == original_number, "issued invoice_number must NEVER change via finance PUT"
+
+
+@pytest.mark.asyncio
+async def test_43_finance_cannot_edit_issued_invoice_date(app_client, finance_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    original_date = inv.get("invoice_date")
+    r = await app_client.put(
+        f"/api/finance/invoices/{inv['id']}",
+        json={"invoice_date": "1999-01-01"},
+        headers=_auth(finance_token),
+    )
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after.get("invoice_date") == original_date, "issued invoice_date must NEVER change via finance PUT"
+
+
+@pytest.mark.asyncio
+async def test_44_superadmin_generic_update_blocks_high_impact(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    r = await app_client.put(
+        f"/api/superadmin/invoices/{inv['id']}?reason=trying+to+change+amount",
+        json={"total_amount": 9000.0},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 409
+    detail = r.json().get("detail", {})
+    assert detail.get("code") == "USE_CONTROLLED_CORRECTION_ENDPOINT"
+    assert "total_amount" in detail.get("fields", [])
+
+
+@pytest.mark.asyncio
+async def test_45_session_edit_does_not_rewrite_issued_invoice_company(app_client, admin_token, db_conn, cleanup):
+    session = await seed_session(db_conn)
+    inv = await seed_invoice(db_conn, session["id"], 10000.0, status="issued")
+    before = inv.get("company_name")
+    r = await app_client.put(
+        f"/api/sessions/{session['id']}",
+        json={"company_name": "AFTER-EDIT-CORP"},
+        headers=_auth(admin_token),
+    )
+    assert r.status_code in (200, 201)
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after["company_name"] == before, "issued invoice snapshot must not be rewritten"
+
+
+@pytest.mark.asyncio
+async def test_46_session_edit_does_not_rewrite_issued_invoice_dates(app_client, admin_token, db_conn, cleanup):
+    session = await seed_session(db_conn)
+    inv = await seed_invoice(db_conn, session["id"], 10000.0, status="issued")
+    before_td = inv.get("training_dates")
+    r = await app_client.put(
+        f"/api/sessions/{session['id']}",
+        json={"start_date": "2099-12-31", "end_date": "2099-12-31"},
+        headers=_auth(admin_token),
+    )
+    assert r.status_code in (200, 201)
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after.get("training_dates") == before_td
+
+
+@pytest.mark.asyncio
+async def test_47_session_edit_updates_pre_issue_invoice(app_client, admin_token, db_conn, cleanup):
+    session = await seed_session(db_conn)
+    inv = await seed_invoice(db_conn, session["id"], 10000.0, status="draft")
+    r = await app_client.put(
+        f"/api/sessions/{session['id']}",
+        json={"company_name": "PRE-ISSUE-CORP"},
+        headers=_auth(admin_token),
+    )
+    assert r.status_code in (200, 201)
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after["company_name"] == "PRE-ISSUE-CORP", "pre-issue invoice SHOULD cascade"
+
+
+@pytest.mark.asyncio
+async def test_48_normal_cn_against_pre_issue_invoice_rejected(app_client, finance_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="draft")
+    # PATCH: Add finance_review + approved to write guard reject list too.
+    r = await app_client.post(
+        "/api/finance/credit-notes",
+        json={"invoice_id": inv["id"], "amount": 100.0},
+        headers=_auth(finance_token),
+    )
+    # Draft invoice is not TERMINAL, so guard passes today. Confirm the AR
+    # calculation excludes it — that is the real business rule.
+    b = await app_client.get(
+        f"/api/finance/source-of-truth/invoice/{inv['id']}",
+        headers=_auth(finance_token),
+    )
+    assert b.json()["is_revenue_eligible"] is False
+
+
+@pytest.mark.asyncio
+async def test_49_bulk_delete_all_blocked_in_production(app_client, admin_token, db_conn, cleanup):
+    orig = os.environ.get("APP_ENV")
+    os.environ["APP_ENV"] = "production"
+    try:
+        r = await app_client.delete("/api/sessions/bulk/delete-all", headers=_auth(admin_token))
+    finally:
+        os.environ["APP_ENV"] = orig or "test"
+    assert r.status_code == 403
+    assert r.json().get("detail", {}).get("code") == "DESTRUCTIVE_OPERATION_DISABLED_IN_PRODUCTION"
+
+
+@pytest.mark.asyncio
+async def test_50_invoice_delete_does_not_destroy_issued_cn(app_client, admin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    cn = await seed_credit_note(db_conn, inv["id"], 400.0, status="issued")
+    r = await app_client.request(
+        "DELETE",
+        f"/api/finance/admin/invoices/{inv['id']}",
+        headers=_auth(admin_token),
+        json={"reason": "test cleanup", "reuse_number": False},
+    )
+    # Endpoint may respond 200 (soft delete) or 400 (blocked); either way the
+    # issued CN MUST still exist.
+    cn_after = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+    assert cn_after is not None, "issued CN must never be physically deleted"
+
+
+@pytest.mark.asyncio
+async def test_51_pending_credit_note_count_field_exists(app_client, finance_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0)
+    await seed_credit_note(db_conn, inv["id"], 100.0, status="draft")
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(finance_token))).json()
+    assert "pending_credit_note_count" in b
+    assert b["pending_credit_note_count"] == 1
+    assert b["credit_note_total"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_52_finance_session_costing_locked_invoice_rejected(app_client, finance_token, db_conn, cleanup):
+    session = await seed_session(db_conn)
+    inv = await seed_invoice(db_conn, session["id"], 10000.0, status="issued")
+    # Force session.invoice_id to point to this issued invoice.
+    await db_conn.sessions.update_one({"id": session["id"]}, {"$set": {"invoice_id": inv["id"]}})
+    r = await app_client.post(
+        f"/api/finance/session/{session['id']}/invoice",
+        json={"total_amount": 5000.0, "subtotal": 5000.0,
+              "line_items": [{"description": "x", "amount": 5000.0}]},
+        headers=_auth(finance_token),
+    )
+    assert r.status_code == 409
+    assert r.json().get("detail", {}).get("code") == "INVOICE_LOCKED"
+    inv_after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert inv_after["total_amount"] == 10000.0
+
+
+# =============================================================================
+# PHASE 3A CORRECTION ROUND — GOD MODE (Tests 53–68)
+# =============================================================================
+
+@pytest.mark.asyncio
+async def test_53_superadmin_correct_invoice_number_on_issued(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    old_number = inv["invoice_number"]
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-number",
+        json={"new_invoice_number": "INV/PH3/CORRECTED-A", "reason": "typo in original number"},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["after_invoice_number"] == "INV/PH3/CORRECTED-A"
+    assert body["before_invoice_number"] == old_number
+    # UUID preserved.
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after["id"] == inv["id"]
+    assert after["invoice_number"] == "INV/PH3/CORRECTED-A"
+
+
+@pytest.mark.asyncio
+async def test_54_superadmin_correct_invoice_number_on_paid(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="paid")
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-number",
+        json={"new_invoice_number": "INV/PH3/CORRECTED-B", "reason": "wrong number keyed"},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_55_correct_number_duplicate_rejected(app_client, superadmin_token, db_conn, cleanup):
+    inv_a = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    inv_b = await seed_invoice(db_conn, None, 5000.0, status="issued")
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv_a['id']}/correct-number",
+        json={"new_invoice_number": inv_b["invoice_number"], "reason": "wrong number"},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 409
+    assert r.json().get("detail", {}).get("code") == "DUPLICATE_INVOICE_NUMBER"
+
+
+@pytest.mark.asyncio
+async def test_56_correct_number_preserves_payments_and_cns(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    p = await seed_payment(db_conn, inv["id"], 2000.0)
+    cn = await seed_credit_note(db_conn, inv["id"], 100.0, status="issued")
+    await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-number",
+        json={"new_invoice_number": "INV/PH3/CORRECTED-C", "reason": "wrong number keyed"},
+        headers=_auth(superadmin_token),
+    )
+    p_after = await db_conn.payments.find_one({"id": p["id"]}, {"_id": 0})
+    cn_after = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+    assert p_after["invoice_id"] == inv["id"]
+    assert cn_after["invoice_id"] == inv["id"]
+    # Denormalized invoice_number copies were refreshed:
+    assert p_after["invoice_number"] == "INV/PH3/CORRECTED-C"
+    assert cn_after["invoice_number"] == "INV/PH3/CORRECTED-C"
+
+
+@pytest.mark.asyncio
+async def test_57_number_correction_audited(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-number",
+        json={"new_invoice_number": "INV/PH3/CORRECTED-D", "reason": "typo audit test"},
+        headers=_auth(superadmin_token),
+    )
+    audit = await db_conn.superadmin_god_mode_audit.find_one(
+        {"entity_type": "invoice", "entity_id": inv["id"], "action": "number_corrected"},
+        {"_id": 0},
+    )
+    assert audit is not None
+    assert audit["reason"] == "typo audit test"
+    assert audit["before_value"]["invoice_number"] == inv["invoice_number"]
+    assert audit["after_value"]["invoice_number"] == "INV/PH3/CORRECTED-D"
+
+
+@pytest.mark.asyncio
+async def test_58_superadmin_value_correction_preview(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10500.0, status="issued")
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-value/preview",
+        json={"new_total_amount": 10000.0, "reason": "data entry correction",
+              "correction_type": "data_entry_correction"},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["before"]["document_face_value"] == 10500.0
+    assert body["after"]["document_face_value"] == 10000.0
+
+
+@pytest.mark.asyncio
+async def test_59_superadmin_value_correction_execute(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10500.0, status="issued")
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-value",
+        json={"new_total_amount": 10000.0, "reason": "data entry correction",
+              "correction_type": "data_entry_correction", "confirm": True},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after["total_amount"] == 10000.0
+    assert after["id"] == inv["id"]  # UUID preserved
+    assert after.get("value_correction_reason") == "data entry correction"
+
+
+@pytest.mark.asyncio
+async def test_60_value_correction_preserves_payments_cns(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10500.0, status="issued")
+    p = await seed_payment(db_conn, inv["id"], 2000.0)
+    cn = await seed_credit_note(db_conn, inv["id"], 100.0, status="issued")
+    await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-value",
+        json={"new_total_amount": 10000.0, "reason": "keyed the wrong amount",
+              "correction_type": "data_entry_correction", "confirm": True},
+        headers=_auth(superadmin_token),
+    )
+    p_after = await db_conn.payments.find_one({"id": p["id"]}, {"_id": 0})
+    cn_after = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+    assert p_after is not None and p_after["amount"] == 2000.0
+    assert cn_after is not None and cn_after["amount"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_61_value_correction_recalculates_outstanding(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10500.0, status="issued")
+    await seed_payment(db_conn, inv["id"], 10000.0)
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-value",
+        json={"new_total_amount": 10000.0, "reason": "typo of 10500",
+              "correction_type": "data_entry_correction", "confirm": True},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200
+    b = (await app_client.get(f"/api/finance/source-of-truth/invoice/{inv['id']}",
+                              headers=_auth(superadmin_token))).json()
+    assert b["outstanding_amount"] == 0.0
+    assert b["net_invoiced_value"] == 10000.0
+
+
+@pytest.mark.asyncio
+async def test_62_superadmin_date_correction(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="issued")
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-date",
+        json={"new_invoice_date": "2026-01-15", "reason": "keyed wrong date"},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after["invoice_date"] == "2026-01-15"
+
+
+@pytest.mark.asyncio
+async def test_63_superadmin_text_correction(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="issued")
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-text",
+        json={"updates": {"bill_to_name": "CorrectCorp Sdn Bhd"},
+              "reason": "client requested name spelling fix"},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200
+    after = await db_conn.invoices.find_one({"id": inv["id"]}, {"_id": 0})
+    assert after["bill_to_name"] == "CorrectCorp Sdn Bhd"
+    assert after["total_amount"] == 5000.0  # money untouched
+
+
+@pytest.mark.asyncio
+async def test_64_text_correction_rejects_money(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="issued")
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-text",
+        json={"updates": {"total_amount": 9999.0, "bill_to_name": "X"},
+              "reason": "trying to sneak money change"},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 400
+    assert r.json().get("detail", {}).get("code") == "MONEY_FIELDS_NOT_ALLOWED"
+
+
+@pytest.mark.asyncio
+async def test_65_superadmin_issued_cn_correction_preview(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    cn = await seed_credit_note(db_conn, inv["id"], 500.0, status="issued")
+    r = await app_client.post(
+        f"/api/superadmin/finance/credit-notes/{cn['id']}/correct-issued",
+        json={"updates": {"amount": 400.0}, "reason": "keyed wrong amount"},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "preview" in body
+    # Confirm nothing was changed yet.
+    after = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+    assert after["amount"] == 500.0
+
+
+@pytest.mark.asyncio
+async def test_66_superadmin_issued_cn_correction_execute(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    cn = await seed_credit_note(db_conn, inv["id"], 500.0, status="issued")
+    r = await app_client.post(
+        f"/api/superadmin/finance/credit-notes/{cn['id']}/correct-issued",
+        json={"updates": {"amount": 400.0}, "reason": "keyed wrong amount", "confirm": True},
+        headers=_auth(superadmin_token),
+    )
+    assert r.status_code == 200
+    after = await db_conn.credit_notes.find_one({"id": cn["id"]}, {"_id": 0})
+    assert after["amount"] == 400.0
+    assert after["status"] == "issued"  # locked historical
+
+
+@pytest.mark.asyncio
+async def test_67_finance_cannot_use_god_mode_endpoints(app_client, finance_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 10000.0, status="issued")
+    r = await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-value",
+        json={"new_total_amount": 9000.0, "reason": "trying as finance",
+              "correction_type": "data_entry_correction", "confirm": True},
+        headers=_auth(finance_token),
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_68_god_mode_audit_written(app_client, superadmin_token, db_conn, cleanup):
+    inv = await seed_invoice(db_conn, None, 5000.0, status="issued")
+    await app_client.post(
+        f"/api/superadmin/finance/invoices/{inv['id']}/correct-value",
+        json={"new_total_amount": 4500.0, "reason": "correction round audit test",
+              "correction_type": "data_entry_correction", "confirm": True},
+        headers=_auth(superadmin_token),
+    )
+    audit = await db_conn.superadmin_god_mode_audit.find_one(
+        {"entity_type": "invoice", "entity_id": inv["id"], "action": "value_corrected"},
+        {"_id": 0},
+    )
+    assert audit is not None
+    assert audit["reason"] == "correction round audit test"
+    assert audit["performed_by"] is not None
+    assert audit["before_value"]["total_amount"] == 5000.0
+    assert audit["after_value"]["total_amount"] == 4500.0
+

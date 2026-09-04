@@ -1,0 +1,31 @@
+{
+  "summary": "Phase 3A Consolidated Correction Round — backend-only regression. Ran the three requested pytest suites in separate processes as instructed. All 138 tests passed: test_phase3a_write_protection.py (68/68), test_financial_source_of_truth.py (44/44), test_payment_history.py (26/26). Verified production DB isolation (0 ph2_test/ph3_test tagged rows in driving_training_db). Verified the Phase 3A partial unique index `uniq_converted_from_proforma_id_partial` is present on invoices collection in the running (production) DB after backend startup. Test DB is ephemeral — created & torn down inside module-scoped fixtures via ASGITransport startup, so index-existence check on that DB after teardown returns False, which is expected (proforma-conversion concurrency test cases 1 & 2 in the phase3a suite still pass, so the guard is functional in the isolated test DB while tests run). No production DB writes observed. No code was modified during this round.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase3a_write_protection.py",
+    "/app/backend/tests/test_financial_source_of_truth.py",
+    "/app/backend/tests/test_payment_history.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py still uses deprecated on_event startup/shutdown handlers; migrate to FastAPI lifespan handlers to remove the deprecation warnings and get deterministic index creation during tests.",
+    "routes/accounting.py continues to use Pydantic V1 @validator and min_items= — should be migrated to V2 (@field_validator, min_length=). Not blocking for Phase 3A but worth queuing.",
+    "The Phase 3A partial unique index is created only during main backend startup; module-scoped test fixtures using ASGITransport will trigger it, but per-test DB drops can remove it before the next module runs. Consider a session-scoped index bootstrap in tests/conftest for future robustness."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (138/138)", "frontend": "n/a (backend-only review)"},
+  "test_credentials": "SuperAdmin correction endpoints exercised entirely via pytest with fixture-seeded ph3_test users; no manual credentials required. /app/memory/test_credentials.md admin (arjuna@mddrc.com.my) is not superadmin, so manual curl spot-checks of /api/superadmin/finance/... were not attempted — backend pytest coverage supersedes them.",
+  "seed_data_creation": "None persisted — every fixture user/session/invoice/CN/payment is tagged with ph2_test or ph3_test and created against the isolated driving_training_db_phase2_test DB. Verified 0 tagged rows in production DB after full run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Phase 3A Consolidated Correction Round is fully green (138/138). Feature-flag scope for tests 41-68 (SuperAdmin correction endpoints: correct-number, correct-value/preview + confirm, correct-date, correct-text, correct-issued CN, high-impact block on generic PUT, DELETE bulk production guard, CN preservation on invoice delete, canonical outstanding via SoT, pending_credit_note_count exposure, partial unique index) — all verified. Do NOT touch the Phase 2 CN semantic (only status=='issued' reduces net) — that flip is intentional. Certificates/settings/training_reports ephemeral-upload lint errors are explicitly out of scope. User has said DO NOT redeploy and DO NOT start Phase 3B. Next agent can proceed straight to Phase 3B when unblocked.",
+  "rca of the issue": "N/A — no regressions detected in this iteration."
+}

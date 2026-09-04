@@ -1,0 +1,340 @@
+================================================================================
+PHASE 3A CONSOLIDATED CORRECTION ROUND — FINAL REVIEW BUNDLE
+Financial Integrity + Controlled SuperAdmin God Mode
+================================================================================
+Date: 2026-09-04
+Testing: iteration_50.json — 138/138 tests PASS (verified by testing_agent)
+
+Design principle:
+    NORMAL USERS  → strong financial lifecycle protection.
+    SUPERADMIN    → CONTROLLED, AUDITED, IMPACT-AWARE God Mode (unchanged
+                    authority; safer surface).
+
+
+################################################################################
+# 1. CHANGED-FILE MANIFEST (13 modified)
+################################################################################
+
+    backend/services/financial_source_of_truth.py
+        * INFORMATIONAL_INVOICE_STATUSES now includes finance_review & approved.
+
+    backend/routes/superadmin_portal.py
+        * update_invoice(): rejects HIGH_IMPACT_INVOICE_FIELDS on LOCKED
+          invoices with HTTP 409 code=USE_CONTROLLED_CORRECTION_ENDPOINT.
+          Directs SuperAdmin to the dedicated correction endpoints.
+
+    backend/routes/sessions_new.py
+        * update_session(): cascade to invoices restricted to
+          {draft, auto_draft, finance_review, approved}. Issued snapshots
+          are never rewritten.
+        * delete_all_sessions(): BLOCKED in production with
+          code=DESTRUCTIVE_OPERATION_DISABLED_IN_PRODUCTION.
+
+    backend/routes/finance_invoices.py
+        * delete_invoice(): NEVER physically deletes credit notes on
+          invoices with financial history. Only draft CNs on pre-issue
+          invoices with no payments and no issued CNs may be cleaned up.
+
+    backend/routes/finance_session.py
+        * save_session_invoice(): now uses
+          FinancialWriteGuard.resolve_session_primary_invoice(). Rejects
+          ambiguous session→invoice with 409
+          code=AMBIGUOUS_SESSION_INVOICE_SELECTION. Rejects mutation of
+          LOCKED/TERMINAL invoices with 409 code=INVOICE_LOCKED.
+
+    backend/server.py
+        * Registers new superadmin_finance_corrections_router.
+        * Creates partial-unique index uniq_converted_from_proforma_id_partial
+          on invoices.converted_from_proforma_id. Historical duplicates are
+          NOT auto-repaired — index creation logs a warning and continues.
+
+    backend/routes/__init__.py
+        * Registers the new correction router in get_all_routers().
+
+    backend/services/financial_write_guard.py
+        * is_production_mode() precedence corrected: APP_ENV=production
+          forces production behaviour even against a test DB.
+
+    frontend/src/components/finance/PaymentsTab.jsx
+        * On invoice select, GETs
+          /api/finance/source-of-truth/invoice/{id}/outstanding and defaults
+          the payment amount to canonical_outstanding (NOT invoice.total_amount).
+        * Shows Invoice Face Value + Canonical Outstanding hint.
+          data-testid="canonical-outstanding-hint" and
+          data-testid="invoice-fully-settled-badge".
+
+    backend/tests/test_phase3a_write_protection.py
+        * Added 28 new tests (41–68) covering correction-round protections
+          AND SuperAdmin God Mode workflows.
+
+    backend/tests/test_financial_source_of_truth.py
+        * Unchanged since Phase 3A round 1 (intentional flip of tests CN_A
+          & CN_B remains — draft/approved CNs no longer reduce net).
+
+    (frontend/src/components/ClaimFormPrint.jsx and
+     backend/routes/finance_payments.py already updated in Phase 3A
+     round 1 — re-shipped for completeness.)
+
+
+################################################################################
+# 2. NEW FILES (2)
+################################################################################
+
+    backend/services/superadmin_financial_correction.py    (NEW)
+        SuperAdminFinancialCorrection service:
+            correct_invoice_number()
+            preview_value_correction()
+            correct_invoice_value()
+            correct_invoice_date()
+            correct_invoice_text()
+            correct_issued_credit_note()
+        HIGH_IMPACT_INVOICE_FIELDS set exported.
+        high_impact_touched() helper for the generic SuperAdmin PUT.
+        Writes to db.superadmin_god_mode_audit with performed_by/name/email,
+        before/after values, reason, timestamp, correction_type.
+
+    backend/routes/superadmin_finance_corrections.py       (NEW)
+        POST /api/superadmin/finance/invoices/{id}/correct-number
+        POST /api/superadmin/finance/invoices/{id}/correct-value/preview
+        POST /api/superadmin/finance/invoices/{id}/correct-value
+        POST /api/superadmin/finance/invoices/{id}/correct-date
+        POST /api/superadmin/finance/invoices/{id}/correct-text
+        POST /api/superadmin/finance/credit-notes/{id}/correct-issued
+        SuperAdmin-only. Every endpoint requires reason (min 5 chars) and
+        writes an audit record.
+
+
+################################################################################
+# 3. NORMAL INVOICE LIFECYCLE MATRIX
+################################################################################
+
+    STATUS          BUCKET          NORMAL EDIT?         WHY
+    draft           PRE_ISSUE       yes                  editable
+    auto_draft      PRE_ISSUE       yes                  auto-generated draft
+    finance_review  PRE_ISSUE       yes                  awaiting review
+    approved        PRE_ISSUE       yes (limited)        approved but not issued
+    issued          LOCKED_ACTIVE   NO                   HISTORICAL SNAPSHOT
+    partially_paid  LOCKED_ACTIVE   NO                   HISTORICAL SNAPSHOT
+    paid            LOCKED_ACTIVE   NO                   HISTORICAL SNAPSHOT
+    voided          TERMINAL        NO                   HISTORICAL
+    cancelled       TERMINAL        NO                   HISTORICAL
+    deleted         TERMINAL        NO                   HISTORICAL
+    converted       TERMINAL        NO                   PROFORMA→INVOICE
+
+
+################################################################################
+# 4. SUPERADMIN GOD MODE AUTHORITY MATRIX
+################################################################################
+
+    OPERATION                     PATH                                     STATUSES ALLOWED
+    Correct invoice number        POST .../correct-number                  ALL (unique-checked)
+    Preview value correction      POST .../correct-value/preview           ALL
+    Execute value correction      POST .../correct-value (confirm=true)    ALL
+    Correct invoice date          POST .../correct-date                    ALL
+    Correct text/bill-to          POST .../correct-text                    ALL (money rejected)
+    Correct issued CN             POST .../credit-notes/{id}/correct-issued issued only
+
+    Every action requires:
+        role == "super_admin"
+        reason >= 5 chars
+        idempotent by design
+        audit row in superadmin_god_mode_audit with:
+            entity_type, entity_id, action, reason,
+            before_value, after_value,
+            performed_by / performed_by_name / performed_by_email,
+            performed_at, correction_type (for value corrections),
+            preview (for value + issued-CN corrections).
+
+
+################################################################################
+# 5–9. CORRECTION DESIGNS (compact)
+################################################################################
+
+INVOICE NUMBER   — unique constraint pre-check, denormalized copies on
+                   payments & credit_notes updated to the new number,
+                   invoice UUID preserved, audit written.
+
+INVOICE VALUE    — preview endpoint reuses Phase 2 SoT internal helper
+                   (`_compute_invoice_snapshot`) to compute an "after"
+                   snapshot WITHOUT mutating. Execute endpoint recalculates
+                   subtotal & tax from tax_rate, re-derives canonical status
+                   (issued vs partially_paid vs paid) from fresh SoT snapshot.
+                   correction_type must be one of:
+                       data_entry_correction | commercial_adjustment
+                       | exceptional_override
+
+INVOICE DATE     — invoice_date changed; created_at preserved intact.
+
+BILL-TO / TEXT   — allowed set:
+                     company_name, bill_to_name, bill_to_address,
+                     bill_to_email, programme_name, session_name,
+                     description, po_number, line_items_text_note.
+                   Any monetary field in body → 400 MONEY_FIELDS_NOT_ALLOWED.
+
+ISSUED CN        — allowed set: cn_number, cn_date, amount, reason,
+                   description. On amount change, existing linked
+                   journal entries are voided (idempotent) and a new
+                   journal is re-posted via post_credit_note_issued
+                   under the SuperAdmin correction audit.
+
+
+################################################################################
+# 10–13. NORMAL LOCK / SESSION / RESERVATION / CN DESIGN
+################################################################################
+
+CN normal locks:
+    draft   → editable
+    approved→ materially locked
+    issued  → LOCKED (SuperAdmin correction only)
+    voided  → LOCKED historical
+
+Session-costing protection:
+    finance_session.save_session_invoice() only mutates a PRE-ISSUE
+    invoice. Issued/paid/terminal invoices raise INVOICE_LOCKED.
+
+Session edit cascade:
+    Only PRE_ISSUE invoices receive session cascades. Issued/paid
+    invoices remain untouched.
+
+
+################################################################################
+# 14–17. ARCHIVE + DESTRUCTIVE-OP SAFEGUARDS + CONCURRENCY
+################################################################################
+
+- POST /api/sessions/{id}/archive preserves ALL financial records.
+- DELETE /api/sessions/{id} in production rejects when financial history
+  exists (SESSION_HAS_FINANCIAL_HISTORY, 409).
+- DELETE /api/sessions/bulk/delete-all in production returns 403
+  DESTRUCTIVE_OPERATION_DISABLED_IN_PRODUCTION.
+- delete_invoice() never wipes CNs on invoices with financial history.
+- Proforma-conversion concurrency: partial unique index
+  uniq_converted_from_proforma_id_partial on invoices; combined with the
+  pre-check in convert_proforma_to_invoice + race-safe re-check on insert
+  failure, guarantees exactly ONE resulting invoice per proforma.
+
+
+################################################################################
+# 18. TEST DATABASE
+################################################################################
+
+    Name: driving_training_db_phase2_test  (shared with Phase 2)
+    Every fixture: ph2_test or ph3_test tagged.
+
+
+################################################################################
+# 19. PRODUCTION-DB WRITE CONFIRMATION
+################################################################################
+
+    Sessions / invoices / payments / credit_notes / users /
+    journal_entries / superadmin_god_mode_audit
+        ph2_test|ph3_test docs = 0
+
+    => Production DB (driving_training_db) received ZERO fixture writes.
+
+
+################################################################################
+# 20. PHASE 3A CORRECTION-ROUND TEST RUN
+################################################################################
+
+    Command : pytest tests/test_phase3a_write_protection.py -q
+    Run     : 68
+    Passed  : 68
+    Failed  :  0
+
+    New tests (28) covering:
+        41-47  Normal locks + session-edit protection
+        48     CN pre-issue behaviour
+        49     Bulk delete-all blocked
+        50     Invoice delete preserves CNs
+        51     pending_credit_note_count field
+        52     Finance Session Costing blocked on locked invoices
+        53-57  SuperAdmin correct invoice number (issued/paid/dup/preserve/audit)
+        58-61  SuperAdmin correct invoice value (preview/execute/preserve/recalc)
+        62     SuperAdmin correct invoice date
+        63-64  SuperAdmin correct text (rejects money)
+        65-66  SuperAdmin correct issued CN (preview/execute)
+        67     Finance BLOCKED from God Mode endpoints
+        68     God Mode audit written
+
+
+################################################################################
+# 21. PHASE 2 REGRESSION
+################################################################################
+
+    Command : pytest tests/test_financial_source_of_truth.py -q
+    Run     : 44
+    Passed  : 44
+    Failed  :  0
+
+
+################################################################################
+# 22. PHASE 1 REGRESSION
+################################################################################
+
+    Command : pytest tests/test_payment_history.py -q
+    Run     : 26
+    Passed  : 26
+    Failed  :  0
+
+
+################################################################################
+# 23. OTHER REGRESSIONS
+################################################################################
+
+    Independent testing_agent (report iteration_50.json) confirmed all 138
+    tests pass across the three suites, verified the partial unique index
+    on invoices, and verified production DB has 0 fixture rows.
+
+
+################################################################################
+# 24. HISTORICAL PRODUCTION RECORDS MODIFIED
+################################################################################
+
+    NONE.
+
+    The one production-side write performed is:
+        db.invoices.create_index("converted_from_proforma_id",
+                                 unique=True, partialFilterExpression=...)
+    which is a metadata operation. No historical rows were changed.
+
+
+################################################################################
+# 25. REDEPLOYMENT / SCOPE CONFIRMATIONS
+################################################################################
+
+    - No production redeployment.
+    - Phase 3B NOT started.
+    - Pre-existing Object Storage lint errors NOT touched (out of scope).
+    - No Roles/Multi-Role, Calendar, Marketing, Certificates, Email,
+      Coordinator Command Centre, Trainer/Trainee, or reporting redesign
+      work performed.
+
+
+################################################################################
+# 26. DOWNLOADABLE CORRECTED SOURCE
+################################################################################
+
+Every corrected source file is exposed as plain text under:
+    /api/static/docs/*.txt
+
+Files in this bundle:
+    PHASE_3A_CORRECTION_ROUND_REVIEW_BUNDLE.txt   (this file)
+    financial_write_guard.py.txt
+    superadmin_financial_correction.py.txt         (NEW)
+    financial_source_of_truth.py.txt
+    finance_invoices.py.txt
+    finance_payments.py.txt
+    finance_session.py.txt
+    finance_source_of_truth.py.txt
+    superadmin_finance_corrections.py.txt          (NEW)
+    superadmin_portal.py.txt
+    sessions_new.py.txt
+    server.py.txt
+    __init__.py.txt                                 (routes/__init__.py)
+    test_phase3a_write_protection.py.txt
+    test_financial_source_of_truth.py.txt
+    PaymentsTab.jsx.txt
+    ClaimFormPrint.jsx.txt
+
+
+WAITING FOR INDEPENDENT REVIEW BEFORE ANY REDEPLOYMENT OR PHASE 3B KICKOFF.

@@ -1444,10 +1444,12 @@ async def delete_invoice(
     status = invoice.get("status", "")
     is_additional = invoice.get("is_additional_invoice", False)
     
-    # Check if this is an issued/paid invoice - warn but allow
-    if status in ["issued", "paid"]:
-        # For issued/paid invoices, we still delete but log it prominently
-        pass
+    # Check if this is an issued/paid invoice - block hard-delete of historical evidence.
+    from services.financial_write_guard import is_production_mode
+    financial_statuses = {"issued", "partially_paid", "paid", "voided", "cancelled", "converted"}
+    if status in financial_statuses and is_production_mode():
+        # Soft-delete is fine (status='deleted' below) but we MUST NOT wipe CNs/payments.
+        pass  # continue to soft-delete branch below; guarded by "don't wipe CNs" below.
     
     # Create audit trail entry BEFORE deleting
     record_ref = f"{invoice_number} - {company_name} - RM {total_amount:,.2f}"
@@ -1500,8 +1502,24 @@ async def delete_invoice(
                 }}
             )
     
-    # Delete related credit notes if any
-    credit_notes_deleted = await db.credit_notes.delete_many({"invoice_id": invoice_id})
+    # PHASE 3A (Section 10): NEVER physically delete historical Credit Notes.
+    # For a pre-issue invoice (draft/auto_draft) with NO payments and NO issued CNs,
+    # it is safe to remove associated draft CNs (typically none exist). For any
+    # invoice with financial history, we preserve credit notes intact — the
+    # invoice moves to status="deleted" via the soft-delete below.
+    credit_notes_deleted = None
+    if status in ("draft", "auto_draft"):
+        active_payments = await db.payments.count_documents({
+            "invoice_id": invoice_id, "status": {"$ne": "reversed"},
+        })
+        active_cns = await db.credit_notes.count_documents({
+            "invoice_id": invoice_id, "status": "issued",
+        })
+        if active_payments == 0 and active_cns == 0:
+            # Only DRAFT CNs on a pre-issue invoice may be cleaned up.
+            credit_notes_deleted = await db.credit_notes.delete_many(
+                {"invoice_id": invoice_id, "status": "draft"}
+            )
     
     # Soft-delete the invoice — preserves audit trail (no untraceable number gaps)
     # Row stays in DB with status="deleted"; hidden from all normal filters.
@@ -1534,7 +1552,7 @@ async def delete_invoice(
         "message": "Invoice deleted successfully",
         "invoice_number": invoice_number,
         "session_updated": session_id is not None,
-        "credit_notes_deleted": credit_notes_deleted.deleted_count,
+        "credit_notes_deleted": credit_notes_deleted.deleted_count if credit_notes_deleted is not None else 0,
         "number_added_to_reuse_pool": request.reuse_number and status in ["auto_draft", "draft"]
     }
 

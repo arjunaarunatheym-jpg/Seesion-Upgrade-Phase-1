@@ -1010,11 +1010,18 @@ async def update_session(session_id: str, session_data: dict, current_user: User
         {"$set": session_data}
     )
     
+    # PHASE 3A (Section 11): session-edit cascades apply ONLY to safe pre-issue
+    # invoice documents. Once an invoice is issued/partially_paid/paid or in a
+    # terminal state, it is a HISTORICAL SNAPSHOT — session edits MUST NOT
+    # silently rewrite it. Corrections to locked invoices must go through
+    # the controlled SuperAdmin correction endpoints.
+    PRE_ISSUE_INVOICE_STATUSES = ["draft", "auto_draft", "finance_review", "approved"]
+
     # Cascade company_name update to related invoices and quotations
     new_company_name = session_data.get("company_name")
     if new_company_name and new_company_name != old_company_name:
         await db.invoices.update_many(
-            {"session_id": session_id},
+            {"session_id": session_id, "status": {"$in": PRE_ISSUE_INVOICE_STATUSES}},
             {"$set": {"company_name": new_company_name, "bill_to_name": new_company_name}}
         )
         if session.get("quotation_id"):
@@ -1027,8 +1034,8 @@ async def update_session(session_id: str, session_data: dict, current_user: User
                 {"id": session.get("lead_id")},
                 {"$set": {"company_name": new_company_name}}
             )
-    
-    # Cascade date changes to related invoices
+
+    # Cascade date changes to related invoices — PRE-ISSUE ONLY.
     new_start_date = session_data.get("start_date")
     new_end_date = session_data.get("end_date")
     if (new_start_date and new_start_date != old_start_date) or (new_end_date and new_end_date != old_end_date):
@@ -1037,25 +1044,25 @@ async def update_session(session_id: str, session_data: dict, current_user: User
         if final_start and final_end:
             new_training_dates = f"{final_start} to {final_end}"
             await db.invoices.update_many(
-                {"session_id": session_id},
+                {"session_id": session_id, "status": {"$in": PRE_ISSUE_INVOICE_STATUSES}},
                 {"$set": {"training_dates": new_training_dates}}
             )
-    
-    # Cascade venue/location changes to related invoices
+
+    # Cascade venue/location changes to related invoices — PRE-ISSUE ONLY.
     new_location = session_data.get("location")
     if new_location and new_location != old_location:
         await db.invoices.update_many(
-            {"session_id": session_id},
+            {"session_id": session_id, "status": {"$in": PRE_ISSUE_INVOICE_STATUSES}},
             {"$set": {"venue": new_location}}
         )
-    
-    # Cascade programme changes to related invoices
+
+    # Cascade programme changes to related invoices — PRE-ISSUE ONLY.
     new_program_id = session_data.get("program_id")
     if new_program_id and new_program_id != old_program_id:
         programme = await db.programs.find_one({"id": new_program_id}, {"_id": 0})
         if programme:
             await db.invoices.update_many(
-                {"session_id": session_id},
+                {"session_id": session_id, "status": {"$in": PRE_ISSUE_INVOICE_STATUSES}},
                 {"$set": {"programme_name": programme.get("name")}}
             )
     
@@ -1187,10 +1194,30 @@ async def archive_session(session_id: str, request: dict, current_user: User = D
 
 @router.delete("/bulk/delete-all")
 async def delete_all_sessions(current_user: User = Depends(get_current_user)):
-    """Delete ALL sessions and related data - for testing/cleanup purposes"""
+    """Delete ALL sessions and related data - for testing/cleanup purposes.
+
+    PHASE 3A (Section 23): DISABLED IN PRODUCTION.
+    God Mode does not need an accidental 'erase entire production training
+    database' button. In production this returns HTTP 403 with a clear
+    destructive-operation-disabled error.
+    """
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admins can delete all sessions")
-    
+
+    from services.financial_write_guard import is_production_mode
+    if is_production_mode():
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "DESTRUCTIVE_OPERATION_DISABLED_IN_PRODUCTION",
+                "message": (
+                    "Bulk delete-all is disabled in production. Use per-session "
+                    "archive/void workflows or the disaster-recovery maintenance "
+                    "process (out of scope for the standard UI)."
+                ),
+            },
+        )
+
     all_sessions = await db.sessions.find({}, {"_id": 0, "id": 1}).to_list(1000)
     session_ids = [s["id"] for s in all_sessions]
     

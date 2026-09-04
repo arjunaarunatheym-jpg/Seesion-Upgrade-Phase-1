@@ -496,7 +496,33 @@ async def update_invoice(
     
     update_fields["updated_at"] = get_malaysia_time().isoformat()
     before_value = {k: invoice.get(k) for k in update_fields.keys() if k != "updated_at"}
-    
+
+    # ---- Phase 3A: reject high-impact changes on locked invoices ----------
+    # SuperAdmin can still correct these — but ONLY through the controlled
+    # dedicated endpoints (correct-number/value/date/text) so that impact
+    # preview, before/after audit, and relationship preservation are applied.
+    from services.superadmin_financial_correction import (
+        high_impact_touched, HIGH_IMPACT_INVOICE_FIELDS,
+    )
+    touched = high_impact_touched(invoice, update_fields)
+    # `status` is already handled above by the BLOCKED_DOWNGRADES check —
+    # ignore it here to avoid double-blocking the allowed transitions.
+    touched = [f for f in touched if f != "status"]
+    if touched:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "USE_CONTROLLED_CORRECTION_ENDPOINT",
+                "message": (
+                    "Locked invoice has high-impact fields in this request. "
+                    f"Use the dedicated SuperAdmin correction endpoints for {touched}. "
+                    "See /api/superadmin/finance/invoices/{invoice_id}/correct-* endpoints."
+                ),
+                "fields": touched,
+                "invoice_status": invoice.get("status"),
+            },
+        )
+
     await db.invoices.update_one({"id": invoice_id}, {"$set": update_fields})
     
     await log_super_admin_action(
