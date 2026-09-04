@@ -14,6 +14,7 @@ from io import BytesIO
 
 from core import db, get_current_user, get_malaysia_time
 from models import User, CompanySettings
+from services.object_storage import put_uploaded_file
 
 router = APIRouter(prefix="/finance", tags=["finance-payables"])
 
@@ -114,15 +115,9 @@ async def upload_company_logo(file: UploadFile = File(...), current_user: User =
     
     content = await file.read()
     
-    upload_dir = "uploads/company"
-    os.makedirs(upload_dir, exist_ok=True)
-    
     timestamp = get_malaysia_time().strftime("%Y%m%d_%H%M%S")
     safe_filename = f"company_logo_{timestamp}{file_ext}"
-    file_path = os.path.join(upload_dir, safe_filename)
-    
-    with open(file_path, "wb") as f:  # noqa: ephemeral-upload-storage
-        f.write(content)
+    await put_uploaded_file(db, "company", safe_filename, content, file.content_type or f"image/{file_ext.lstrip('.')}")
     
     logo_url = f"/api/uploads/company/{safe_filename}"
     
@@ -151,16 +146,18 @@ async def upload_indemnity_form(file: UploadFile = File(...), current_user: User
     
     content = await file.read()
     
-    upload_dir = "uploads/company"
-    os.makedirs(upload_dir, exist_ok=True)
-    
     timestamp = get_malaysia_time().strftime("%Y%m%d_%H%M%S")
     file_ext = os.path.splitext(file.filename)[1].lower()
     safe_filename = f"indemnity_form_{timestamp}{file_ext}"
-    file_path = os.path.join(upload_dir, safe_filename)
-    
-    with open(file_path, "wb") as f:  # noqa: ephemeral-upload-storage
-        f.write(content)
+    content_types = {
+        ".pdf": "application/pdf",
+        ".doc": "application/msword",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+    await put_uploaded_file(
+        db, "company", safe_filename, content,
+        content_types.get(file_ext, "application/octet-stream"),
+    )
     
     form_url = f"/api/uploads/company/{safe_filename}"
     

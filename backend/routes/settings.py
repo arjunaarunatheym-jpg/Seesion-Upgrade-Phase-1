@@ -18,11 +18,11 @@ from fastapi.responses import FileResponse
 from datetime import datetime
 from typing import List
 from pathlib import Path
-import shutil
 import uuid
 
 from core import db, get_current_user, get_malaysia_time, LOGO_DIR, TEMPLATE_DIR, ROOT_DIR
 from models import User, Settings, SettingsUpdate
+from services.object_storage import put_uploaded_file, serve_uploaded_file
 
 router = APIRouter(tags=["settings"])
 
@@ -72,10 +72,8 @@ async def upload_logo(file: UploadFile = File(...), current_user: User = Depends
     
     file_ext = file.filename.split(".")[-1]
     filename = f"logo.{file_ext}"
-    file_path = LOGO_DIR / filename
-    
-    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
-        shutil.copyfileobj(file.file, buffer)
+    data = await file.read()
+    await put_uploaded_file(db, "logos", filename, data, file.content_type or f"image/{file_ext}")
     
     logo_url = f"/api/static/logos/{filename}"
     
@@ -98,10 +96,14 @@ async def upload_certificate_template(file: UploadFile = File(...), current_user
         raise HTTPException(status_code=400, detail="Only .docx files are supported")
     
     filename = "certificate_template.docx"
-    file_path = TEMPLATE_DIR / filename
-    
-    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
-        shutil.copyfileobj(file.file, buffer)
+    data = await file.read()
+    await put_uploaded_file(
+        db, "templates", filename, data,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    # Also persist locally so the certificate generator (docx template loader) can read it.
+    TEMPLATE_DIR.mkdir(parents=True, exist_ok=True)
+    (TEMPLATE_DIR / filename).write_bytes(data)
     
     template_url = f"/api/static/templates/{filename}"
     
@@ -230,18 +232,13 @@ async def upload_certificate_asset(
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid file type. Only images allowed.")
     
-    # Create directory if not exists
-    asset_dir = ROOT_DIR / "static" / "certificate_assets"
-    asset_dir.mkdir(parents=True, exist_ok=True)
-    
     # Generate unique filename
     ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
     filename = f"{type}_{uuid.uuid4().hex[:8]}.{ext}"
-    file_path = asset_dir / filename
-    
-    # Save file
-    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
-        shutil.copyfileobj(file.file, buffer)
+    data = await file.read()
+    await put_uploaded_file(
+        db, "certificate_assets", filename, data, file.content_type or f"image/{ext}"
+    )
     
     url = f"/api/static/certificate_assets/{filename}"
     
@@ -252,9 +249,9 @@ async def upload_certificate_asset(
 async def get_certificate_asset(filename: str):
     """Serve certificate asset files"""
     file_path = ROOT_DIR / "static" / "certificate_assets" / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Asset not found")
-    return FileResponse(file_path)
+    if file_path.exists():
+        return FileResponse(file_path)
+    return await serve_uploaded_file(db, "certificate_assets", filename)
 
 
 # Indemnity Sections Management

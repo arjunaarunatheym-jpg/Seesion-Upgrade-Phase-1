@@ -140,21 +140,18 @@ async def upload_edited_docx(
     if current_user.role not in ["coordinator", "admin"]:
         raise HTTPException(status_code=403, detail="Unauthorized")
     
-    # Save uploaded file
-    from pathlib import Path
-    REPORT_DIR = Path(__file__).parent.parent / "static" / "reports"
-    REPORT_DIR.mkdir(exist_ok=True)
-    
-    file_path = REPORT_DIR / f"edited_{session_id}.docx"
+    from services.object_storage import put_uploaded_file
+    filename = f"edited_{session_id}.docx"
     contents = await file.read()
+    await put_uploaded_file(
+        db, "reports_docx", filename, contents,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
     
-    with open(file_path, 'wb') as f:  # noqa: ephemeral-upload-storage
-        f.write(contents)
-    
-    # Update report
+    docx_url = f"/api/static/reports/{filename}"
     await db.training_reports.update_one(
         {"session_id": session_id},
-        {"$set": {"docx_path": str(file_path)}}
+        {"$set": {"docx_path": docx_url}}
     )
     
     return {"message": "Edited DOCX uploaded successfully"}
@@ -170,22 +167,18 @@ async def upload_final_pdf(
     if current_user.role not in ["coordinator", "admin"]:
         raise HTTPException(status_code=403, detail="Unauthorized")
     
-    from pathlib import Path
-    REPORT_PDF_DIR = Path(__file__).parent.parent / "static" / "reports_pdf"
-    REPORT_PDF_DIR.mkdir(exist_ok=True)
-    
-    file_path = REPORT_PDF_DIR / f"final_{session_id}.pdf"
+    from services.object_storage import put_uploaded_file
+    filename = f"final_{session_id}.pdf"
     contents = await file.read()
+    await put_uploaded_file(db, "reports_pdf", filename, contents, "application/pdf")
     
-    with open(file_path, 'wb') as f:  # noqa: ephemeral-upload-storage
-        f.write(contents)
-    
+    pdf_url = f"/api/static/reports_pdf/{filename}"
     await db.training_reports.update_one(
         {"session_id": session_id},
-        {"$set": {"pdf_path": str(file_path), "status": "submitted"}}
+        {"$set": {"pdf_path": pdf_url, "status": "submitted"}}
     )
     
-    return {"message": "Final PDF uploaded successfully", "pdf_path": str(file_path)}
+    return {"message": "Final PDF uploaded successfully", "pdf_path": pdf_url}
 
 
 @router.get("/{session_id}/download-pdf")

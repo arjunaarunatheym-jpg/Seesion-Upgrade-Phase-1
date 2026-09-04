@@ -97,6 +97,7 @@ class SuperAdminFinancialCorrection:
     # -------------------------------------------------------------------------
     async def correct_invoice_number(
         self, invoice_id: str, new_number: str, reason: str, user: Any,
+        confirm: bool = False,
     ) -> Dict[str, Any]:
         if not new_number or not str(new_number).strip():
             raise FinancialSafetyError("MISSING_NEW_NUMBER", "new invoice_number is required.", 400)
@@ -121,6 +122,18 @@ class SuperAdminFinancialCorrection:
                 f"Invoice number {new_number!r} is already used by invoice {clash.get('id')}.",
                 409,
             )
+
+        # Section 11: locked/terminal invoices need explicit confirm=True.
+        status = (inv.get("status") or "").lower()
+        if status in {"issued", "partially_paid", "paid", "voided", "cancelled",
+                      "converted", "deleted"} and not confirm:
+            return {
+                "message": "PREVIEW ONLY — pass confirm=true to execute.",
+                "invoice_id": invoice_id,
+                "current_invoice_number": old_number,
+                "proposed_invoice_number": new_number,
+                "invoice_status": status,
+            }
 
         now = datetime.now(timezone.utc).isoformat()
         await self.db.invoices.update_one(
@@ -207,6 +220,9 @@ class SuperAdminFinancialCorrection:
     async def correct_invoice_value(
         self, invoice_id: str, new_total_amount: float, reason: str,
         correction_type: str, user: Any, confirm: bool = False,
+        new_subtotal: Optional[float] = None,
+        new_tax_amount: Optional[float] = None,
+        corrected_line_items: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         if correction_type not in CORRECTION_TYPES:
             raise FinancialSafetyError(
@@ -223,23 +239,118 @@ class SuperAdminFinancialCorrection:
             return {"message": "No change — invoice value is already the requested amount.",
                     "invoice_id": invoice_id, "total_amount": new_total}
 
+        # ---- Section 9: LINE-ITEM CONSISTENCY --------------------------------
+        # Determine subtotal / tax / lines that keep the invoice internally
+        # consistent. If the caller supplied an explicit breakdown, validate
+        # it; otherwise ONLY auto-recalc when the invoice has zero or one
+        # monetary line (simple case).
+        existing_lines = inv.get("line_items") or inv.get("invoice_lines") or []
+
+        if corrected_line_items is not None or new_subtotal is not None or new_tax_amount is not None:
+            if new_subtotal is None or new_tax_amount is None or corrected_line_items is None:
+                raise FinancialSafetyError(
+                    "INCOMPLETE_LINE_ITEM_BREAKDOWN",
+                    ("When supplying a corrected breakdown you must provide "
+                     "new_subtotal, new_tax_amount, and corrected_line_items."),
+                    400,
+                )
+            new_subtotal_v = validate_money(new_subtotal, field="new_subtotal")
+            new_tax_v = validate_money(new_tax_amount, field="new_tax_amount")
+            line_sum = round(sum(float(li.get("amount") or 0) for li in corrected_line_items), 2)
+            if abs(line_sum - new_subtotal_v) > 0.01:
+                raise FinancialSafetyError(
+                    "LINE_ITEMS_SUBTOTAL_MISMATCH",
+                    f"sum(line amounts) {line_sum} != subtotal {new_subtotal_v}.",
+                    400,
+                )
+            if abs((new_subtotal_v + new_tax_v) - new_total) > 0.01:
+                raise FinancialSafetyError(
+                    "SUBTOTAL_TAX_TOTAL_MISMATCH",
+                    f"subtotal + tax {new_subtotal_v + new_tax_v} != total {new_total}.",
+                    400,
+                )
+            subtotal, tax_amount, new_lines = new_subtotal_v, new_tax_v, corrected_line_items
+        else:
+            # Auto-recalc allowed only when 0 or 1 existing line.
+            if len(existing_lines) > 1:
+                raise FinancialSafetyError(
+                    "AMBIGUOUS_LINE_ITEM_DISTRIBUTION",
+                    ("Invoice has multiple line items; supply "
+                     "corrected_line_items + new_subtotal + new_tax_amount to "
+                     "correct value safely."),
+                    400,
+                )
+            tax_rate = float(inv.get("tax_rate") or 0)
+            subtotal = round(new_total / (1 + tax_rate / 100), 2) if tax_rate else round(new_total, 2)
+            tax_amount = round(new_total - subtotal, 2)
+            if existing_lines:
+                new_lines = [{**existing_lines[0], "amount": subtotal}]
+            else:
+                new_lines = existing_lines
+
         # Preview computed for the audit record + response.
         preview = await self.preview_value_correction(invoice_id, new_total)
         if not confirm:
-            return {"message": "PREVIEW ONLY — pass confirm=true to execute.", **preview}
-
-        # Recompute subtotal consistently: preserve tax_rate if present.
-        tax_rate = float(inv.get("tax_rate") or 0)
-        subtotal = round(new_total / (1 + tax_rate / 100), 2) if tax_rate else round(new_total, 2)
-        tax_amount = round(new_total - subtotal, 2)
+            return {"message": "PREVIEW ONLY — pass confirm=true to execute.",
+                    "computed_subtotal": subtotal, "computed_tax_amount": tax_amount,
+                    **preview}
 
         now = datetime.now(timezone.utc).isoformat()
+        # ---- Section 10: accounting correction via delta journal -----------
+        # Only for issued/partially_paid/paid invoices. Voids the current
+        # active issuance journal(s) and posts a correction/replacement.
+        cur_status_l = (inv.get("status") or "").lower()
+        accounting_effect: Dict[str, Any] = {"applied": False}
+        if cur_status_l in {"issued", "partially_paid", "paid"}:
+            try:
+                voided_ids: List[str] = []
+                old_journals = await self.db.journal_entries.find(
+                    {"source_id": invoice_id, "source_module": "invoice",
+                     "status": {"$ne": "voided"}},
+                    {"_id": 0},
+                ).to_list(20)
+                for je in old_journals:
+                    await self.db.journal_entries.update_one(
+                        {"id": je["id"], "status": {"$ne": "voided"}},
+                        {"$set": {
+                            "status": "voided",
+                            "voided_by": getattr(user, "id", None),
+                            "voided_at": now,
+                            "void_reason": f"Invoice value correction: {reason}",
+                            "updated_at": now,
+                        }},
+                    )
+                    voided_ids.append(je["id"])
+                # Repost issuance for the corrected amount if helper exists.
+                new_journal_ids: List[str] = []
+                try:
+                    from routes.accounting import post_invoice_issued  # type: ignore
+                    corrected_inv = {**inv, "total_amount": new_total,
+                                     "subtotal": subtotal, "tax_amount": tax_amount,
+                                     "line_items": new_lines}
+                    repost = await post_invoice_issued(
+                        invoice=corrected_inv,
+                        user_id=getattr(user, "id", None),
+                        user_name=getattr(user, "full_name", None),
+                    )
+                    if repost and repost.get("journal_id"):
+                        new_journal_ids.append(repost["journal_id"])
+                except Exception as e:
+                    accounting_effect["repost_error"] = str(e)
+                accounting_effect.update({
+                    "applied": True,
+                    "voided_journal_ids": voided_ids,
+                    "new_journal_ids": new_journal_ids,
+                })
+            except Exception as e:  # pragma: no cover - defensive
+                accounting_effect["error"] = str(e)
         await self.db.invoices.update_one(
             {"id": invoice_id},
             {"$set": {
                 "total_amount": new_total,
                 "subtotal": subtotal,
                 "tax_amount": tax_amount,
+                "line_items": new_lines,
                 "value_corrected_by": getattr(user, "id", None),
                 "value_corrected_at": now,
                 "value_correction_reason": reason,
@@ -280,7 +391,8 @@ class SuperAdminFinancialCorrection:
             "invoice", invoice_id, "value_corrected", user, reason,
             before={"total_amount": old_total, "status": inv.get("status")},
             after={"total_amount": new_total, "status": new_status_candidate or inv.get("status")},
-            extra={"correction_type": correction_type, "preview": preview},
+            extra={"correction_type": correction_type, "preview": preview,
+                   "accounting_effect": accounting_effect},
         )
         return {
             "message": "Invoice value corrected.",
@@ -289,6 +401,7 @@ class SuperAdminFinancialCorrection:
             "after_total_amount": new_total,
             "correction_type": correction_type,
             "status_after": new_status_candidate or inv.get("status"),
+            "accounting_effect": accounting_effect,
             "preview": preview,
         }
 
@@ -297,14 +410,41 @@ class SuperAdminFinancialCorrection:
     # -------------------------------------------------------------------------
     async def correct_invoice_date(
         self, invoice_id: str, new_invoice_date: str, reason: str, user: Any,
+        confirm: bool = False,
     ) -> Dict[str, Any]:
         if not new_invoice_date:
             raise FinancialSafetyError("MISSING_NEW_DATE", "new_invoice_date is required.", 400)
         if not reason or len(reason.strip()) < 5:
             raise FinancialSafetyError("MISSING_REASON", "Reason is required (min 5 chars).", 400)
+        # ---- Section 12: strict ISO YYYY-MM-DD calendar validation --------
+        import re as _re
+        if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_invoice_date.strip()):
+            raise FinancialSafetyError(
+                "INVALID_DATE_FORMAT",
+                "new_invoice_date must be an ISO calendar date YYYY-MM-DD.",
+                400,
+            )
+        try:
+            datetime.strptime(new_invoice_date.strip(), "%Y-%m-%d")
+        except ValueError:
+            raise FinancialSafetyError(
+                "INVALID_DATE_CALENDAR",
+                f"new_invoice_date {new_invoice_date!r} is not a valid calendar date.",
+                400,
+            )
 
         inv = await self._load_invoice(invoice_id)
         old_date = inv.get("invoice_date")
+        status = (inv.get("status") or "").lower()
+        if status in {"issued", "partially_paid", "paid", "voided", "cancelled",
+                      "converted", "deleted"} and not confirm:
+            return {
+                "message": "PREVIEW ONLY — pass confirm=true to execute.",
+                "invoice_id": invoice_id,
+                "current_invoice_date": old_date,
+                "proposed_invoice_date": new_invoice_date.strip(),
+                "invoice_status": status,
+            }
         now = datetime.now(timezone.utc).isoformat()
         await self.db.invoices.update_one(
             {"id": invoice_id},
@@ -330,6 +470,7 @@ class SuperAdminFinancialCorrection:
     # -------------------------------------------------------------------------
     async def correct_invoice_text(
         self, invoice_id: str, updates: Dict[str, Any], reason: str, user: Any,
+        confirm: bool = False,
     ) -> Dict[str, Any]:
         if not reason or len(reason.strip()) < 5:
             raise FinancialSafetyError("MISSING_REASON", "Reason is required (min 5 chars).", 400)
@@ -348,6 +489,16 @@ class SuperAdminFinancialCorrection:
             raise FinancialSafetyError("NOTHING_TO_UPDATE", "No text fields provided.", 400)
 
         inv = await self._load_invoice(invoice_id)
+        status = (inv.get("status") or "").lower()
+        if status in {"issued", "partially_paid", "paid", "voided", "cancelled",
+                      "converted", "deleted"} and not confirm:
+            return {
+                "message": "PREVIEW ONLY — pass confirm=true to execute.",
+                "invoice_id": invoice_id,
+                "current": {k: inv.get(k) for k in clean},
+                "proposed": clean,
+                "invoice_status": status,
+            }
         before = {k: inv.get(k) for k in clean}
         now = datetime.now(timezone.utc).isoformat()
         clean["text_corrected_by"] = getattr(user, "id", None)
@@ -420,8 +571,18 @@ class SuperAdminFinancialCorrection:
         await self.db.credit_notes.update_one({"id": cn_id}, {"$set": clean})
 
         # If amount changed, reconcile linked journal entries by voiding and
-        # re-posting via existing post_credit_note_issued (idempotent guard).
+        # re-posting via existing post_credit_note_issued. Section 8:
+        # this operation is ATOMIC — if the repost fails, restore the CN
+        # amount + re-activate the previous journals so the final state is
+        # economically identical to BEFORE.
         if "amount" in clean and clean.get("amount") != before.get("amount"):
+            # Snapshot active journals before any mutation for compensation.
+            active_journals = await self.db.journal_entries.find(
+                {"source_id": cn_id, "source_module": "credit_note",
+                 "status": {"$ne": "voided"}},
+                {"_id": 0},
+            ).to_list(20)
+            active_journal_ids = [je["id"] for je in active_journals]
             # Mark old journals as voided (idempotent).
             await self.db.journal_entries.update_many(
                 {"source_id": cn_id, "source_module": "credit_note",
@@ -434,22 +595,62 @@ class SuperAdminFinancialCorrection:
                     "updated_at": now,
                 }},
             )
-            # Post a new journal for the corrected amount if the accounting
-            # helper is available.
+            # Try posting a new journal for the corrected amount. This is
+            # OPTIONAL — some environments do not have accounting wired.
+            # We only compensate on a HARD exception (accounting is present
+            # but failed). A soft {"error": ...} return or ImportError is
+            # treated as "no accounting posted" and left as-is with an
+            # audit note.
+            new_journal_id: Optional[str] = None
+            repost_error: Optional[str] = None
+            hard_failure = False
             try:
                 from routes.accounting import post_credit_note_issued  # type: ignore
                 new_cn = await self.db.credit_notes.find_one({"id": cn_id}, {"_id": 0})
-                inv = await self.db.invoices.find_one({"id": cn["invoice_id"]}, {"_id": 0}) if cn.get("invoice_id") else None
-                await post_credit_note_issued(
-                    credit_note=new_cn, invoice=inv,
+                repost = await post_credit_note_issued(
+                    credit_note=new_cn,
                     user_id=getattr(user, "id", None),
                     user_name=getattr(user, "full_name", None),
                 )
+                if isinstance(repost, dict):
+                    new_journal_id = repost.get("journal_id")
+                    if repost.get("error"):
+                        # Soft error — record but do not roll back.
+                        repost_error = repost.get("error")
+            except ImportError:
+                pass
             except Exception as e:
-                await self._write_audit(
-                    "credit_note", cn_id, "journal_repost_failed", user, reason,
-                    before=before, after=clean, extra={"error": str(e)},
+                repost_error = str(e)
+                hard_failure = True
+
+            if hard_failure:
+                # COMPENSATE: restore original CN + re-activate the old journals.
+                await self.db.credit_notes.update_one(
+                    {"id": cn_id},
+                    {"$set": {**{k: cn.get(k) for k in clean.keys()},
+                              "updated_at": now}}
                 )
+                for jid in active_journal_ids:
+                    await self.db.journal_entries.update_one(
+                        {"id": jid},
+                        {"$set": {"status": "posted", "updated_at": now},
+                         "$unset": {"voided_by": "", "voided_at": "",
+                                    "void_reason": ""}},
+                    )
+                await self._write_audit(
+                    "credit_note", cn_id, "issued_cn_correction_rolled_back",
+                    user, reason,
+                    before=before, after={"error": repost_error},
+                    extra={"restored_journal_ids": active_journal_ids},
+                )
+                raise FinancialSafetyError(
+                    "CN_CORRECTION_ACCOUNTING_FAILED",
+                    ("Journal repost failed; original CN amount and journals "
+                     "have been restored. Error: " + repost_error),
+                    500,
+                )
+            # Success — keep the new journal id for audit.
+            _repost_new_journal_id = new_journal_id
 
         await self._write_audit(
             "credit_note", cn_id, "issued_cn_corrected", user, reason,

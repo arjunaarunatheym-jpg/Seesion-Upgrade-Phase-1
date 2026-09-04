@@ -2,7 +2,7 @@
  * PaymentsTab Component - Extracted from FinanceDashboard
  * Handles payment recording and recent payments listing
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { axiosInstance } from "../../App";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,6 +83,17 @@ const PaymentsTab = ({
     }
   };
 
+  // Phase 3A Section 19: when selectedInvoiceId prop is (re)set from the
+  // parent (e.g. clicking "Record Payment" on an invoice row), auto-run
+  // the canonical outstanding fetch so canonicalOutstanding is populated
+  // and paymentDisabled evaluates correctly.
+  useEffect(() => {
+    if (selectedInvoiceId) {
+      handleInvoiceSelect(selectedInvoiceId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedInvoiceId]);
+
   // Reset canonicalOutstanding + error when the form is cleared.
   const clearForm = () => {
     setPaymentForm(initialPaymentForm);
@@ -94,6 +105,7 @@ const PaymentsTab = ({
     !paymentForm.invoice_id ||
     outstandingLoading ||
     !!outstandingError ||
+    !canonicalOutstanding ||
     (canonicalOutstanding && Number(canonicalOutstanding.outstanding_amount || 0) <= 0) ||
     !paymentForm.amount ||
     Number(paymentForm.amount) <= 0 ||

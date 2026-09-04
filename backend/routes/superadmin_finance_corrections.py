@@ -50,6 +50,7 @@ def _to_http(e: FinancialSafetyError) -> HTTPException:
 class NumberCorrection(BaseModel):
     new_invoice_number: str
     reason: str
+    confirm: bool = False
 
 
 class ValueCorrection(BaseModel):
@@ -57,16 +58,23 @@ class ValueCorrection(BaseModel):
     reason: str
     correction_type: str = Field(..., description=f"One of: {list(CORRECTION_TYPES)}")
     confirm: bool = False
+    # Phase 3A Section 9: optional explicit line-item breakdown for
+    # multi-line/complex-tax invoices. When provided the sums must reconcile.
+    new_subtotal: Optional[float] = None
+    new_tax_amount: Optional[float] = None
+    corrected_line_items: Optional[list] = None
 
 
 class DateCorrection(BaseModel):
     new_invoice_date: str
     reason: str
+    confirm: bool = False
 
 
 class TextCorrection(BaseModel):
     updates: Dict[str, Any]
     reason: str
+    confirm: bool = False
 
 
 class CnIssuedCorrection(BaseModel):
@@ -86,7 +94,7 @@ async def correct_invoice_number(
     _require_superadmin(current_user)
     try:
         return await _svc().correct_invoice_number(
-            invoice_id, body.new_invoice_number, body.reason, current_user,
+            invoice_id, body.new_invoice_number, body.reason, current_user, body.confirm,
         )
     except FinancialSafetyError as e:
         raise _to_http(e)
@@ -114,6 +122,9 @@ async def correct_invoice_value(
         return await _svc().correct_invoice_value(
             invoice_id, body.new_total_amount, body.reason,
             body.correction_type, current_user, body.confirm,
+            new_subtotal=body.new_subtotal,
+            new_tax_amount=body.new_tax_amount,
+            corrected_line_items=body.corrected_line_items,
         )
     except FinancialSafetyError as e:
         raise _to_http(e)
@@ -127,7 +138,7 @@ async def correct_invoice_date(
     _require_superadmin(current_user)
     try:
         return await _svc().correct_invoice_date(
-            invoice_id, body.new_invoice_date, body.reason, current_user,
+            invoice_id, body.new_invoice_date, body.reason, current_user, body.confirm,
         )
     except FinancialSafetyError as e:
         raise _to_http(e)
@@ -141,7 +152,7 @@ async def correct_invoice_text(
     _require_superadmin(current_user)
     try:
         return await _svc().correct_invoice_text(
-            invoice_id, body.updates, body.reason, current_user,
+            invoice_id, body.updates, body.reason, current_user, body.confirm,
         )
     except FinancialSafetyError as e:
         raise _to_http(e)

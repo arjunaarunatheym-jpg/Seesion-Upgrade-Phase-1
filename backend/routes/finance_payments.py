@@ -263,11 +263,17 @@ async def _build_payment_history_query(
     if funding_source and funding_source != "all":
         query["payment_type"] = funding_source
 
-    # Status: 'active' (default in UI) => exclude reversed; 'reversed' => only reversed; 'all' => everything
+    # Status: 'active' (default in UI) => exclude reversed AND voided;
+    # 'reversed' => only reversed; 'voided' => only voided;
+    # 'inactive' => reversed or voided; 'all' => everything
     if status == "reversed":
         query["status"] = "reversed"
+    elif status == "voided":
+        query["status"] = "voided"
+    elif status == "inactive":
+        query["status"] = {"$in": ["reversed", "voided"]}
     elif status == "active" or not status:
-        query["status"] = {"$ne": "reversed"}
+        query["status"] = {"$nin": ["reversed", "voided"]}
     # 'all' -> no status filter
 
     # Search: match receipt_number OR reference_number OR resolve invoice/company via a pre-lookup
@@ -694,7 +700,6 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
                 try:
                     await post_credit_note_issued(
                         credit_note=credit_note,
-                        invoice=invoice,
                         user_id=current_user.id,
                         user_name=current_user.full_name
                     )
@@ -938,23 +943,17 @@ async def delete_payment(
     company_name = invoice.get("company_name", "Unknown") if invoice else "Unknown"
     record_ref = f"{company_name} - RM {payment.get('amount', 0):,.2f} ({payment.get('payment_method', 'Unknown')})"
 
-    # --- Production path: reject destructive delete; use reversal instead ---
+    # --- Production path: delegate to the ONE canonical reversal engine ---
     from services.financial_write_guard import is_production_mode
     if is_production_mode():
-        if payment.get("status") == "reversed":
-            raise HTTPException(status_code=400, detail="Payment is already reversed")
-        now = get_malaysia_time()
-        await db.payments.update_one(
-            {"id": payment_id},
-            {"$set": {
-                "status": "reversed",
-                "reversed_by": current_user.id,
-                "reversed_by_name": current_user.full_name,
-                "reversed_at": now.isoformat(),
-                "reversal_reason": request.reason,
-                "updated_at": now.isoformat(),
-            }}
+        from services.payment_reversal import PaymentReversalService
+        svc = PaymentReversalService(db)
+        result = await svc.execute(
+            payment_id, reason=request.reason, user=current_user,
+            alias="finance_admin_delete",
         )
+        if result.get("error") == "PAYMENT_NOT_FOUND":
+            raise HTTPException(status_code=404, detail="Payment not found")
         await create_audit_trail_entry(
             action="Payment Reversed (hard-delete blocked in production)",
             record_reference=record_ref,
@@ -966,19 +965,8 @@ async def delete_payment(
             from_value=payment.get("status", "active"),
             to_value="reversed",
         )
-        # Recompute invoice status from remaining valid payments.
-        if invoice:
-            remaining = await db.payments.find(
-                {"invoice_id": invoice["id"], "status": {"$ne": "reversed"}},
-                {"_id": 0, "amount": 1},
-            ).to_list(500)
-            paid = sum(float(p.get("amount") or 0) for p in remaining)
-            if invoice.get("status") == "paid" and paid < float(invoice.get("total_amount") or 0):
-                await db.invoices.update_one(
-                    {"id": invoice["id"]},
-                    {"$set": {"status": "issued", "updated_at": now.isoformat()}}
-                )
         return {
+            **result,
             "message": "Hard delete is disabled in production; payment has been reversed instead.",
             "reversed": True,
             "code": "HARD_DELETE_BLOCKED_IN_PRODUCTION",
@@ -1158,7 +1146,13 @@ async def approve_credit_note(cn_id: str, current_user: User = Depends(get_curre
 
 @router.post("/credit-notes/{cn_id}/issue")
 async def issue_credit_note(cn_id: str, current_user: User = Depends(get_current_user)):
-    """Issue a credit note"""
+    """Issue a credit note.
+
+    Phase 3A Section 6: this operation is ATOMIC — success means the CN is
+    ``issued`` AND the accounting journal was posted. If accounting fails,
+    the CN status is restored to its exact prior state and any partial
+    journal side-effect is voided.
+    """
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Only Finance can issue credit notes")
     
@@ -1169,6 +1163,12 @@ async def issue_credit_note(cn_id: str, current_user: User = Depends(get_current
     if credit_note.get("status") not in ["draft", "approved"]:
         raise HTTPException(status_code=400, detail="Credit note must be draft or approved to be issued")
     
+    prior_status = credit_note.get("status")
+    prior_snapshot = {
+        "status": prior_status,
+        "issued_by": credit_note.get("issued_by"),
+        "issued_at": credit_note.get("issued_at"),
+    }
     now = get_malaysia_time()
     update_dict = {
         "status": "issued",
@@ -1178,10 +1178,9 @@ async def issue_credit_note(cn_id: str, current_user: User = Depends(get_current
     }
     
     await db.credit_notes.update_one({"id": cn_id}, {"$set": update_dict})
-    await log_finance_action("credit_note", cn_id, "issued", current_user.id, credit_note, update_dict)
     
-    # ============ ACCOUNTING AUTO-POST (Phase 2) ============
-    # Create journal entry for credit note issued
+    # ---- Atomic accounting post with compensation --------------------------
+    accounting_error: Optional[str] = None
     try:
         updated_cn = await db.credit_notes.find_one({"id": cn_id}, {"_id": 0})
         accounting_result = await post_credit_note_issued(
@@ -1189,12 +1188,56 @@ async def issue_credit_note(cn_id: str, current_user: User = Depends(get_current
             user_id=current_user.id,
             user_name=current_user.full_name
         )
-        if accounting_result.get("error"):
-            print(f"Accounting auto-post warning: {accounting_result.get('error')}")
+        if accounting_result and accounting_result.get("error"):
+            accounting_error = accounting_result.get("error")
     except Exception as e:
-        print(f"Accounting auto-post error: {str(e)}")
-    # ============ END ACCOUNTING AUTO-POST ============
-    
+        accounting_error = str(e)
+
+    if accounting_error:
+        # Compensate: restore CN to prior status, void any partial journal.
+        # Use a separate $set (no $unset conflict on issued_at).
+        restore_doc = {
+            "status": prior_snapshot["status"],
+            "updated_at": now.isoformat(),
+        }
+        if prior_snapshot.get("issued_by") is not None:
+            restore_doc["issued_by"] = prior_snapshot["issued_by"]
+        if prior_snapshot.get("issued_at") is not None:
+            restore_doc["issued_at"] = prior_snapshot["issued_at"]
+        update_ops = {"$set": restore_doc}
+        if prior_snapshot.get("issued_at") is None:
+            update_ops["$unset"] = {"issued_at": ""}
+        await db.credit_notes.update_one({"id": cn_id}, update_ops)
+        # Void any journal that may have been inserted with this CN as source.
+        await db.journal_entries.update_many(
+            {"source_id": cn_id, "source_module": "credit_note",
+             "status": {"$ne": "voided"}},
+            {"$set": {
+                "status": "voided",
+                "voided_by": current_user.id,
+                "voided_at": now.isoformat(),
+                "void_reason": f"CN issue compensation: {accounting_error}",
+                "updated_at": now.isoformat(),
+            }},
+        )
+        await log_finance_action(
+            "credit_note", cn_id, "issue_failed_compensated", current_user.id,
+            before_value=prior_snapshot,
+            after_value={"error": accounting_error},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "CN_ACCOUNTING_POST_FAILED",
+                "message": (
+                    "Credit Note journal posting failed; CN status restored. "
+                    "Retry after resolving the accounting error."
+                ),
+                "error": accounting_error,
+            },
+        )
+
+    await log_finance_action("credit_note", cn_id, "issued", current_user.id, credit_note, update_dict)
     return {"message": "Credit note issued", "cn_number": credit_note.get("cn_number")}
 
 

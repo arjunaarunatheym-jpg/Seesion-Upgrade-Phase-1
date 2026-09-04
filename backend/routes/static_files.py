@@ -14,7 +14,6 @@ Endpoints: 9
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.responses import FileResponse
 import uuid
-import shutil
 import os
 
 from core import (
@@ -23,6 +22,7 @@ from core import (
     TEMPLATE_DIR, CHECKLIST_PHOTOS_DIR
 )
 from models import User
+from services.object_storage import put_uploaded_file, serve_uploaded_file
 
 db_name = os.environ.get('DB_NAME', 'unknown')
 
@@ -32,42 +32,42 @@ router = APIRouter(tags=["static_files"])
 @router.get("/static/logos/{filename}")
 async def get_logo(filename: str):
     file_path = LOGO_DIR / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Logo not found")
-    return FileResponse(file_path)
+    if file_path.exists():
+        return FileResponse(file_path)
+    return await serve_uploaded_file(db, "logos", filename)
 
 
 @router.get("/static/certificates/{filename}")
 async def get_certificate(filename: str):
     file_path = CERTIFICATE_DIR / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Certificate not found")
-    return FileResponse(file_path)
+    if file_path.exists():
+        return FileResponse(file_path)
+    return await serve_uploaded_file(db, "certificates", filename)
 
 
 @router.get("/static/certificates_pdf/{filename}")
 async def get_certificate_pdf(filename: str):
     file_path = CERTIFICATE_PDF_DIR / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Certificate PDF not found")
-    return FileResponse(
-        file_path,
-        media_type='application/pdf',
-        headers={
-            "Content-Disposition": f"attachment; filename={filename}",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET",
-            "X-Content-Type-Options": "nosniff"
-        }
-    )
+    if file_path.exists():
+        return FileResponse(
+            file_path,
+            media_type='application/pdf',
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET",
+                "X-Content-Type-Options": "nosniff"
+            }
+        )
+    return await serve_uploaded_file(db, "certificates_pdf", filename)
 
 
 @router.get("/static/templates/{filename}")
 async def get_template(filename: str):
     file_path = TEMPLATE_DIR / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Template not found")
-    return FileResponse(file_path)
+    if file_path.exists():
+        return FileResponse(file_path)
+    return await serve_uploaded_file(db, "templates", filename)
 
 
 @router.get("/static/docs/{filename}")
@@ -90,10 +90,8 @@ async def upload_checklist_photo(file: UploadFile = File(...), current_user: Use
 
     file_extension = file.filename.split('.')[-1]
     filename = f"{str(uuid.uuid4())}.{file_extension}"
-    file_path = CHECKLIST_PHOTOS_DIR / filename
-
-    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
-        shutil.copyfileobj(file.file, buffer)
+    data = await file.read()
+    await put_uploaded_file(db, "checklist_photos", filename, data, file.content_type or "image/jpeg")
 
     photo_url = f"/api/static/checklist-photos/{filename}"
     return {"photo_url": photo_url}
@@ -102,45 +100,41 @@ async def upload_checklist_photo(file: UploadFile = File(...), current_user: Use
 @router.get("/static/checklist-photos/{filename}")
 async def get_checklist_photo(filename: str):
     file_path = CHECKLIST_PHOTOS_DIR / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Photo not found")
-    return FileResponse(file_path)
+    if file_path.exists():
+        return FileResponse(file_path)
+    return await serve_uploaded_file(db, "checklist_photos", filename)
 
 
 @router.get("/uploads/company/{filename}")
 async def get_company_file(filename: str):
     """Serve uploaded company files"""
     file_path = f"uploads/company/{filename}"
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-
-    ext = os.path.splitext(filename)[1].lower()
-    content_types = {
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp'
-    }
-    content_type = content_types.get(ext, 'application/octet-stream')
-
-    return FileResponse(file_path, media_type=content_type, filename=filename)
+    if os.path.exists(file_path):
+        ext = os.path.splitext(filename)[1].lower()
+        content_types = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp'
+        }
+        content_type = content_types.get(ext, 'application/octet-stream')
+        return FileResponse(file_path, media_type=content_type, filename=filename)
+    return await serve_uploaded_file(db, "company", filename)
 
 
 @router.get("/uploads/indemnity/{filename}")
 async def get_indemnity_file(filename: str):
     """Serve uploaded indemnity form file"""
     file_path = f"uploads/indemnity/{filename}"
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-
-    content_type = "application/pdf"
-    if filename.lower().endswith('.doc'):
-        content_type = "application/msword"
-    elif filename.lower().endswith('.docx'):
-        content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-    return FileResponse(file_path, media_type=content_type, filename=filename)
+    if os.path.exists(file_path):
+        content_type = "application/pdf"
+        if filename.lower().endswith('.doc'):
+            content_type = "application/msword"
+        elif filename.lower().endswith('.docx'):
+            content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        return FileResponse(file_path, media_type=content_type, filename=filename)
+    return await serve_uploaded_file(db, "indemnity", filename)
 
 
 @router.get("/debug/database-info")

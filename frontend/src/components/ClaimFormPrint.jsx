@@ -55,13 +55,27 @@ const ClaimFormPrint = ({ session, onClose }) => {
       // sot.invoices already excludes proformas & terminal invoices — it is
       // the canonical set of REVENUE-eligible invoices for this session.
       const realInvoices = Array.isArray(sot.invoices) ? sot.invoices : [];
+      // ---- Phase 3A Section 15/16: also fetch session SoT snapshot so the
+      // headline financials (session revenue, cost, profit) come from ONE
+      // authoritative source instead of being recomputed in React.
+      let sessionSnapshot = null;
+      try {
+        const sRes = await axiosInstance.get(
+          `/finance/source-of-truth/session/${session.id}/snapshot`,
+        );
+        sessionSnapshot = sRes.data || null;
+      } catch (_err) {
+        sessionSnapshot = null;
+      }
       if (realInvoices.length > 0) {
         const invoiceNumbers = realInvoices.map(inv => inv.invoice_number).filter(Boolean).join(', ');
         const primary = realInvoices[0];
         setCostingData(prev => ({
           ...prev,
           invoice_number: invoiceNumbers,
-          invoice_date: primary.invoice_date || primary.created_at,
+          // Phase 3A Section 18: use SoT invoice_date, fall back to
+          // invoice_created_at (never generic created_at).
+          invoice_date: primary.invoice_date || primary.invoice_created_at,
           // Canonical values from Source of Truth (never double-counted).
           invoice_total: Number(sot.net_invoiced_value || 0),
           less_tax: 0,  // net_invoiced_value already reflects credit-note adjustments
@@ -70,11 +84,18 @@ const ClaimFormPrint = ({ session, onClose }) => {
           credit_note_total: Number(sot.credit_note_total || 0),
           paid_amount: Number(sot.paid_amount || 0),
           outstanding_amount: Number(sot.outstanding_amount || 0),
+          // Phase 3A Section 15/16: canonical headline financials from
+          // session snapshot; React must not recompute them locally.
+          session_revenue: Number(sessionSnapshot?.session_revenue ?? sot.net_invoiced_value ?? 0),
+          session_cost: Number(sessionSnapshot?.session_cost ?? 0),
+          gross_profit: Number(sessionSnapshot?.gross_profit ?? 0),
+          gross_margin_pct: Number(sessionSnapshot?.gross_margin_pct ?? 0),
           all_invoices: realInvoices.map(snap => ({
             invoice_number: snap.invoice_number,
-            invoice_date: snap.invoice_date,
+            invoice_date: snap.invoice_date || snap.invoice_created_at,
             company_name: snap.company_name,
-            total_amount: Number(snap.document_face_value || 0),
+            document_face_value: Number(snap.document_face_value || 0),
+            credit_note_total: Number(snap.credit_note_total || 0),
             net_invoiced_value: Number(snap.net_invoiced_value || 0),
             outstanding_amount: Number(snap.outstanding_amount || 0),
           })),
@@ -248,30 +269,32 @@ const ClaimFormPrint = ({ session, onClose }) => {
   }
 
   const days = calculateDays();
-  const invoiceTotal = costingData.invoice_total || 0;
-  const taxAmount = costingData.less_tax || 0;
-  // Calculate gross revenue from combined invoice total minus tax
-  const grossRevenue = invoiceTotal - taxAmount;
+  // ---- Phase 3A Sections 15-17: SoT is the ONLY headline formula source.
+  // These values come from the canonical session snapshot; NO local
+  // recomputation of gross revenue / profit / margin.
+  const invoiceTotal = Number(costingData.net_invoiced_value || 0);
+  const taxAmount = 0;
+  const grossRevenue = Number(
+    costingData.session_revenue ?? costingData.net_invoiced_value ?? 0,
+  );
   const trainerFeesTotal = costingData.trainer_fees_total || 0;
   const coordFeeTotal = costingData.coordinator_fee_total || 0;
   const cashExpenses = costingData.cash_expenses_actual || costingData.cash_expenses_estimated || 0;
-  
-  // Calculate marketing commission and profit the same way as Profit Summary
-  // (based on profit AFTER expenses, not from stored values)
-  const profitBeforeMarketing = grossRevenue - trainerFeesTotal - coordFeeTotal - cashExpenses;
-  
-  let marketingAmount = 0;
-  if (costingData.marketing) {
-    if (costingData.marketing.commission_type === 'percentage') {
-      marketingAmount = profitBeforeMarketing * (costingData.marketing.commission_rate || 0) / 100;
-    } else {
-      marketingAmount = costingData.marketing.fixed_amount || 0;
-    }
-  }
-  
-  const totalExpenses = trainerFeesTotal + coordFeeTotal + cashExpenses + marketingAmount;
-  const profit = grossRevenue - totalExpenses;
-  const profitPct = grossRevenue > 0 ? (profit / grossRevenue * 100) : 0;
+
+  const marketingAmount = Math.max(
+    0,
+    Number(costingData.session_cost || 0)
+      - trainerFeesTotal - coordFeeTotal - cashExpenses,
+  );
+
+  const totalExpenses = Number(
+    costingData.session_cost ??
+      (trainerFeesTotal + coordFeeTotal + cashExpenses + marketingAmount),
+  );
+  const profit = Number(costingData.gross_profit ?? (grossRevenue - totalExpenses));
+  const profitPct = Number(
+    costingData.gross_margin_pct ?? (grossRevenue > 0 ? (profit / grossRevenue * 100) : 0),
+  );
   const marketingName = costingData.marketing?.marketing_user_name || costingData.marketing?.full_name || 'N/A';
 
   return (
@@ -364,8 +387,8 @@ const ClaimFormPrint = ({ session, onClose }) => {
                           <tr key={idx}>
                             <td className="text-center">1</td>
                             <td>{inv.company_name || session.name} ({inv.invoice_number})</td>
-                            <td className="text-right">{(inv.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-                            <td className="text-right">{(inv.total_amount || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                            <td className="text-right">{(inv.net_invoiced_value || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                            <td className="text-right">{(inv.net_invoiced_value || 0).toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
                           </tr>
                         ))}
                       </>

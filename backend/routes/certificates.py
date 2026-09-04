@@ -20,6 +20,7 @@ from docx.shared import Pt
 
 from core import db, get_current_user, get_malaysia_time, TEMPLATE_DIR, CERTIFICATE_PDF_DIR
 from models import User
+from services.object_storage import put_uploaded_file
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -389,10 +390,9 @@ async def upload_participant_certificate(
         raise HTTPException(status_code=400, detail=f"File size exceeds maximum allowed size of {max_size_mb}MB")
     
     unique_filename = f"{session_id}_{participant_id}_{uuid.uuid4().hex[:8]}.pdf"
-    file_path = CERTIFICATE_PDF_DIR / unique_filename
-    
-    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
-        shutil.copyfileobj(file.file, buffer)
+    file.file.seek(0)
+    data = file.file.read()
+    await put_uploaded_file(db, "certificates_pdf", unique_filename, data, "application/pdf")
     
     certificate_url = f"/api/static/certificates_pdf/{unique_filename}"
     

@@ -571,36 +571,103 @@ async def void_invoice(
     reason: str = Query(..., min_length=10),
     current_user: User = Depends(get_current_user)
 ):
-    """Void an invoice"""
+    """Phase 3A Section 13: SAFE SuperAdmin invoice void.
+
+    Blocks the void if active payments or active issued CNs exist —
+    those must be reversed / voided through their canonical workflows
+    first. When safe, marks the invoice ``voided`` (preserved
+    historically), voids the invoice's active issuance journals, and
+    writes a rich audit record.
+    """
     if not check_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Super Admin access required")
-    
+
     invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
+
     if invoice.get("status") == "voided":
         raise HTTPException(status_code=400, detail="Invoice already voided")
-    
+
+    # ---- Active-payment guard ------------------------------------------
+    active_payments = await db.payments.find(
+        {"invoice_id": invoice_id, "status": {"$nin": ["reversed", "voided"]}},
+        {"_id": 0, "id": 1, "receipt_number": 1, "amount": 1, "status": 1},
+    ).to_list(50)
+    if active_payments:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "INVOICE_HAS_ACTIVE_PAYMENTS",
+                "message": (
+                    "Cannot void invoice — active payments exist. Reverse "
+                    "them via /api/superadmin/payment-reversal/execute first."
+                ),
+                "active_payments": active_payments,
+            },
+        )
+
+    # ---- Active issued CN guard ----------------------------------------
+    active_cns = await db.credit_notes.find(
+        {"invoice_id": invoice_id, "status": "issued"},
+        {"_id": 0, "id": 1, "cn_number": 1, "amount": 1},
+    ).to_list(50)
+    if active_cns:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "INVOICE_HAS_ACTIVE_ISSUED_CNS",
+                "message": (
+                    "Cannot void invoice — issued Credit Notes exist. Void "
+                    "or reverse them first (Finance CN void endpoint)."
+                ),
+                "active_credit_notes": active_cns,
+            },
+        )
+
     old_status = invoice.get("status")
+    now = get_malaysia_time().isoformat()
     await db.invoices.update_one({"id": invoice_id}, {"$set": {
         "status": "voided",
         "voided_by": current_user.id,
-        "voided_at": get_malaysia_time().isoformat(),
-        "void_reason": reason
+        "voided_at": now,
+        "void_reason": reason,
+        "updated_at": now,
     }})
-    
+
+    # ---- Void active issuance journals ---------------------------------
+    voided_journal_ids = []
+    active_journals = await db.journal_entries.find(
+        {"source_id": invoice_id, "source_module": "invoice",
+         "status": {"$ne": "voided"}}, {"_id": 0, "id": 1},
+    ).to_list(20)
+    for je in active_journals:
+        await db.journal_entries.update_one(
+            {"id": je["id"], "status": {"$ne": "voided"}},
+            {"$set": {
+                "status": "voided",
+                "voided_by": current_user.id,
+                "voided_at": now,
+                "void_reason": f"SuperAdmin invoice void: {reason}",
+                "updated_at": now,
+            }},
+        )
+        voided_journal_ids.append(je["id"])
+
     await log_super_admin_action(
         action="invoice_voided",
         entity_type="invoice",
         entity_id=invoice_id,
         performed_by=current_user,
         before_value={"status": old_status},
-        after_value={"status": "voided"},
+        after_value={"status": "voided", "voided_journal_ids": voided_journal_ids},
         reason=reason
     )
-    
-    return {"message": f"Invoice {invoice.get('invoice_number')} voided"}
+
+    return {
+        "message": f"Invoice {invoice.get('invoice_number')} voided",
+        "voided_journal_ids": voided_journal_ids,
+    }
 
 
 # ============ PAYMENTS MANAGEMENT ============

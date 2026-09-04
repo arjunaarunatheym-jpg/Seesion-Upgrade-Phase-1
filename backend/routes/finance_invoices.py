@@ -569,6 +569,28 @@ async def convert_proforma_to_invoice(invoice_id: str, current_user: User = Depe
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    # ---- Phase 3A Section 1: preflight readiness -----------------------
+    # If server startup detected converted_from_proforma_id duplicates,
+    # Proforma conversion is disabled until the ops team resolves them.
+    from starlette.requests import Request  # local import to avoid cycles
+    try:
+        from server import app as _app_ref  # main app instance with state
+        ready = getattr(getattr(_app_ref, "state", None), "proforma_conversion_ready", True)
+    except Exception:
+        ready = True
+    if not ready:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "PROFORMA_CONVERSION_GUARD_UNAVAILABLE",
+                "message": (
+                    "Proforma conversion is temporarily disabled: historical "
+                    "converted_from_proforma_id duplicates detected. "
+                    "Ops must audit and resolve before conversions resume."
+                ),
+            },
+        )
+
     proforma = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not proforma:
         raise HTTPException(status_code=404, detail="Invoice not found")

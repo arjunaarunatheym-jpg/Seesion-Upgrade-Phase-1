@@ -148,7 +148,10 @@ class PaymentReversalService:
         if not payment:
             return {"error": "PAYMENT_NOT_FOUND"}
 
-        # ---- IDEMPOTENCY GUARD (Section N) -----------------------------
+        # ---- IDEMPOTENCY GUARD (Section N + concurrent) ----------------
+        # Atomic claim: only ONE reversal request can flip the payment
+        # status from active/non-reversed → reversed. Concurrent losers
+        # observe the existing reversal record and return it.
         if payment.get("status") == "reversed":
             existing = await self.db.payment_reversals.find_one(
                 {"payment_id": payment_id}, {"_id": 0},
@@ -164,15 +167,10 @@ class PaymentReversalService:
         reversal_id = str(uuid.uuid4())
         actions_taken: List[str] = []
 
-        invoice: Optional[Dict[str, Any]] = None
-        if payment.get("invoice_id"):
-            invoice = await self.db.invoices.find_one(
-                {"id": payment["invoice_id"]}, {"_id": 0},
-            )
-
-        # ---- 1. Mark payment reversed -----------------------------------
-        await self.db.payments.update_one(
-            {"id": payment_id, "status": {"$ne": "reversed"}},
+        # Atomic claim on the payment row — modified_count==0 means someone
+        # else won the race; we return their reversal record.
+        claim = await self.db.payments.update_one(
+            {"id": payment_id, "status": {"$nin": list(NON_ACTIVE_PAYMENT_STATUSES)}},
             {"$set": {
                 "status": "reversed",
                 "reversed_by": getattr(user, "id", None),
@@ -184,9 +182,25 @@ class PaymentReversalService:
                 "updated_at": now.isoformat(),
             }},
         )
+        if claim.modified_count == 0:
+            existing = await self.db.payment_reversals.find_one(
+                {"payment_id": payment_id}, {"_id": 0},
+            )
+            return {
+                "message": "Payment already reversed (concurrent race lost)",
+                "idempotent": True,
+                "reversal": existing,
+                "payment_id": payment_id,
+            }
         actions_taken.append(
             f"Payment RM {float(payment.get('amount') or 0):,.2f} reversed"
         )
+
+        invoice: Optional[Dict[str, Any]] = None
+        if payment.get("invoice_id"):
+            invoice = await self.db.invoices.find_one(
+                {"id": payment["invoice_id"]}, {"_id": 0},
+            )
 
         # ---- 2. Auto-void EXPLICITLY LINKED CNs (Section L) -------------
         voided_credit_notes: List[str] = []
@@ -305,6 +319,8 @@ class PaymentReversalService:
         }
         await self.db.payment_reversals.insert_one(reversal_record)
         reversal_record.pop("_id", None)
+        # Also stamp reversal_id back onto the payment (payments row was
+        # already flipped in the atomic claim; this is metadata only).
         return {
             "message": "Payment reversed successfully",
             "reversal_id": reversal_id,

@@ -13,6 +13,7 @@ import shutil
 
 from core import db, get_current_user, get_malaysia_time
 from models import User
+from services.object_storage import put_uploaded_file
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -305,10 +306,11 @@ async def upload_edited_docx(session_id: str, file: UploadFile = File(...), curr
         raise HTTPException(status_code=400, detail="Only DOCX files are accepted")
     
     filename = f"{session_id}_edited_{uuid.uuid4().hex[:8]}.docx"
-    file_path = REPORT_DIR / filename
-    
-    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
-        shutil.copyfileobj(file.file, buffer)
+    data = await file.read()
+    await put_uploaded_file(
+        db, "reports_docx", filename, data,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
     
     docx_url = f"/api/static/reports/{filename}"
     
@@ -331,10 +333,8 @@ async def upload_final_pdf(session_id: str, file: UploadFile = File(...), curren
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
     
     filename = f"{session_id}_final_{uuid.uuid4().hex[:8]}.pdf"
-    file_path = REPORT_PDF_DIR / filename
-    
-    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
-        shutil.copyfileobj(file.file, buffer)
+    data = await file.read()
+    await put_uploaded_file(db, "reports_pdf", filename, data, "application/pdf")
     
     pdf_url = f"/api/static/reports_pdf/{filename}"
     

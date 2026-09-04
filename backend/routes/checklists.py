@@ -6,11 +6,11 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from typing import List, Optional
 from datetime import datetime
 import uuid
-import shutil
 from pathlib import Path
 
 from core import db, get_current_user, get_malaysia_time, get_or_create_participant_access
 from models import User
+from services.object_storage import put_uploaded_file
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -403,10 +403,8 @@ async def upload_checklist_photo(
     
     file_ext = file.filename.split(".")[-1]
     filename = f"{session_id}_{participant_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
-    file_path = CHECKLIST_PHOTOS_DIR / filename
-    
-    with open(file_path, "wb") as buffer:  # noqa: ephemeral-upload-storage
-        shutil.copyfileobj(file.file, buffer)
+    data = await file.read()
+    await put_uploaded_file(db, "checklist_photos", filename, data, file.content_type or "image/jpeg")
     
     photo_url = f"/api/static/checklist-photos/{filename}"
     return {"photo_url": photo_url}

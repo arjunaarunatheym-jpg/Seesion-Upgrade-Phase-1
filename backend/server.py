@@ -490,25 +490,73 @@ async def setup_admin_account():
             await db.vehicle_issues.create_index([("session_id", 1), ("participant_id", 1)])
 
             # Phase 3A: proforma-conversion concurrency guard.
-            # UNIQUE partial index on converted_from_proforma_id for non-null
-            # values. Prevents a race where two concurrent conversions insert
-            # two invoices linked to the same proforma.
-            try:
-                await db.invoices.create_index(
-                    "converted_from_proforma_id",
-                    unique=True,
-                    partialFilterExpression={
-                        "converted_from_proforma_id": {"$exists": True, "$type": "string"}
+            # ============================================================
+            # 1. READ-ONLY duplicate preflight — no auto-repair.
+            # 2. Only meaningful values participate (non-null, non-empty,
+            #    non-whitespace string).
+            # 3. If duplicates exist, log conflicting IDs and mark Proforma
+            #    conversion NOT READY (checked at request time via
+            #    _proforma_conversion_ready flag on the app state).
+            # 4. Only create the unique partial index when preflight is clean.
+            # 5. On DuplicateKeyError at insert time, race winner's row is
+            #    fetched and returned (idempotent) by the conversion route.
+            # ============================================================
+            preflight_pipeline = [
+                {"$match": {
+                    "converted_from_proforma_id": {
+                        "$exists": True, "$type": "string", "$nin": [None, ""],
                     },
-                    name="uniq_converted_from_proforma_id_partial",
+                }},
+                {"$project": {
+                    "converted_from_proforma_id": 1,
+                    "_trim": {"$trim": {"input": "$converted_from_proforma_id"}},
+                }},
+                {"$match": {"_trim": {"$ne": ""}}},
+                {"$group": {
+                    "_id": "$_trim",
+                    "invoice_ids": {"$push": "$id"},
+                    "count": {"$sum": 1},
+                }},
+                {"$match": {"count": {"$gt": 1}}},
+            ]
+            duplicates = await db.invoices.aggregate(preflight_pipeline).to_list(500)
+            proforma_conversion_ready = not duplicates
+            app.state.proforma_conversion_ready = proforma_conversion_ready
+            if duplicates:
+                logging.error(
+                    "Phase 3A Section 1: converted_from_proforma_id duplicates "
+                    "detected — Proforma conversion marked NOT READY. "
+                    "Conflicts: %s",
+                    [{"converted_from_proforma_id": d["_id"],
+                      "invoice_ids": d["invoice_ids"]} for d in duplicates[:20]],
                 )
-            except Exception as _pf_idx_err:
-                # If historical duplicates exist, log & continue — do NOT
-                # auto-repair historical data (safety rule).
+            else:
+                try:
+                    await db.invoices.create_index(
+                        "converted_from_proforma_id",
+                        unique=True,
+                        partialFilterExpression={
+                            "converted_from_proforma_id": {"$exists": True, "$type": "string"},
+                        },
+                        name="uniq_converted_from_proforma_id_partial",
+                    )
+                except Exception as _pf_idx_err:
+                    logging.warning(
+                        "Phase 3A partial unique index on converted_from_proforma_id "
+                        f"could not be created: {_pf_idx_err}. Marking Proforma "
+                        "conversion NOT READY."
+                    )
+                    app.state.proforma_conversion_ready = False
+
+            # Payment reversal idempotency: one reversal record per payment.
+            try:
+                await db.payment_reversals.create_index(
+                    "payment_id", unique=True, name="uniq_payment_reversal_payment_id",
+                )
+            except Exception as _pr_idx_err:
                 logging.warning(
-                    "Phase 3A partial unique index on converted_from_proforma_id "
-                    f"could not be created: {_pf_idx_err}. Historical duplicates "
-                    "may exist; audit before retrying."
+                    "Phase 3A unique index on payment_reversals.payment_id "
+                    f"could not be created: {_pr_idx_err}."
                 )
 
             logging.info("✅ Database indexes created successfully")
