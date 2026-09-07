@@ -200,7 +200,9 @@ async def get_trainer_income(trainer_id: str, current_user: User = Depends(get_c
             record["amount"] = record.get("fee_amount", 0)
             valid_records.append(record)
         else:
-            await db.trainer_fees.delete_one({"id": record.get("id")})
+            record["warning"] = "SESSION_MISSING"
+            record["amount"] = record.get("fee_amount", 0)
+            valid_records.append(record)
     
     total = sum(r.get("fee_amount", 0) for r in valid_records)
     paid = sum(r.get("fee_amount", 0) for r in valid_records if r.get("status") == "paid")
@@ -233,7 +235,9 @@ async def get_coordinator_income(coordinator_id: str, current_user: User = Depen
             record["amount"] = record.get("total_fee", 0)
             valid_records.append(record)
         else:
-            await db.coordinator_fees.delete_one({"id": record.get("id")})
+            record["warning"] = "SESSION_MISSING"
+            record["amount"] = record.get("total_fee", 0)
+            valid_records.append(record)
     
     total = sum(r.get("total_fee", 0) for r in valid_records)
     paid = sum(r.get("total_fee", 0) for r in valid_records if r.get("status") == "paid")
@@ -266,7 +270,8 @@ async def get_marketing_income(marketing_id: str, current_user: User = Depends(g
             record["company_name"] = company.get("name") if company else None
             valid_records.append(record)
         else:
-            await db.marketing_commissions.delete_one({"id": record.get("id")})
+            record["warning"] = "SESSION_MISSING"
+            valid_records.append(record)
     
     total = sum(r.get("calculated_amount", 0) for r in valid_records)
     paid = sum(r.get("calculated_amount", 0) for r in valid_records if r.get("status") == "paid")
@@ -922,16 +927,18 @@ async def get_pending_trainer_fees(current_user: User = Depends(get_current_user
     
     result = []
     for fee in fees:
-        if fee.get("session_id") not in session_map:
-            await db.trainer_fees.delete_one({"id": fee.get("id")})
-            continue
-            
-        session_info = session_map.get(fee.get("session_id"), {})
+        session_info = session_map.get(fee.get("session_id"))
         trainer = await db.users.find_one({"id": fee.get("trainer_id")}, {"_id": 0, "full_name": 1})
         fee["trainer_name"] = trainer.get("full_name") if trainer else "Unknown"
-        fee["session_name"] = session_info.get("name", "Unknown Session")
-        fee["session_start_date"] = session_info.get("start_date")
-        fee["company_name"] = company_map.get(session_info.get("company_id"), "Unknown Company")
+        if session_info is None:
+            fee["warning"] = "SESSION_MISSING"
+            fee["session_name"] = "(Missing session)"
+            fee["session_start_date"] = None
+            fee["company_name"] = "(Missing session)"
+        else:
+            fee["session_name"] = session_info.get("name", "Unknown Session")
+            fee["session_start_date"] = session_info.get("start_date")
+            fee["company_name"] = company_map.get(session_info.get("company_id"), "Unknown Company")
         result.append(fee)
     
     return result
@@ -954,16 +961,18 @@ async def get_pending_coordinator_fees(current_user: User = Depends(get_current_
     
     result = []
     for fee in fees:
-        if fee.get("session_id") not in session_map:
-            await db.coordinator_fees.delete_one({"id": fee.get("id")})
-            continue
-        
-        session_info = session_map.get(fee.get("session_id"), {})
+        session_info = session_map.get(fee.get("session_id"))
         coordinator = await db.users.find_one({"id": fee.get("coordinator_id")}, {"_id": 0, "full_name": 1})
         fee["coordinator_name"] = coordinator.get("full_name") if coordinator else "Unknown"
-        fee["session_name"] = session_info.get("name", "Unknown Session")
-        fee["session_start_date"] = session_info.get("start_date")
-        fee["company_name"] = company_map.get(session_info.get("company_id"), "Unknown Company")
+        if session_info is None:
+            fee["warning"] = "SESSION_MISSING"
+            fee["session_name"] = "(Missing session)"
+            fee["session_start_date"] = None
+            fee["company_name"] = "(Missing session)"
+        else:
+            fee["session_name"] = session_info.get("name", "Unknown Session")
+            fee["session_start_date"] = session_info.get("start_date")
+            fee["company_name"] = company_map.get(session_info.get("company_id"), "Unknown Company")
         result.append(fee)
     
     return result
@@ -987,8 +996,10 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
     result = []
     for comm in comms:
         session_id = comm.get("session_id")
-        if session_id not in session_map:
-            await db.marketing_commissions.delete_one({"id": comm.get("id")})
+        session_info = session_map.get(session_id)
+        if session_info is None:
+            comm["warning"] = "SESSION_MISSING"
+            result.append(comm)
             continue
         
         session_info = session_map.get(session_id, {})

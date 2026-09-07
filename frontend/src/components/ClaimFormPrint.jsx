@@ -33,20 +33,27 @@ const ClaimFormPrint = ({ session, onClose }) => {
   const [companySettings, setCompanySettings] = useState(null);
   const printRef = useRef(null);
 
+  // Phase 3A FINAL Section 7: increment a token per session load so a late
+  // response for a previous session cannot overwrite current state, and
+  // show a clear "unavailable" state when the authoritative snapshot fails
+  // instead of silently substituting zeros.
+  const [sotError, setSotError] = useState(null);
+  const loadTokenRef = React.useRef(0);
   useEffect(() => {
-    loadData();
+    loadTokenRef.current += 1;
+    loadData(loadTokenRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id]);
 
-  const loadData = async () => {
+  const loadData = async (token) => {
     try {
-      // PHASE 3A (Section V): consume the Phase 2 canonical Source-of-Truth
-      // for session financial totals instead of summing every invoice in React.
-      // This eliminates the Proforma+converted-Invoice double-count bug.
+      setSotError(null);
       const [costingRes, settingsRes, sotRes] = await Promise.all([
         axiosInstance.get(`/finance/session/${session.id}/costing`),
         axiosInstance.get('/finance/company-settings'),
         axiosInstance.get(`/finance/source-of-truth/session/${session.id}`)
       ]);
+      if (token !== loadTokenRef.current) return;
 
       setCostingData(costingRes.data);
       setCompanySettings(settingsRes.data);
@@ -102,6 +109,7 @@ const ClaimFormPrint = ({ session, onClose }) => {
         }));
       }
     } catch (error) {
+      setSotError('Financial snapshot unavailable — please retry. Values not shown to avoid displaying stale zeros.');
       toast.error('Failed to load claim form data');
       console.error(error);
     } finally {

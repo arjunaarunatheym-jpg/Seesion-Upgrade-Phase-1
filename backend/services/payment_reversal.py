@@ -167,34 +167,44 @@ class PaymentReversalService:
         reversal_id = str(uuid.uuid4())
         actions_taken: List[str] = []
 
-        # Atomic claim on the payment row — modified_count==0 means someone
-        # else won the race; we return their reversal record.
-        claim = await self.db.payments.update_one(
-            {"id": payment_id, "status": {"$nin": list(NON_ACTIVE_PAYMENT_STATUSES)}},
-            {"$set": {
-                "status": "reversed",
+        # Phase 3A FINAL Section 4: two-phase reversal —
+        # 1) Reserve an in-progress reversal record with unique payment_id
+        #    (index enforced). If another request already reserved, we
+        #    observe/return it.
+        # 2) Do all CN/journal work while payment is STILL active.
+        # 3) Only after everything is durable, flip payment.status to
+        #    "reversed" (last atomic claim).
+        # A retry can therefore only return "completed" when the reversal
+        # record status is "completed".
+        try:
+            await self.db.payment_reversals.insert_one({
+                "id": reversal_id,
+                "payment_id": payment_id,
+                "status": "in_progress",
+                "reason": reason,
+                "alias": alias,
                 "reversed_by": getattr(user, "id", None),
                 "reversed_by_name": getattr(user, "full_name", None),
                 "reversed_at": now.isoformat(),
-                "reversal_reason": reason,
-                "reversal_id": reversal_id,
-                "reversal_alias": alias,
-                "updated_at": now.isoformat(),
-            }},
-        )
-        if claim.modified_count == 0:
+            })
+        except Exception:
+            # Unique-index collision means someone else is reversing this payment.
             existing = await self.db.payment_reversals.find_one(
                 {"payment_id": payment_id}, {"_id": 0},
             )
+            if existing and existing.get("status") == "completed":
+                return {
+                    "message": "Payment already reversed (concurrent completed)",
+                    "idempotent": True,
+                    "reversal": existing,
+                    "payment_id": payment_id,
+                }
             return {
-                "message": "Payment already reversed (concurrent race lost)",
-                "idempotent": True,
-                "reversal": existing,
+                "message": "Reversal in progress by another request",
+                "code": "REVERSAL_IN_PROGRESS",
                 "payment_id": payment_id,
+                "idempotent": True,
             }
-        actions_taken.append(
-            f"Payment RM {float(payment.get('amount') or 0):,.2f} reversed"
-        )
 
         invoice: Optional[Dict[str, Any]] = None
         if payment.get("invoice_id"):
@@ -317,7 +327,37 @@ class PaymentReversalService:
             "reversed_by_name": getattr(user, "full_name", None),
             "reversed_at": now.isoformat(),
         }
-        await self.db.payment_reversals.insert_one(reversal_record)
+        # ---- 6. FINAL step: flip payment.status = reversed + finalize -------
+        # Only after CN/journal/invoice work has landed durably. If this
+        # conditional update lands 0 rows, someone else finished ahead of us —
+        # return idempotently.
+        claim = await self.db.payments.update_one(
+            {"id": payment_id, "status": {"$nin": list(NON_ACTIVE_PAYMENT_STATUSES)}},
+            {"$set": {
+                "status": "reversed",
+                "reversed_by": getattr(user, "id", None),
+                "reversed_by_name": getattr(user, "full_name", None),
+                "reversed_at": now.isoformat(),
+                "reversal_reason": reason,
+                "reversal_id": reversal_id,
+                "reversal_alias": alias,
+                "updated_at": now.isoformat(),
+            }},
+        )
+        actions_taken.append(
+            f"Payment RM {float(payment.get('amount') or 0):,.2f} reversed"
+        )
+
+        # Finalize the previously-reserved reversal record: mark completed
+        # + attach the durable audit trail. Retries that see status=completed
+        # can safely return this record.
+        await self.db.payment_reversals.update_one(
+            {"id": reversal_id},
+            {"$set": {
+                **reversal_record,
+                "status": "completed" if claim.modified_count == 1 else "duplicate_completed",
+            }},
+        )
         reversal_record.pop("_id", None)
         # Also stamp reversal_id back onto the payment (payments row was
         # already flipped in the atomic claim; this is metadata only).

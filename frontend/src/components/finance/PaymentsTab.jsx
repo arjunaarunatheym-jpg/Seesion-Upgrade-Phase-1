@@ -55,29 +55,37 @@ const PaymentsTab = ({
   const pendingInvoices = invoices.filter(inv => inv.status === 'issued' || inv.status === 'partially_paid');
 
   // Handle invoice selection and auto-fill amount from CANONICAL outstanding.
+  // Phase 3A FINAL Section 7: use a monotonically-increasing token so a
+  // late-arriving response for invoice A cannot overwrite the state now
+  // showing invoice B.
+  const [outstandingReqToken, setOutstandingReqToken] = useState(0);
+  const [savingPayment, setSavingPayment] = useState(false);
   const handleInvoiceSelect = async (invoiceId) => {
-    setPaymentForm({ ...paymentForm, invoice_id: invoiceId, amount: '' });
+    const token = outstandingReqToken + 1;
+    setOutstandingReqToken(token);
+    setPaymentForm(prev => ({ ...prev, invoice_id: invoiceId, amount: '' }));
     setCanonicalOutstanding(null);
     setOutstandingError(null);
     if (!invoiceId) return;
     setOutstandingLoading(true);
     try {
       const r = await axiosInstance.get(`/finance/source-of-truth/invoice/${invoiceId}/outstanding`);
+      // Ignore stale responses.
+      if (token !== outstandingReqToken + 1) return;
       const c = r.data || {};
       setCanonicalOutstanding(c);
-      // Default to canonical outstanding, NEVER invoice.total_amount.
       const defaultAmount = Number(c.outstanding_amount || 0);
-      setPaymentForm(prev => ({
-        ...prev,
-        invoice_id: invoiceId,
-        amount: defaultAmount > 0 ? defaultAmount : ''
-      }));
+      setPaymentForm(prev => (
+        prev.invoice_id === invoiceId
+          ? { ...prev, amount: defaultAmount > 0 ? defaultAmount : '' }
+          : prev
+      ));
     } catch (err) {
-      // Phase 3A: NO unsafe fallback to invoice.total_amount. Backend is
-      // authoritative. Clear the amount, disable submission, surface the
-      // error and allow the user to retry the invoice select.
+      // Phase 3A: NO unsafe fallback to invoice.total_amount.
       setOutstandingError('Unable to verify outstanding amount from server. Please retry.');
-      setPaymentForm(prev => ({ ...prev, invoice_id: invoiceId, amount: '' }));
+      setPaymentForm(prev => (
+        prev.invoice_id === invoiceId ? { ...prev, amount: '' } : prev
+      ));
     } finally {
       setOutstandingLoading(false);
     }
@@ -102,12 +110,14 @@ const PaymentsTab = ({
   };
 
   const paymentDisabled = (
+    savingPayment ||
     !paymentForm.invoice_id ||
     outstandingLoading ||
     !!outstandingError ||
     !canonicalOutstanding ||
     (canonicalOutstanding && Number(canonicalOutstanding.outstanding_amount || 0) <= 0) ||
     !paymentForm.amount ||
+    !Number.isFinite(Number(paymentForm.amount)) ||
     Number(paymentForm.amount) <= 0 ||
     (canonicalOutstanding && Number(paymentForm.amount) > Number(canonicalOutstanding.outstanding_amount || 0) + 0.01)
   );
@@ -118,7 +128,7 @@ const PaymentsTab = ({
       toast.error(outstandingError || "Select an invoice and enter a valid amount within outstanding.");
       return;
     }
-
+    setSavingPayment(true);
     try {
       const response = await axiosInstance.post('/finance/payments', {
         invoice_id: paymentForm.invoice_id,
@@ -151,6 +161,8 @@ const PaymentsTab = ({
       onRefresh();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to record payment");
+    } finally {
+      setSavingPayment(false);
     }
   };
 

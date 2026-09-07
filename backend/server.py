@@ -519,17 +519,33 @@ async def setup_admin_account():
                 }},
                 {"$match": {"count": {"$gt": 1}}},
             ]
-            duplicates = await db.invoices.aggregate(preflight_pipeline).to_list(500)
-            proforma_conversion_ready = not duplicates
-            app.state.proforma_conversion_ready = proforma_conversion_ready
-            if duplicates:
+            # Phase 3A FINAL Section 6: FAIL-CLOSED default. Readiness starts
+            # False and is only flipped True after preflight passes AND the
+            # partial unique index is confirmed present.
+            app.state.proforma_conversion_ready = False
+            try:
+                duplicates = await db.invoices.aggregate(preflight_pipeline).to_list(500)
+            except Exception as _pf_err:
                 logging.error(
-                    "Phase 3A Section 1: converted_from_proforma_id duplicates "
-                    "detected — Proforma conversion marked NOT READY. "
-                    "Conflicts: %s",
-                    [{"converted_from_proforma_id": d["_id"],
-                      "invoice_ids": d["invoice_ids"]} for d in duplicates[:20]],
+                    "Proforma preflight verification failed (%s); "
+                    "conversion remains NOT READY.", _pf_err,
                 )
+                duplicates = ["_verification_unavailable_"]
+            if duplicates and duplicates != []:
+                if duplicates == ["_verification_unavailable_"]:
+                    logging.error(
+                        "Proforma conversion NOT READY — preflight could "
+                        "not be verified."
+                    )
+                else:
+                    logging.error(
+                        "Phase 3A Section 1: converted_from_proforma_id duplicates "
+                        "detected — Proforma conversion marked NOT READY. "
+                        "Conflicts: %s",
+                        [{"converted_from_proforma_id": d["_id"],
+                          "invoice_ids": d["invoice_ids"]} for d in duplicates[:20]
+                         if isinstance(d, dict)],
+                    )
             else:
                 try:
                     await db.invoices.create_index(
@@ -540,13 +556,37 @@ async def setup_admin_account():
                         },
                         name="uniq_converted_from_proforma_id_partial",
                     )
+                    # Verify the index actually exists before flipping ready.
+                    idx_info = await db.invoices.index_information()
+                    if "uniq_converted_from_proforma_id_partial" in idx_info:
+                        app.state.proforma_conversion_ready = True
+                        # Also ensure a unique invoice_number index — protects
+                        # against concurrent duplicate allocation on conversion.
+                        try:
+                            await db.invoices.create_index(
+                                "invoice_number", unique=True,
+                                partialFilterExpression={
+                                    "invoice_number": {"$exists": True, "$type": "string"},
+                                    "document_type": {"$ne": "proforma"},
+                                },
+                                name="uniq_invoice_number_non_proforma_partial",
+                            )
+                        except Exception as _num_idx_err:
+                            logging.warning(
+                                "invoice_number unique index could not be "
+                                f"created: {_num_idx_err}"
+                            )
+                    else:
+                        logging.error(
+                            "Proforma unique index did not register; "
+                            "conversion remains NOT READY."
+                        )
                 except Exception as _pf_idx_err:
                     logging.warning(
                         "Phase 3A partial unique index on converted_from_proforma_id "
                         f"could not be created: {_pf_idx_err}. Marking Proforma "
                         "conversion NOT READY."
                     )
-                    app.state.proforma_conversion_ready = False
 
             # Payment reversal idempotency: one reversal record per payment.
             try:

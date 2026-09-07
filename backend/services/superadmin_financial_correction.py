@@ -296,54 +296,91 @@ class SuperAdminFinancialCorrection:
                     **preview}
 
         now = datetime.now(timezone.utc).isoformat()
-        # ---- Section 10: accounting correction via delta journal -----------
-        # Only for issued/partially_paid/paid invoices. Voids the current
-        # active issuance journal(s) and posts a correction/replacement.
+        # ---- Section 10 (FINAL): atomic accounting correction ----------
+        # If the correction touches accounting (issued/partially_paid/paid),
+        # void the old journals, post the corrected journal, and ONLY THEN
+        # apply the amount change to the invoice. If accounting fails at any
+        # point, restore the previous state and return a controlled
+        # INVOICE_VALUE_CORRECTION_ACCOUNTING_FAILED.
         cur_status_l = (inv.get("status") or "").lower()
         accounting_effect: Dict[str, Any] = {"applied": False}
+        voided_journal_snapshot: List[Dict[str, Any]] = []
         if cur_status_l in {"issued", "partially_paid", "paid"}:
+            old_journals = await self.db.journal_entries.find(
+                {"source_id": invoice_id, "source_module": "invoice",
+                 "status": {"$ne": "voided"}},
+                {"_id": 0},
+            ).to_list(20)
+            voided_journal_snapshot = list(old_journals)
+            voided_ids: List[str] = []
+            for je in old_journals:
+                await self.db.journal_entries.update_one(
+                    {"id": je["id"], "status": {"$ne": "voided"}},
+                    {"$set": {
+                        "status": "voided",
+                        "voided_by": getattr(user, "id", None),
+                        "voided_at": now,
+                        "void_reason": f"Invoice value correction: {reason}",
+                        "updated_at": now,
+                    }},
+                )
+                voided_ids.append(je["id"])
+            # Try posting corrected issuance journal.
+            new_journal_ids: List[str] = []
+            repost_error: Optional[str] = None
             try:
-                voided_ids: List[str] = []
-                old_journals = await self.db.journal_entries.find(
-                    {"source_id": invoice_id, "source_module": "invoice",
-                     "status": {"$ne": "voided"}},
-                    {"_id": 0},
-                ).to_list(20)
-                for je in old_journals:
-                    await self.db.journal_entries.update_one(
-                        {"id": je["id"], "status": {"$ne": "voided"}},
-                        {"$set": {
-                            "status": "voided",
-                            "voided_by": getattr(user, "id", None),
-                            "voided_at": now,
-                            "void_reason": f"Invoice value correction: {reason}",
-                            "updated_at": now,
-                        }},
-                    )
-                    voided_ids.append(je["id"])
-                # Repost issuance for the corrected amount if helper exists.
-                new_journal_ids: List[str] = []
-                try:
-                    from routes.accounting import post_invoice_issued  # type: ignore
-                    corrected_inv = {**inv, "total_amount": new_total,
-                                     "subtotal": subtotal, "tax_amount": tax_amount,
-                                     "line_items": new_lines}
-                    repost = await post_invoice_issued(
-                        invoice=corrected_inv,
-                        user_id=getattr(user, "id", None),
-                        user_name=getattr(user, "full_name", None),
-                    )
-                    if repost and repost.get("journal_id"):
+                from routes.accounting import post_invoice_issued  # type: ignore
+                corrected_inv = {**inv, "total_amount": new_total,
+                                 "subtotal": subtotal, "tax_amount": tax_amount,
+                                 "line_items": new_lines}
+                repost = await post_invoice_issued(
+                    invoice=corrected_inv,
+                    user_id=getattr(user, "id", None),
+                    user_name=getattr(user, "full_name", None),
+                )
+                if isinstance(repost, dict):
+                    if repost.get("error"):
+                        repost_error = repost.get("error")
+                    elif repost.get("journal_id"):
                         new_journal_ids.append(repost["journal_id"])
-                except Exception as e:
-                    accounting_effect["repost_error"] = str(e)
-                accounting_effect.update({
-                    "applied": True,
-                    "voided_journal_ids": voided_ids,
-                    "new_journal_ids": new_journal_ids,
-                })
-            except Exception as e:  # pragma: no cover - defensive
-                accounting_effect["error"] = str(e)
+                    else:
+                        repost_error = "ACCOUNTING_RETURNED_NO_JOURNAL"
+            except ImportError:
+                if voided_journal_snapshot:
+                    repost_error = "ACCOUNTING_LAYER_UNAVAILABLE"
+            except Exception as e:
+                repost_error = str(e)
+
+            if repost_error:
+                # ROLL BACK — re-activate the old journals and DO NOT save
+                # the new total on the invoice.
+                for je in voided_journal_snapshot:
+                    await self.db.journal_entries.update_one(
+                        {"id": je["id"]},
+                        {"$set": {"status": je.get("status", "posted"),
+                                  "updated_at": now},
+                         "$unset": {"voided_by": "", "voided_at": "",
+                                    "void_reason": ""}},
+                    )
+                await self._write_audit(
+                    "invoice", invoice_id, "value_correction_rolled_back",
+                    user, reason,
+                    before={"total_amount": old_total, "status": inv.get("status")},
+                    after={"error": repost_error},
+                    extra={"restored_journal_ids": voided_ids},
+                )
+                raise FinancialSafetyError(
+                    "INVOICE_VALUE_CORRECTION_ACCOUNTING_FAILED",
+                    ("Invoice value correction accounting failed; invoice "
+                     "amount and journals have been restored. Error: "
+                     + repost_error),
+                    500,
+                )
+            accounting_effect = {
+                "applied": True,
+                "voided_journal_ids": voided_ids,
+                "new_journal_ids": new_journal_ids,
+            }
         await self.db.invoices.update_one(
             {"id": invoice_id},
             {"$set": {
@@ -595,12 +632,11 @@ class SuperAdminFinancialCorrection:
                     "updated_at": now,
                 }},
             )
-            # Try posting a new journal for the corrected amount. This is
-            # OPTIONAL — some environments do not have accounting wired.
-            # We only compensate on a HARD exception (accounting is present
-            # but failed). A soft {"error": ...} return or ImportError is
-            # treated as "no accounting posted" and left as-is with an
-            # audit note.
+            # Phase 3A FINAL Section 5: BOTH raised exceptions AND returned
+            # {"error": ...} accounting failures are treated as HARD failures.
+            # If accounting is truly not available (ImportError), we still
+            # roll back the CN amount change because the accounting effect
+            # cannot be verified consistent.
             new_journal_id: Optional[str] = None
             repost_error: Optional[str] = None
             hard_failure = False
@@ -615,10 +651,21 @@ class SuperAdminFinancialCorrection:
                 if isinstance(repost, dict):
                     new_journal_id = repost.get("journal_id")
                     if repost.get("error"):
-                        # Soft error — record but do not roll back.
                         repost_error = repost.get("error")
+                        hard_failure = True
+                    elif not new_journal_id:
+                        # Accounting call returned no journal id — treat as
+                        # incomplete accounting.
+                        repost_error = "ACCOUNTING_RETURNED_NO_JOURNAL"
+                        hard_failure = True
             except ImportError:
-                pass
+                # Accounting layer genuinely missing — treat as soft only
+                # when the CN wasn't previously journalled. If old journals
+                # DID exist and were voided, we cannot leave the CN corrected
+                # with no accounting; roll back.
+                if active_journal_ids:
+                    repost_error = "ACCOUNTING_LAYER_UNAVAILABLE"
+                    hard_failure = True
             except Exception as e:
                 repost_error = str(e)
                 hard_failure = True

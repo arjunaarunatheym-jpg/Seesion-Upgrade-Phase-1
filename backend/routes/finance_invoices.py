@@ -342,28 +342,62 @@ async def export_invoices(
     
     bil = 1
     for inv in invoices:
-        payment = payment_by_invoice.get(inv.get("id"))
-        payment_status = "Paid" if payment else "Unpaid"
-        
-        inv_credit_notes = cn_by_invoice.get(inv.get("id"), [])
+        # Phase 3A FINAL Section 7: Payment status derived from CANONICAL
+        # active payments + issued-only Credit Notes, not "any payment exists".
+        inv_id = inv.get("id")
+        inv_status_lower = (inv.get("status") or "").lower()
+        cn_active_total = sum(
+            float(cn.get("amount") or 0)
+            for cn in cn_by_invoice.get(inv_id, [])
+            if (cn.get("status") or "").lower() == "issued"
+        )
+        active_payments = [
+            p for p in payments
+            if p.get("invoice_id") == inv_id
+            and (p.get("status") or "").lower() not in ("reversed", "voided")
+        ]
+        paid_amount = sum(float(p.get("amount") or 0) for p in active_payments)
+        gross_total = float(inv.get("total_amount") or 0)
+        net_total = max(0.0, gross_total - cn_active_total)
+        if inv_status_lower in ("voided", "cancelled"):
+            payment_status = inv_status_lower.title()
+        elif net_total <= 0.005:
+            payment_status = "Fully Credited"
+        elif paid_amount + 0.005 >= net_total and paid_amount > 0:
+            payment_status = "Paid"
+        elif paid_amount > 0:
+            payment_status = "Partially Paid"
+        else:
+            payment_status = "Unpaid"
+
+        inv_credit_notes = cn_by_invoice.get(inv_id, [])
         cn_info = ""
         if inv_credit_notes:
-            cn_parts = [f"{cn.get('cn_number', 'CN')}: RM{cn.get('amount', 0)}" for cn in inv_credit_notes]
+            cn_parts = [
+                f"{cn.get('cn_number', 'CN')}: RM{cn.get('amount', 0)} ({(cn.get('status') or '').title()})"
+                for cn in inv_credit_notes
+            ]
             cn_info = "; ".join(cn_parts)
-        
+
+        # Safe spreadsheet-cell handling: strip Excel formula prefixes.
+        def _safe(v):
+            if isinstance(v, str) and v[:1] in ("=", "+", "-", "@"):
+                return "'" + v
+            return v
+
         row = bil + 1
         ws.cell(row=row, column=1, value=bil).border = thin_border
         ws.cell(row=row, column=2, value=str(inv.get("created_at", ""))[:10] if inv.get("created_at") else "").border = thin_border
-        ws.cell(row=row, column=3, value=inv.get("invoice_number", "")).border = thin_border
-        ws.cell(row=row, column=4, value=inv.get("bill_to_name") or inv.get("company_name", "")).border = thin_border
-        ws.cell(row=row, column=5, value=inv.get("programme_name", "")).border = thin_border
-        ws.cell(row=row, column=6, value=inv.get("company_name", "")).border = thin_border
-        ws.cell(row=row, column=7, value=inv.get("venue", "")).border = thin_border
+        ws.cell(row=row, column=3, value=_safe(inv.get("invoice_number", ""))).border = thin_border
+        ws.cell(row=row, column=4, value=_safe(inv.get("bill_to_name") or inv.get("company_name", ""))).border = thin_border
+        ws.cell(row=row, column=5, value=_safe(inv.get("programme_name", ""))).border = thin_border
+        ws.cell(row=row, column=6, value=_safe(inv.get("company_name", ""))).border = thin_border
+        ws.cell(row=row, column=7, value=_safe(inv.get("venue", ""))).border = thin_border
         ws.cell(row=row, column=8, value=inv.get("pax", 0)).border = thin_border
         ws.cell(row=row, column=9, value=inv.get("total_amount", 0)).border = thin_border
         ws.cell(row=row, column=10, value=inv.get("status", "").replace("_", " ").title()).border = thin_border
         ws.cell(row=row, column=11, value=payment_status).border = thin_border
-        ws.cell(row=row, column=12, value=cn_info).border = thin_border
+        ws.cell(row=row, column=12, value=_safe(cn_info)).border = thin_border
         bil += 1
     
     for col in ws.columns:
@@ -475,7 +509,15 @@ async def approve_invoice(invoice_id: str, current_user: User = Depends(get_curr
 
 @router.post("/invoices/{invoice_id}/issue")
 async def issue_invoice(invoice_id: str, current_user: User = Depends(get_current_user)):
-    """Issue invoice"""
+    """Issue invoice.
+
+    Phase 3A FINAL Section 2: this operation is idempotent + atomic. The
+    status flip uses a conditional update so a stale request cannot
+    overwrite a status that changed after read. Required accounting posting
+    is treated as a hard requirement — on hard failure we compensate by
+    restoring the prior status and voiding any partial journal side-effect
+    and return a controlled `INVOICE_ISSUE_ACCOUNTING_FAILED` error.
+    """
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Only Finance can issue invoices")
     
@@ -492,16 +534,32 @@ async def issue_invoice(invoice_id: str, current_user: User = Depends(get_curren
             status_code=400,
             detail="This is a Proforma Invoice — it cannot be issued directly. Use 'Convert to Invoice' to create a real tax invoice from it."
         )
-    
-    await db.invoices.update_one(
-        {"id": invoice_id},
+
+    now_iso = get_malaysia_time().isoformat()
+    prior_status = invoice.get("status")
+    # Conditional update — only flip if still approved. If another request
+    # already issued this invoice, we return idempotently.
+    claim = await db.invoices.update_one(
+        {"id": invoice_id, "status": "approved"},
         {"$set": {
             "status": "issued",
             "issued_by": current_user.id,
-            "issued_at": get_malaysia_time().isoformat(),
-            "updated_at": get_malaysia_time().isoformat()
+            "issued_at": now_iso,
+            "updated_at": now_iso,
         }}
     )
+    if claim.modified_count == 0:
+        current = await db.invoices.find_one({"id": invoice_id}, {"_id": 0, "status": 1, "invoice_number": 1})
+        if current and current.get("status") == "issued":
+            return {
+                "message": "Invoice already issued",
+                "invoice_number": current.get("invoice_number"),
+                "idempotent": True,
+            }
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_ISSUE_CONFLICT",
+            "message": "Invoice status changed since read; refresh and retry.",
+        })
     
     await db.sessions.update_one({"invoice_id": invoice_id}, {"$set": {"invoice_status": "issued"}})
     
@@ -519,16 +577,13 @@ async def issue_invoice(invoice_id: str, current_user: User = Depends(get_curren
                 "calculated_amount": commission_amount,
                 "invoice_id": invoice_id,
                 "status": "approved",
-                "updated_at": get_malaysia_time().isoformat()
+                "updated_at": now_iso
             }},
             upsert=True
         )
     
-    await log_finance_action("invoice", invoice_id, "status_changed", current_user.id,
-                            {"status": invoice.get("status")}, {"status": "issued"})
-    
-    # ============ ACCOUNTING AUTO-POST (Phase 2) ============
-    # Create journal entry for issued invoice
+    # ============ ACCOUNTING AUTO-POST (Phase 2) — HARD REQUIREMENT ==========
+    accounting_error: Optional[str] = None
     try:
         updated_invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
         accounting_result = await post_invoice_issued(
@@ -537,10 +592,45 @@ async def issue_invoice(invoice_id: str, current_user: User = Depends(get_curren
             user_id=current_user.id,
             user_name=current_user.full_name
         )
-        if accounting_result.get("error"):
-            print(f"Accounting auto-post warning: {accounting_result.get('error')}")
+        if isinstance(accounting_result, dict) and accounting_result.get("error"):
+            accounting_error = accounting_result.get("error")
+    except ImportError:
+        pass  # Accounting module not wired in this environment.
     except Exception as e:
-        print(f"Accounting auto-post error: {str(e)}")
+        accounting_error = str(e)
+
+    if accounting_error:
+        # Compensate: restore prior status, void any partial invoice journal.
+        await db.invoices.update_one(
+            {"id": invoice_id},
+            {"$set": {"status": prior_status, "updated_at": now_iso},
+             "$unset": {"issued_by": "", "issued_at": ""}},
+        )
+        await db.sessions.update_one(
+            {"invoice_id": invoice_id}, {"$set": {"invoice_status": prior_status}}
+        )
+        await db.journal_entries.update_many(
+            {"source_id": invoice_id, "source_module": "invoice",
+             "status": {"$ne": "voided"}},
+            {"$set": {
+                "status": "voided",
+                "voided_by": current_user.id,
+                "voided_at": now_iso,
+                "void_reason": f"Invoice issue compensation: {accounting_error}",
+                "updated_at": now_iso,
+            }},
+        )
+        raise HTTPException(status_code=500, detail={
+            "code": "INVOICE_ISSUE_ACCOUNTING_FAILED",
+            "message": (
+                "Invoice issuance accounting failed; status restored. "
+                "Retry after resolving the accounting error."
+            ),
+            "error": accounting_error,
+        })
+
+    await log_finance_action("invoice", invoice_id, "status_changed", current_user.id,
+                            {"status": prior_status}, {"status": "issued"})
     # ============ END ACCOUNTING AUTO-POST ============
     
     # ============ EMAIL NOTIFICATION ============
@@ -686,29 +776,76 @@ async def convert_proforma_to_invoice(invoice_id: str, current_user: User = Depe
 
 @router.post("/invoices/{invoice_id}/cancel")
 async def cancel_invoice(invoice_id: str, reason: str = "", current_user: User = Depends(get_current_user)):
-    """Cancel invoice"""
+    """Cancel invoice — pre-issue lifecycle only.
+
+    Phase 3A FINAL Section 2: normal admin cancellation is permitted only
+    for genuinely editable pre-issue statuses (draft/auto_draft/approved/
+    finance_review). Issued/paid/voided/converted invoices must go through
+    the controlled SuperAdmin void / Repair Status workflow — and only if
+    no active payments or issued Credit Notes exist against them.
+    """
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Only Finance can cancel invoices")
-    
+
     invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    
-    await db.invoices.update_one(
-        {"id": invoice_id},
+
+    editable_pre_issue = {"draft", "auto_draft", "approved", "finance_review", "rejected"}
+    cur_status = (invoice.get("status") or "").lower()
+    if cur_status not in editable_pre_issue:
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_CANCEL_BLOCKED",
+            "message": (
+                f"Invoice status is {cur_status!r}. Cancel is only permitted "
+                "for pre-issue invoices; use the SuperAdmin void workflow for "
+                "issued/paid/terminal invoices."
+            ),
+            "invoice_status": cur_status,
+        })
+
+    # Even for pre-issue invoices, block if any active payment/CN somehow exists.
+    active_pmt = await db.payments.find_one(
+        {"invoice_id": invoice_id, "status": {"$nin": ["reversed", "voided"]}},
+        {"_id": 0, "id": 1},
+    )
+    if active_pmt:
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_HAS_ACTIVE_PAYMENTS",
+            "message": "Reverse active payments before cancelling.",
+        })
+    active_cn = await db.credit_notes.find_one(
+        {"invoice_id": invoice_id, "status": "issued"},
+        {"_id": 0, "id": 1},
+    )
+    if active_cn:
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_HAS_ACTIVE_ISSUED_CNS",
+            "message": "Void issued Credit Notes before cancelling.",
+        })
+
+    now_iso = get_malaysia_time().isoformat()
+    # Conditional update against the observed status (no stale overwrite).
+    claim = await db.invoices.update_one(
+        {"id": invoice_id, "status": invoice.get("status")},
         {"$set": {
             "status": "cancelled",
             "cancelled_by": current_user.id,
-            "cancelled_at": get_malaysia_time().isoformat(),
+            "cancelled_at": now_iso,
             "cancellation_reason": reason,
-            "updated_at": get_malaysia_time().isoformat()
+            "updated_at": now_iso,
         }}
     )
-    
+    if claim.modified_count == 0:
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_CANCEL_CONFLICT",
+            "message": "Invoice changed since read; refresh and retry.",
+        })
+
     await db.sessions.update_one({"invoice_id": invoice_id}, {"$set": {"invoice_status": "cancelled"}})
     await log_finance_action("invoice", invoice_id, "status_changed", current_user.id,
-                            {"status": invoice.get("status")}, {"status": "cancelled", "reason": reason}, reason)
-    
+                            {"status": cur_status}, {"status": "cancelled", "reason": reason}, reason)
+
     return {"message": "Invoice cancelled successfully"}
 
 @router.post("/invoices/{invoice_id}/revert-status")
@@ -772,35 +909,68 @@ async def revert_invoice_status(invoice_id: str, target_status: str = "auto_draf
 
 @router.post("/invoices/revert-batch")
 async def revert_invoices_batch(data: dict, current_user: User = Depends(get_current_user)):
-    """Revert multiple invoices by invoice_number (Admin only)"""
+    """Revert multiple invoices by invoice_number (Admin only).
+
+    Phase 3A FINAL Section 2: each invoice must satisfy the same
+    per-invoice guard as single revert. Locked / issued / paid / terminal
+    invoices are skipped with a reason instead of silently rewritten.
+    """
     if current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Only admins can revert invoice status")
-    
+
     invoice_numbers = data.get("invoice_numbers", [])
     target_status = data.get("target_status", "auto_draft")
-    
+
     allowed_targets = ["auto_draft", "draft", "finance_review"]
     if target_status not in allowed_targets:
         raise HTTPException(status_code=400, detail=f"Target status must be one of: {allowed_targets}")
-    
+
+    LOCKED = {"issued", "partially_paid", "paid", "voided", "deleted", "converted"}
     results = []
     for inv_num in invoice_numbers:
         invoice = await db.invoices.find_one({"invoice_number": inv_num}, {"_id": 0})
         if not invoice:
             results.append({"invoice_number": inv_num, "status": "not_found"})
             continue
-        
-        old_status = invoice.get("status")
-        await db.invoices.update_one(
-            {"id": invoice["id"]},
+
+        cur_status = (invoice.get("status") or "").lower()
+        if cur_status in LOCKED:
+            results.append({
+                "invoice_number": inv_num,
+                "status": "skipped",
+                "reason": "INVOICE_LOCKED",
+                "current_status": cur_status,
+            })
+            continue
+        # Only cancelled invoices can be reverted via this endpoint
+        # (mirrors /revert-status semantics).
+        if cur_status != "cancelled":
+            results.append({
+                "invoice_number": inv_num,
+                "status": "skipped",
+                "reason": "NOT_CANCELLED",
+                "current_status": cur_status,
+            })
+            continue
+
+        # Conditional update — do not overwrite if status shifted concurrently.
+        claim = await db.invoices.update_one(
+            {"id": invoice["id"], "status": "cancelled"},
             {"$set": {"status": target_status, "updated_at": get_malaysia_time().isoformat()},
              "$unset": {"cancelled_by": "", "cancelled_at": "", "cancellation_reason": ""}}
         )
+        if claim.modified_count == 0:
+            results.append({
+                "invoice_number": inv_num,
+                "status": "skipped",
+                "reason": "RACE_CONDITION",
+            })
+            continue
         await db.sessions.update_one({"invoice_id": invoice["id"]}, {"$set": {"invoice_status": target_status}})
         await log_finance_action("invoice", invoice["id"], "status_reverted", current_user.id,
-                                {"status": old_status}, {"status": target_status})
-        results.append({"invoice_number": inv_num, "old_status": old_status, "new_status": target_status})
-    
+                                {"status": cur_status}, {"status": target_status})
+        results.append({"invoice_number": inv_num, "old_status": cur_status, "new_status": target_status})
+
     return {"results": results}
 
 
@@ -1115,7 +1285,14 @@ async def void_invoice(
     request: VoidInvoiceRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Void an invoice"""
+    """Void an invoice — Admin/Finance path.
+
+    Phase 3A FINAL Section 2: Admin void must inspect active payments and
+    active issued Credit Notes; the invoice cannot be silently voided when
+    financial history exists. The user is redirected to reverse payments /
+    void CNs (or, when truly exceptional, the SuperAdmin void workflow).
+    Conditional update guards against stale overwrite.
+    """
     if current_user.role not in ["admin", "finance"]:
         raise HTTPException(status_code=403, detail="Only Admin and Finance can void invoices")
     
@@ -1128,12 +1305,66 @@ async def void_invoice(
     
     if invoice.get("status") == "voided":
         raise HTTPException(status_code=400, detail="Invoice is already voided")
-    
+
+    active_payments = await db.payments.find(
+        {"invoice_id": invoice_id, "status": {"$nin": ["reversed", "voided"]}},
+        {"_id": 0, "id": 1, "receipt_number": 1, "amount": 1},
+    ).to_list(50)
+    if active_payments:
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_HAS_ACTIVE_PAYMENTS",
+            "message": (
+                "Cannot void — reverse active payments first via the "
+                "SuperAdmin payment reversal workflow."
+            ),
+            "active_payments": active_payments,
+        })
+    active_cns = await db.credit_notes.find(
+        {"invoice_id": invoice_id, "status": "issued"},
+        {"_id": 0, "id": 1, "cn_number": 1, "amount": 1},
+    ).to_list(50)
+    if active_cns:
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_HAS_ACTIVE_ISSUED_CNS",
+            "message": "Cannot void — void issued Credit Notes first.",
+            "active_credit_notes": active_cns,
+        })
+
     old_status = invoice.get("status")
     company_name = invoice.get("company_name", "Unknown")
     total_amount = invoice.get("total_amount", 0)
     record_ref = f"{company_name} - RM {total_amount:,.2f}"
-    
+    now_iso = get_malaysia_time().isoformat()
+
+    claim = await db.invoices.update_one(
+        {"id": invoice_id, "status": old_status},
+        {"$set": {
+            "status": "voided",
+            "voided_by": current_user.id,
+            "voided_at": now_iso,
+            "void_reason": request.reason,
+            "updated_at": now_iso,
+        }}
+    )
+    if claim.modified_count == 0:
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_VOID_CONFLICT",
+            "message": "Invoice status changed since read; refresh and retry.",
+        })
+
+    # Void any active issuance journals for the invoice.
+    await db.journal_entries.update_many(
+        {"source_id": invoice_id, "source_module": "invoice",
+         "status": {"$ne": "voided"}},
+        {"$set": {
+            "status": "voided",
+            "voided_by": current_user.id,
+            "voided_at": now_iso,
+            "void_reason": f"Admin invoice void: {request.reason}",
+            "updated_at": now_iso,
+        }},
+    )
+
     await create_audit_trail_entry(
         action="Invoice Voided",
         record_reference=record_ref,
@@ -1144,17 +1375,6 @@ async def void_invoice(
         field_changed="status",
         from_value=old_status,
         to_value="voided"
-    )
-    
-    await db.invoices.update_one(
-        {"id": invoice_id},
-        {"$set": {
-            "status": "voided",
-            "voided_by": current_user.id,
-            "voided_at": get_malaysia_time().isoformat(),
-            "void_reason": request.reason,
-            "updated_at": get_malaysia_time().isoformat()
-        }}
     )
     
     return {"message": "Invoice voided successfully", "invoice_number": invoice.get("invoice_number")}

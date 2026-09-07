@@ -696,20 +696,64 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
 
                 await log_finance_action("credit_note", credit_note["id"], "created", current_user.id, after_value=credit_note)
 
-                # Post credit note to journal (idempotent — matches CN issued state)
+                # Phase 3A FINAL Section 3: linked CN accounting is a HARD
+                # requirement. Both exceptions AND {"error": ...} results
+                # are failures. On failure we compensate:
+                # - void the CN we just issued
+                # - reverse the just-inserted payment
+                cn_accounting_error: Optional[str] = None
                 try:
-                    await post_credit_note_issued(
+                    result = await post_credit_note_issued(
                         credit_note=credit_note,
                         user_id=current_user.id,
                         user_name=current_user.full_name
                     )
+                    if isinstance(result, dict) and result.get("error"):
+                        cn_accounting_error = result.get("error")
+                except ImportError:
+                    pass  # Accounting not wired in this env — leave audit trail
                 except Exception as e:
-                    # Surface — do not silently swallow (Section N).
-                    print(f"Credit note accounting auto-post error: {str(e)}")
-                    await log_finance_action(
-                        "credit_note", credit_note["id"], "journal_post_failed",
-                        current_user.id, after_value={"error": str(e)},
+                    cn_accounting_error = str(e)
+
+                if cn_accounting_error:
+                    now_iso = get_malaysia_time().isoformat()
+                    # Void the CN
+                    await db.credit_notes.update_one(
+                        {"id": credit_note["id"]},
+                        {"$set": {
+                            "status": "voided",
+                            "voided_by": current_user.id,
+                            "voided_at": now_iso,
+                            "void_reason": f"Payment CN accounting failed: {cn_accounting_error}",
+                            "updated_at": now_iso,
+                        }},
                     )
+                    # Reverse the payment (mark reversed — canonical service
+                    # cannot be called here without circular imports, so we
+                    # do a controlled inline flip). Preserve receipt/history.
+                    await db.payments.update_one(
+                        {"id": payment["id"]},
+                        {"$set": {
+                            "status": "reversed",
+                            "reversed_by": current_user.id,
+                            "reversed_at": now_iso,
+                            "reversal_reason": f"CN accounting failed: {cn_accounting_error}",
+                            "updated_at": now_iso,
+                        }},
+                    )
+                    await log_finance_action(
+                        "payment", payment["id"], "compensated_after_cn_failure",
+                        current_user.id, after_value={"error": cn_accounting_error},
+                    )
+                    raise HTTPException(status_code=500, detail={
+                        "code": "PAYMENT_CN_ACCOUNTING_FAILED",
+                        "message": (
+                            "Linked Credit Note accounting failed; payment "
+                            "reversed and CN voided. Retry after resolving "
+                            "the accounting error."
+                        ),
+                        "error": cn_accounting_error,
+                    })
         except Exception as e:
             print(f"Error creating credit note: {e}")
     # ============ END CREDIT NOTE ============
