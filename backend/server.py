@@ -607,6 +607,16 @@ async def setup_admin_account():
                     f"could not be created: {_pr_idx_err}."
                 )
 
+            # Phase 3A FINAL Section (uow): financial_operations ledger.
+            try:
+                from services.financial_operation import ensure_financial_operations_indexes
+                await ensure_financial_operations_indexes(db)
+            except Exception as _uow_idx_err:
+                logging.warning(
+                    "financial_operations indexes could not be created: "
+                    f"{_uow_idx_err}"
+                )
+
             logging.info("✅ Database indexes created successfully")
         except Exception as idx_error:
             logging.warning(f"⚠️  Index creation warning (may already exist): {str(idx_error)}")
