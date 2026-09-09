@@ -556,30 +556,38 @@ async def setup_admin_account():
                         },
                         name="uniq_converted_from_proforma_id_partial",
                     )
-                    # Verify the index actually exists before flipping ready.
+                    # Verify the index actually exists AND enforces uniqueness
+                    # before flipping ready.
                     idx_info = await db.invoices.index_information()
-                    if "uniq_converted_from_proforma_id_partial" in idx_info:
+                    pf_idx = idx_info.get("uniq_converted_from_proforma_id_partial")
+                    pf_ok = bool(pf_idx and pf_idx.get("unique") and pf_idx.get("partialFilterExpression"))
+                    # Also ensure a unique invoice_number index — protects
+                    # against concurrent duplicate allocation on conversion.
+                    num_ok = False
+                    try:
+                        await db.invoices.create_index(
+                            "invoice_number", unique=True,
+                            partialFilterExpression={
+                                "invoice_number": {"$exists": True, "$type": "string"},
+                                "document_type": {"$ne": "proforma"},
+                            },
+                            name="uniq_invoice_number_non_proforma_partial",
+                        )
+                        idx_info2 = await db.invoices.index_information()
+                        num_idx = idx_info2.get("uniq_invoice_number_non_proforma_partial")
+                        num_ok = bool(num_idx and num_idx.get("unique"))
+                    except Exception as _num_idx_err:
+                        logging.warning(
+                            "invoice_number unique index could not be "
+                            f"created: {_num_idx_err}. Migration required."
+                        )
+                    if pf_ok and num_ok:
                         app.state.proforma_conversion_ready = True
-                        # Also ensure a unique invoice_number index — protects
-                        # against concurrent duplicate allocation on conversion.
-                        try:
-                            await db.invoices.create_index(
-                                "invoice_number", unique=True,
-                                partialFilterExpression={
-                                    "invoice_number": {"$exists": True, "$type": "string"},
-                                    "document_type": {"$ne": "proforma"},
-                                },
-                                name="uniq_invoice_number_non_proforma_partial",
-                            )
-                        except Exception as _num_idx_err:
-                            logging.warning(
-                                "invoice_number unique index could not be "
-                                f"created: {_num_idx_err}"
-                            )
                     else:
                         logging.error(
-                            "Proforma unique index did not register; "
-                            "conversion remains NOT READY."
+                            "Proforma readiness deferred — one or more required "
+                            f"indexes not confirmed. pf_ok={pf_ok} num_ok={num_ok}. "
+                            "Migration required."
                         )
                 except Exception as _pf_idx_err:
                     logging.warning(
@@ -603,32 +611,27 @@ async def setup_admin_account():
         except Exception as idx_error:
             logging.warning(f"⚠️  Index creation warning (may already exist): {str(idx_error)}")
         
-        # Admin credentials from environment variables
-        admin_email = os.environ.get('ADMIN_EMAIL', 'admin@example.com')
-        admin_password = os.environ.get('ADMIN_PASSWORD', 'changeme123')
+        # Phase 3A FINAL Section H: DO NOT reset an existing administrator's
+        # credentials on ordinary startup. Preserve authorized accounts.
+        # Only CREATE a first-run admin when explicit env credentials are
+        # provided (no insecure fallback password).
+        admin_email = os.environ.get('ADMIN_EMAIL')
+        admin_password = os.environ.get('ADMIN_PASSWORD')
         admin_name = "Arjuna Arunatheym"
         admin_id_number = "ADMIN001"
-        
-        # Check if admin exists
+
         existing_admin = await db.users.find_one({"role": "admin"})
-        
-        # Hash password
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        hashed_password = pwd_context.hash(admin_password)
-        
+
         if existing_admin:
-            # Update existing admin
-            await db.users.update_one(
-                {"role": "admin"},
-                {"$set": {
-                    "email": admin_email,
-                    "password": hashed_password,
-                    "full_name": admin_name,
-                    "id_number": admin_id_number
-                }}
+            # Preserve credentials exactly as-is. No password reset, no
+            # email overwrite on ordinary startup.
+            logging.info(
+                "Admin account already provisioned; not modifying on startup."
             )
-            logging.info(f"✅ Admin account updated: {admin_email}")
-        else:
+        elif admin_email and admin_password:
+            # First-run provisioning only.
+            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            hashed_password = pwd_context.hash(admin_password)
             # Create new admin
             admin_doc = {
                 "id": str(uuid.uuid4()),
@@ -643,9 +646,13 @@ async def setup_admin_account():
             }
             await db.users.insert_one(admin_doc)
             logging.info(f"✅ Admin account created: {admin_email}")
-        
-        logging.info(f"Admin account ready: {admin_email}")
-        
+        else:
+            logging.warning(
+                "No admin exists and ADMIN_EMAIL/ADMIN_PASSWORD not set — "
+                "skipping insecure fallback provisioning. Provision via a "
+                "controlled process."
+            )
+
     except Exception as e:
         logging.error(f"❌ Failed to setup admin account: {str(e)}")
 

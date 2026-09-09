@@ -396,6 +396,35 @@ class SuperAdminFinancialCorrection:
                 "updated_at": now,
             }}
         )
+        # Section C: verify the invoice update actually landed. If not,
+        # roll back the accounting effects created by THIS operation and
+        # return recovery-required — do NOT report success.
+        _post_update_inv = await self.db.invoices.find_one(
+            {"id": invoice_id}, {"_id": 0, "total_amount": 1},
+        )
+        if not _post_update_inv or abs(float(_post_update_inv.get("total_amount") or 0) - new_total) > 0.01:
+            # Void the new journals we just created (this operation only).
+            for jid in accounting_effect.get("new_journal_ids", []) or []:
+                await self.db.journal_entries.update_one(
+                    {"id": jid},
+                    {"$set": {"status": "voided", "voided_at": now,
+                              "void_reason": "Invoice update did not persist"}},
+                )
+            # Re-activate the old journals we voided.
+            for je in voided_journal_snapshot or []:
+                await self.db.journal_entries.update_one(
+                    {"id": je["id"]},
+                    {"$set": {"status": je.get("status", "posted"),
+                              "updated_at": now},
+                     "$unset": {"voided_by": "", "voided_at": "",
+                                "void_reason": ""}},
+                )
+            raise FinancialSafetyError(
+                "INVOICE_VALUE_CORRECTION_RECOVERY_REQUIRED",
+                ("Invoice value update did not persist; new journals voided "
+                 "and prior journals restored. Retry after investigation."),
+                500,
+            )
         # Recompute canonical status from fresh snapshot.
         # Phase 3A Section V: TERMINAL statuses (voided/cancelled/deleted/
         # converted) MUST NOT be silently resurrected by a value correction.
@@ -671,7 +700,14 @@ class SuperAdminFinancialCorrection:
                 hard_failure = True
 
             if hard_failure:
-                # COMPENSATE: restore original CN + re-activate the old journals.
+                # COMPENSATE: void the new journal if one was created, and
+                # re-activate the old journals; restore the CN doc.
+                if new_journal_id:
+                    await self.db.journal_entries.update_one(
+                        {"id": new_journal_id},
+                        {"$set": {"status": "voided", "voided_at": now,
+                                  "void_reason": f"CN correction failed: {repost_error}"}},
+                    )
                 await self.db.credit_notes.update_one(
                     {"id": cn_id},
                     {"$set": {**{k: cn.get(k) for k in clean.keys()},

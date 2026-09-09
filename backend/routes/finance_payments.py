@@ -702,6 +702,9 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
                 # - void the CN we just issued
                 # - reverse the just-inserted payment
                 cn_accounting_error: Optional[str] = None
+                # Do NOT use `except ImportError: pass` — required accounting
+                # must fail hard. If the module is genuinely missing the
+                # deployment is misconfigured.
                 try:
                     result = await post_credit_note_issued(
                         credit_note=credit_note,
@@ -710,8 +713,8 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
                     )
                     if isinstance(result, dict) and result.get("error"):
                         cn_accounting_error = result.get("error")
-                except ImportError:
-                    pass  # Accounting not wired in this env — leave audit trail
+                    elif not isinstance(result, dict) or not result.get("journal_id"):
+                        cn_accounting_error = "ACCOUNTING_RETURNED_NO_JOURNAL"
                 except Exception as e:
                     cn_accounting_error = str(e)
 
@@ -754,6 +757,10 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
                         ),
                         "error": cn_accounting_error,
                     })
+        except HTTPException:
+            # Section A: DO NOT swallow the intentional compensation
+            # HTTPException raised by the CN-accounting-failed handler.
+            raise
         except Exception as e:
             print(f"Error creating credit note: {e}")
     # ============ END CREDIT NOTE ============
@@ -772,8 +779,11 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     
     await log_finance_action("payment", payment["id"], "created", current_user.id, after_value=payment)
     
-    # ============ ACCOUNTING AUTO-POST (Phase 2) ============
-    # Create journal entry for payment received
+    # ============ ACCOUNTING AUTO-POST (Phase 3A FINAL Section A) ============
+    # Required accounting for a payment is a HARD requirement. Failures must
+    # not be reported as success. Both raised exceptions and {"error": ...}
+    # returns compensate by reversing the just-inserted payment.
+    payment_accounting_error: Optional[str] = None
     try:
         accounting_result = await post_payment_received(
             payment=payment,
@@ -782,10 +792,100 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
             user_name=current_user.full_name,
             hrdcorp_fee_amount=(hrdcorp_fee if payment_type == "hrdcorp" else 0)
         )
-        if accounting_result.get("error"):
-            print(f"Accounting auto-post warning: {accounting_result.get('error')}")
+        if isinstance(accounting_result, dict) and accounting_result.get("error"):
+            payment_accounting_error = accounting_result.get("error")
+        elif not isinstance(accounting_result, dict) or not accounting_result.get("journal_id"):
+            payment_accounting_error = "ACCOUNTING_RETURNED_NO_JOURNAL"
     except Exception as e:
-        print(f"Accounting auto-post error: {str(e)}")
+        payment_accounting_error = str(e)
+
+    if payment_accounting_error:
+        now_iso = get_malaysia_time().isoformat()
+        # Reverse the just-inserted payment. Preserve original receipt + audit.
+        await db.payments.update_one(
+            {"id": payment["id"]},
+            {"$set": {
+                "status": "reversed",
+                "reversed_by": current_user.id,
+                "reversed_at": now_iso,
+                "reversal_reason": f"Payment accounting failed: {payment_accounting_error}",
+                "updated_at": now_iso,
+            }},
+        )
+        # Void any partial payment journal side-effect.
+        await db.journal_entries.update_many(
+            {"source_id": payment["id"], "source_module": "payment",
+             "status": {"$ne": "voided"}},
+            {"$set": {
+                "status": "voided",
+                "voided_by": current_user.id,
+                "voided_at": now_iso,
+                "void_reason": f"Payment accounting compensation: {payment_accounting_error}",
+                "updated_at": now_iso,
+            }},
+        )
+        # Also void the linked CN we created earlier (if any).
+        if credit_note_created:
+            await db.credit_notes.update_one(
+                {"id": credit_note_created["id"]},
+                {"$set": {
+                    "status": "voided",
+                    "voided_by": current_user.id,
+                    "voided_at": now_iso,
+                    "void_reason": f"Payment accounting compensation: {payment_accounting_error}",
+                    "updated_at": now_iso,
+                }},
+            )
+        # Roll back the invoice status flip if we just marked it paid.
+        if total_paid >= invoice.get("total_amount", 0):
+            await db.invoices.update_one(
+                {"id": payment_data.invoice_id},
+                {"$set": {"status": invoice.get("status"), "updated_at": now_iso}},
+            )
+        await log_finance_action(
+            "payment", payment["id"], "compensated_after_accounting_failure",
+            current_user.id, after_value={"error": payment_accounting_error},
+        )
+        raise HTTPException(status_code=500, detail={
+            "code": "PAYMENT_ACCOUNTING_FAILED",
+            "message": ("Payment accounting failed; payment reversed and "
+                        "linked CN voided. Retry after resolving the "
+                        "accounting error."),
+            "error": payment_accounting_error,
+        })
+
+    # Section A: derive invoice status from CANONICAL snapshot instead of
+    # inline arithmetic. Legitimate partial payments preserved.
+    try:
+        from services.financial_source_of_truth import FinancialSourceOfTruth
+        _sot = FinancialSourceOfTruth(db)
+        _snap = await _sot.get_invoice_snapshot(payment_data.invoice_id)
+        if _snap is not None:
+            _paid = float(_snap.get("paid_amount") or 0)
+            _outstanding = float(_snap.get("outstanding_amount") or 0)
+            _net = float(_snap.get("net_invoiced_value") or 0)
+            _cur = (invoice.get("status") or "").lower()
+            if _cur not in {"voided", "cancelled", "deleted", "converted"}:
+                if _outstanding <= 0.005 and _paid > 0:
+                    _new = "paid"
+                elif 0 < _paid < _net:
+                    _new = "partially_paid"
+                else:
+                    _new = _cur or "issued"
+                if _new != _cur:
+                    await db.invoices.update_one(
+                        {"id": payment_data.invoice_id},
+                        {"$set": {"status": _new,
+                                  "updated_at": get_malaysia_time().isoformat()}},
+                    )
+                    await db.sessions.update_one(
+                        {"invoice_id": payment_data.invoice_id},
+                        {"$set": {"invoice_status": _new}},
+                    )
+    except Exception as _sot_err:
+        # SoT is best-effort here; the accounting effect already landed
+        # so we do not fail the request.
+        print(f"SoT status derivation warning: {_sot_err}")
     # ============ END ACCOUNTING AUTO-POST ============
     
     # ============ EMAIL NOTIFICATION ============

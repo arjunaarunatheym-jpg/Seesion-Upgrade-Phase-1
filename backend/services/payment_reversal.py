@@ -199,9 +199,18 @@ class PaymentReversalService:
                     "reversal": existing,
                     "payment_id": payment_id,
                 }
+            # In-progress or recovery-required states — do NOT claim success.
+            state = (existing.get("status") if existing else "in_progress")
             return {
-                "message": "Reversal in progress by another request",
-                "code": "REVERSAL_IN_PROGRESS",
+                "message": (
+                    "Reversal already in progress or awaiting recovery"
+                    if state != "recovery_required"
+                    else "Prior reversal attempt requires ops recovery"
+                ),
+                "code": (
+                    "REVERSAL_IN_PROGRESS"
+                    if state != "recovery_required" else "REVERSAL_RECOVERY_REQUIRED"
+                ),
                 "payment_id": payment_id,
                 "idempotent": True,
             }
@@ -344,6 +353,26 @@ class PaymentReversalService:
                 "updated_at": now.isoformat(),
             }},
         )
+        # Section B: only return "successful reversal" when the payment
+        # status was ACTUALLY flipped by THIS request.
+        if claim.modified_count != 1:
+            existing = await self.db.payment_reversals.find_one(
+                {"payment_id": payment_id, "status": "completed"}, {"_id": 0},
+            )
+            if existing:
+                return {
+                    "message": "Payment already reversed (peer completed)",
+                    "idempotent": True,
+                    "reversal": existing,
+                    "payment_id": payment_id,
+                }
+            # Mark our reservation as recovery-required so ops can inspect.
+            await self.db.payment_reversals.update_one(
+                {"id": reversal_id},
+                {"$set": {"status": "recovery_required",
+                          "note": "final payment flip did not modify a row"}},
+            )
+            raise Exception("PAYMENT_REVERSAL_RECOVERY_REQUIRED")
         actions_taken.append(
             f"Payment RM {float(payment.get('amount') or 0):,.2f} reversed"
         )
@@ -355,7 +384,7 @@ class PaymentReversalService:
             {"id": reversal_id},
             {"$set": {
                 **reversal_record,
-                "status": "completed" if claim.modified_count == 1 else "duplicate_completed",
+                "status": "completed",
             }},
         )
         reversal_record.pop("_id", None)

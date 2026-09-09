@@ -2,7 +2,7 @@
  * PaymentsTab Component - Extracted from FinanceDashboard
  * Handles payment recording and recent payments listing
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { axiosInstance } from "../../App";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,14 +54,14 @@ const PaymentsTab = ({
   // Filter pending invoices for payment
   const pendingInvoices = invoices.filter(inv => inv.status === 'issued' || inv.status === 'partially_paid');
 
-  // Handle invoice selection and auto-fill amount from CANONICAL outstanding.
-  // Phase 3A FINAL Section 7: use a monotonically-increasing token so a
-  // late-arriving response for invoice A cannot overwrite the state now
-  // showing invoice B.
+  // Phase 3A FINAL Section F: use a useRef so a late response for invoice A
+  // cannot populate invoice B even during rapid state churn.
   const [outstandingReqToken, setOutstandingReqToken] = useState(0);
+  const outstandingReqRef = useRef(0);
   const [savingPayment, setSavingPayment] = useState(false);
   const handleInvoiceSelect = async (invoiceId) => {
-    const token = outstandingReqToken + 1;
+    outstandingReqRef.current += 1;
+    const token = outstandingReqRef.current;
     setOutstandingReqToken(token);
     setPaymentForm(prev => ({ ...prev, invoice_id: invoiceId, amount: '' }));
     setCanonicalOutstanding(null);
@@ -71,7 +71,7 @@ const PaymentsTab = ({
     try {
       const r = await axiosInstance.get(`/finance/source-of-truth/invoice/${invoiceId}/outstanding`);
       // Ignore stale responses.
-      if (token !== outstandingReqToken + 1) return;
+      if (token !== outstandingReqRef.current) return;
       const c = r.data || {};
       setCanonicalOutstanding(c);
       const defaultAmount = Number(c.outstanding_amount || 0);
@@ -81,13 +81,15 @@ const PaymentsTab = ({
           : prev
       ));
     } catch (err) {
-      // Phase 3A: NO unsafe fallback to invoice.total_amount.
+      if (token !== outstandingReqRef.current) return;
       setOutstandingError('Unable to verify outstanding amount from server. Please retry.');
       setPaymentForm(prev => (
         prev.invoice_id === invoiceId ? { ...prev, amount: '' } : prev
       ));
     } finally {
-      setOutstandingLoading(false);
+      if (token === outstandingReqRef.current) {
+        setOutstandingLoading(false);
+      }
     }
   };
 

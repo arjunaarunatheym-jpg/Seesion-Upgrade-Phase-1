@@ -584,6 +584,8 @@ async def issue_invoice(invoice_id: str, current_user: User = Depends(get_curren
     
     # ============ ACCOUNTING AUTO-POST (Phase 2) — HARD REQUIREMENT ==========
     accounting_error: Optional[str] = None
+    # Do NOT catch ImportError silently — required accounting cannot be
+    # optional. If the module is missing the deployment is misconfigured.
     try:
         updated_invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
         accounting_result = await post_invoice_issued(
@@ -594,8 +596,8 @@ async def issue_invoice(invoice_id: str, current_user: User = Depends(get_curren
         )
         if isinstance(accounting_result, dict) and accounting_result.get("error"):
             accounting_error = accounting_result.get("error")
-    except ImportError:
-        pass  # Accounting module not wired in this environment.
+        elif not isinstance(accounting_result, dict) or not accounting_result.get("journal_id"):
+            accounting_error = "ACCOUNTING_RETURNED_NO_JOURNAL"
     except Exception as e:
         accounting_error = str(e)
 
@@ -656,30 +658,30 @@ async def convert_proforma_to_invoice(invoice_id: str, current_user: User = Depe
     a second invoice. The converted proforma is TERMINAL and cannot receive
     further mutations.
     """
-    if current_user.role not in ["admin", "super_admin", "finance"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    # ---- Phase 3A Section 1: preflight readiness -----------------------
-    # If server startup detected converted_from_proforma_id duplicates,
-    # Proforma conversion is disabled until the ops team resolves them.
-    from starlette.requests import Request  # local import to avoid cycles
+    # Section E: FAIL-CLOSED readiness check. Any lookup failure defaults
+    # to NOT ready - do not silently allow conversion.
+    ready = False
     try:
         from server import app as _app_ref  # main app instance with state
-        ready = getattr(getattr(_app_ref, "state", None), "proforma_conversion_ready", True)
+        ready = bool(getattr(getattr(_app_ref, "state", None),
+                             "proforma_conversion_ready", False))
     except Exception:
-        ready = True
+        ready = False
     if not ready:
         raise HTTPException(
             status_code=503,
             detail={
                 "code": "PROFORMA_CONVERSION_GUARD_UNAVAILABLE",
                 "message": (
-                    "Proforma conversion is temporarily disabled: historical "
-                    "converted_from_proforma_id duplicates detected. "
+                    "Proforma conversion is temporarily unavailable. Either "
+                    "duplicate historical converted_from_proforma_id values "
+                    "exist, or a required unique index is not established. "
                     "Ops must audit and resolve before conversions resume."
                 ),
             },
         )
+    if current_user.role not in ["admin", "super_admin", "finance"]:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     proforma = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not proforma:
@@ -850,12 +852,10 @@ async def cancel_invoice(invoice_id: str, reason: str = "", current_user: User =
 
 @router.post("/invoices/{invoice_id}/revert-status")
 async def revert_invoice_status(invoice_id: str, target_status: str = "auto_draft", reason: str = "", current_user: User = Depends(get_current_user)):
-    """Revert invoice status (Admin only) - used to undo cancellations.
+    """Revert invoice status (Admin only) — cancelled → editable pre-issue.
 
-    PHASE 3A (Section C): normal Admin/Finance revert works ONLY for
-    invoices whose CURRENT status is 'cancelled'. Reverting an issued /
-    paid / voided invoice is prohibited — use the formal SuperAdmin
-    Reversal / Repair Status workflows instead.
+    Section D: enforce the intended current-status rule + use a CONDITIONAL
+    update so a stale request cannot rewrite a newer status.
     """
     if current_user.role not in ["admin", "super_admin"]:
         raise HTTPException(status_code=403, detail="Only admins can revert invoice status")
@@ -878,20 +878,27 @@ async def revert_invoice_status(invoice_id: str, target_status: str = "auto_draf
                 "invoice_status": cur_status,
             },
         )
+    if cur_status != "cancelled":
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_NOT_CANCELLED",
+            "message": "Only cancelled invoices can be reverted via this endpoint.",
+            "invoice_status": cur_status,
+        })
     
     allowed_targets = ["auto_draft", "draft", "finance_review"]
     if target_status not in allowed_targets:
         raise HTTPException(status_code=400, detail=f"Target status must be one of: {allowed_targets}")
     
-    old_status = invoice.get("status")
-    await db.invoices.update_one(
-        {"id": invoice_id},
+    now_iso = get_malaysia_time().isoformat()
+    # Conditional update — do not overwrite if concurrent request shifted status.
+    claim = await db.invoices.update_one(
+        {"id": invoice_id, "status": "cancelled"},
         {"$set": {
             "status": target_status,
-            "updated_at": get_malaysia_time().isoformat(),
+            "updated_at": now_iso,
             "revert_reason": reason,
             "reverted_by": current_user.id,
-            "reverted_at": get_malaysia_time().isoformat()
+            "reverted_at": now_iso
         },
         "$unset": {
             "cancelled_by": "",
@@ -899,12 +906,17 @@ async def revert_invoice_status(invoice_id: str, target_status: str = "auto_draf
             "cancellation_reason": ""
         }}
     )
+    if claim.modified_count == 0:
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_REVERT_CONFLICT",
+            "message": "Invoice status changed since read; refresh and retry.",
+        })
     
     await db.sessions.update_one({"invoice_id": invoice_id}, {"$set": {"invoice_status": target_status}})
     await log_finance_action("invoice", invoice_id, "status_reverted", current_user.id,
-                            {"status": old_status}, {"status": target_status, "reason": reason})
+                            {"status": cur_status}, {"status": target_status, "reason": reason})
     
-    return {"message": f"Invoice {invoice.get('invoice_number')} reverted from '{old_status}' to '{target_status}'"}
+    return {"message": f"Invoice {invoice.get('invoice_number')} reverted from '{cur_status}' to '{target_status}'"}
 
 
 @router.post("/invoices/revert-batch")
@@ -1758,12 +1770,21 @@ async def delete_invoice(
     status = invoice.get("status", "")
     is_additional = invoice.get("is_additional_invoice", False)
     
-    # Check if this is an issued/paid invoice - block hard-delete of historical evidence.
+    # Section D: block DELETION of issued/paid/voided/cancelled/converted
+    # invoices via this ordinary path. Historical evidence must be preserved
+    # — use the controlled SuperAdmin Void / Repair Status workflow instead.
     from services.financial_write_guard import is_production_mode
     financial_statuses = {"issued", "partially_paid", "paid", "voided", "cancelled", "converted"}
     if status in financial_statuses and is_production_mode():
-        # Soft-delete is fine (status='deleted' below) but we MUST NOT wipe CNs/payments.
-        pass  # continue to soft-delete branch below; guarded by "don't wipe CNs" below.
+        raise HTTPException(status_code=409, detail={
+            "code": "INVOICE_DELETE_BLOCKED",
+            "message": (
+                f"Cannot delete an invoice with status {status!r} via the "
+                "normal delete endpoint. Historical evidence is preserved. "
+                "Use the SuperAdmin Void workflow for exceptional cases."
+            ),
+            "invoice_status": status,
+        })
     
     # Create audit trail entry BEFORE deleting
     record_ref = f"{invoice_number} - {company_name} - RM {total_amount:,.2f}"

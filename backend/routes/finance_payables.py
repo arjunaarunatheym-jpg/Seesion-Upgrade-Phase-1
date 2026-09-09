@@ -1030,19 +1030,24 @@ async def get_pending_marketing_commissions(current_user: User = Depends(get_cur
         else:
             calculated_amount = round(float(comm.get("fixed_amount") or 0.0), 2)
         
-        # Always update if there's a discrepancy
-        if abs(calculated_amount - (comm.get("calculated_amount") or 0)) > 0.01:
-            await db.marketing_commissions.update_one(
-                {"id": comm.get("id")},
-                {"$set": {"calculated_amount": calculated_amount, "updated_at": get_malaysia_time().isoformat()}}
-            )
+        # Section G: DO NOT write during a GET request. Any discrepancy is
+        # surfaced via `calculated_discrepancy` on the payload for a
+        # separately authorized recalculation flow. Preserves paid history
+        # and existing commission policy.
+        stored = float(comm.get("calculated_amount") or 0)
+        if abs(calculated_amount - stored) > 0.01:
+            comm["calculated_discrepancy"] = {
+                "stored": stored, "computed": calculated_amount,
+            }
         
         user = await db.users.find_one({"id": comm.get("marketing_user_id")}, {"_id": 0, "full_name": 1})
         comm["marketing_user_name"] = user.get("full_name") if user else "Unknown"
         comm["session_name"] = session_info.get("name", "Unknown Session")
         comm["session_start_date"] = session_info.get("start_date")
         comm["company_name"] = company_map.get(session_info.get("company_id"), "Unknown Company")
-        comm["calculated_amount"] = calculated_amount
+        # Display the freshly computed value so the UI stays consistent;
+        # the stored value is preserved for the paid-record trail.
+        comm["computed_amount_preview"] = calculated_amount
         result.append(comm)
     
     return result
