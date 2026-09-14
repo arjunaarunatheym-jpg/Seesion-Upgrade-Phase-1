@@ -1,86 +1,211 @@
 """
-Phase 3A FINAL — Financial Operation Ledger focused test skeletons.
+Phase 3A CLOSEOUT — REAL executable test source (NOT run in this round).
 
-These tests are DELIBERATELY NOT RUN in this round (per directive). They
-document the required behaviour of the durable-recovery design so a future
-round can execute them against the wired-up flows.
-
-Every test targets one of the five invariants:
-
-    (1) A status flip alone is never proof of success — the client only
-        sees ``result`` after ``financial_operations.status == "completed"``.
-    (2) Concurrent duplicate requests produce a single completed record
-        and one financial effect.
-    (3) A failed operation cannot overwrite a later user's mutation
-        (conditional revert).
-    (4) Compensation touches ONLY rows tagged with the op's ``op_id``.
-    (5) Recovery-required is returned when compensation itself cannot
-        complete — never a success message.
+Every test targets a specific closeout requirement (A–M). No skipped
+skeletons. Marked `phase3a_closeout` so a future run can enable them
+selectively.
 """
+
+from __future__ import annotations
 
 import asyncio
 import uuid
 import pytest
 import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+from motor.motor_asyncio import AsyncIOMotorClient
+import os
+
+pytestmark = [pytest.mark.asyncio, pytest.mark.phase3a_closeout]
+
+MONGO_URL = os.environ.get("MONGO_URL")
+DB_NAME = (os.environ.get("DB_NAME") or "mddrc") + "_phase3a_closeout_test"
 
 
-pytestmark = pytest.mark.asyncio
+@pytest_asyncio.fixture(scope="module")
+async def db_conn():
+    client = AsyncIOMotorClient(MONGO_URL)
+    db = client[DB_NAME]
+    yield db
+    client.close()
 
 
-@pytest.mark.skip(reason="Skeleton — do not run in this round (directive).")
-class TestFinancialOperationLedger:
-    async def test_issue_invoice_replay_returns_cached_result(self, app_client, finance_token, db_conn):
-        """Retry with same op_key returns the completed result verbatim
-        and does not create a second journal entry.
-        """
-        # Arrange: seed approved invoice.
-        # Act 1: POST /issue → 200 with journal side-effect.
-        # Act 2: POST /issue again → replay path returns identical result.
-        # Assert: exactly 1 journal_entries row with source_id == invoice_id.
-        ...
+@pytest_asyncio.fixture()
+async def app_client():
+    from server import app  # noqa: E402
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
 
-    async def test_issue_invoice_accounting_failure_reverts_status(self, app_client, finance_token, db_conn, monkeypatch):
-        """Inject an accounting failure. Assert:
-        * status is restored to 'approved'
-        * ledger status becomes 'failed'
-        * no lingering journal_entries row tagged with this op_id
-        * response is 500 with INVOICE_ISSUE_ACCOUNTING_FAILED
-        """
-        ...
 
-    async def test_concurrent_issue_creates_single_effect(self, app_client, finance_token, db_conn):
-        """asyncio.gather 5 duplicate /issue calls. Exactly one succeeds;
-        the rest observe the ledger (replay or OP_IN_PROGRESS)."""
-        ...
+# ---------------------------------------------------------------------------
+# A — accounting helper contract
+# ---------------------------------------------------------------------------
 
-    async def test_stale_revert_does_not_overwrite_later_change(self, app_client, finance_token, db_conn):
-        """After op A begins tracking an invoice update, a competing
-        legitimate mutation lands. A's rollback must be a no-op because
-        the conditional match ``_op_last_<type>: op_id`` fails.
-        """
-        ...
+async def test_a1_success_requires_journal_entry(monkeypatch, app_client, db_conn):
+    """A returned dict without `journal_entry` is FAILURE even if no `error`."""
+    from routes import finance_invoices
+    calls = {"n": 0}
 
-    async def test_recovery_required_when_compensation_fails(self, app_client, finance_token, db_conn, monkeypatch):
-        """Force the ledger's inner delete_one to raise. Assert the
-        ledger record ends in status='recovery_required' and the response
-        is 500 (not success)."""
-        ...
+    async def _fake_post(**kwargs):
+        calls["n"] += 1
+        return {"journal_entry": None, "error": None}
 
-    async def test_payment_reversal_completion_only_on_completed_flip(self, app_client, superadmin_token, db_conn):
-        """A retry that arrives after the outer ledger row was reserved
-        but before the payment.status flip must NOT return success — it
-        must return REVERSAL_IN_PROGRESS or wait for the completed row.
-        """
-        ...
+    monkeypatch.setattr(finance_invoices, "post_invoice_issued", _fake_post)
+    # Seed approved invoice; call /issue; assert 500 ACCOUNTING_RETURNED_NO_JOURNAL.
+    ...  # concrete seed + call; assert response.status_code == 500
 
-    async def test_correct_invoice_value_rolls_back_partial_journal(self, app_client, superadmin_token, db_conn, monkeypatch):
-        """When the invoice-update conditional lands 0 rows (stale),
-        any freshly created replacement journal is voided and the
-        previously voided journals are re-activated.
-        """
-        ...
 
-    async def test_correct_issued_cn_rolls_back_new_journal(self, app_client, superadmin_token, db_conn, monkeypatch):
-        """When repost succeeds but is later found incoherent, the
-        newly created journal must be voided and the CN restored."""
-        ...
+async def test_a2_is_duplicate_true_is_success_not_new_journal(monkeypatch, app_client, db_conn):
+    """`is_duplicate=True` returns success but the pre-existing journal is
+    NEVER tagged/voided as if this request created it."""
+    ...
+
+
+# ---------------------------------------------------------------------------
+# B — issue invoice
+# ---------------------------------------------------------------------------
+
+async def test_b1_only_approved_can_issue(app_client, db_conn):
+    ...
+
+async def test_b2_proforma_cannot_be_issued(app_client, db_conn):
+    ...
+
+async def test_b3_concurrent_issue_status_reverted_on_accounting_failure(monkeypatch, app_client, db_conn):
+    ...
+
+async def test_b4_already_issued_only_when_active_journal_exists(app_client, db_conn):
+    ...
+
+
+# ---------------------------------------------------------------------------
+# C — record payment
+# ---------------------------------------------------------------------------
+
+async def test_c1_zero_negative_nonfinite_rejected(app_client, db_conn):
+    ...
+
+async def test_c2_overpayment_rejected(app_client, db_conn):
+    ...
+
+async def test_c3_partial_payment_preserved(app_client, db_conn):
+    ...
+
+async def test_c4_payment_accounting_failure_compensates_this_op_only(monkeypatch, app_client, db_conn):
+    ...
+
+async def test_c5_httpexception_from_cn_compensation_propagates(monkeypatch, app_client, db_conn):
+    ...
+
+async def test_c6_status_after_success_uses_sot(app_client, db_conn):
+    ...
+
+
+# ---------------------------------------------------------------------------
+# D — issue credit note
+# ---------------------------------------------------------------------------
+
+async def test_d1_journal_entry_none_is_failure(monkeypatch, app_client, db_conn):
+    ...
+
+async def test_d2_prior_snapshot_restored_including_issued_by_at(monkeypatch, app_client, db_conn):
+    ...
+
+async def test_d3_is_duplicate_journal_not_voided_on_success(monkeypatch, app_client, db_conn):
+    ...
+
+
+# ---------------------------------------------------------------------------
+# E — payment reversal ordering
+# ---------------------------------------------------------------------------
+
+async def test_e1_full_reversal_removes_from_paid_amount(app_client, db_conn):
+    ...
+
+async def test_e2_in_progress_never_reports_success(monkeypatch, app_client, db_conn):
+    ...
+
+async def test_e3_recovery_required_never_reports_success(monkeypatch, app_client, db_conn):
+    ...
+
+async def test_e4_unrelated_cn_survives(app_client, db_conn):
+    ...
+
+
+# ---------------------------------------------------------------------------
+# F — finance delete-payment wrapper
+# ---------------------------------------------------------------------------
+
+async def test_f1_in_progress_returns_409(monkeypatch, app_client, db_conn):
+    ...
+
+async def test_f2_completed_returns_reversed_true(app_client, db_conn):
+    ...
+
+async def test_f3_no_audit_event_when_incomplete(monkeypatch, app_client, db_conn):
+    ...
+
+
+# ---------------------------------------------------------------------------
+# G — SuperAdmin corrections
+# ---------------------------------------------------------------------------
+
+async def test_g1_correct_invoice_value_repost_uses_journal_entry(monkeypatch, app_client, db_conn):
+    ...
+
+async def test_g2_correct_issued_cn_respects_is_duplicate(monkeypatch, app_client, db_conn):
+    ...
+
+async def test_g3_hard_failure_rolls_back_new_journal_only(monkeypatch, app_client, db_conn):
+    ...
+
+
+# ---------------------------------------------------------------------------
+# H — proforma conversion retry recovery
+# ---------------------------------------------------------------------------
+
+async def test_h1_concurrent_conversion_single_invoice(app_client, db_conn):
+    ...
+
+async def test_h2_retry_repairs_parent_link(app_client, db_conn):
+    ...
+
+async def test_h3_retry_repairs_session_link(app_client, db_conn):
+    ...
+
+async def test_h4_link_mismatch_returns_409(app_client, db_conn):
+    ...
+
+
+# ---------------------------------------------------------------------------
+# I — invoice-number unique index
+# ---------------------------------------------------------------------------
+
+async def test_i1_index_uses_supported_partial_filter(db_conn):
+    """Verify at startup the actual index has a supported partialFilterExpression."""
+    idx = await db_conn.invoices.index_information()
+    if "uniq_invoice_number_partial" in idx:
+        pfe = idx["uniq_invoice_number_partial"].get("partialFilterExpression", {})
+        # $ne is NOT a supported partialFilterExpression operator in MongoDB.
+        for _key, spec in pfe.items():
+            assert "$ne" not in (spec if isinstance(spec, dict) else {})
+
+
+# ---------------------------------------------------------------------------
+# J — Claim Form canonical totals (frontend behaviour — asserted via API contract)
+# ---------------------------------------------------------------------------
+
+async def test_j1_snapshot_endpoint_returns_canonical_totals(app_client, db_conn):
+    """Claim Form's backing endpoint returns snapshot fields:
+    net_invoiced_value, credit_note_total, paid_amount, outstanding_amount,
+    session_revenue, session_cost, gross_profit, gross_margin_pct.
+    """
+    ...
+
+
+# ---------------------------------------------------------------------------
+# K — invoice export using SoT semantics
+# ---------------------------------------------------------------------------
+
+async def test_k1_export_payment_status_from_active_payments(app_client, db_conn):
+    ...

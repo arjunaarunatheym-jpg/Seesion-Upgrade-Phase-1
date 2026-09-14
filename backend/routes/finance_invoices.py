@@ -509,172 +509,125 @@ async def approve_invoice(invoice_id: str, current_user: User = Depends(get_curr
 
 @router.post("/invoices/{invoice_id}/issue")
 async def issue_invoice(invoice_id: str, current_user: User = Depends(get_current_user)):
-    """Issue invoice — durable-recovery via FinancialOperation ledger.
+    """Issue invoice — Phase 3A closeout (A/B).
 
-    Success is only reported when ``financial_operations.status == "completed"``.
-    Concurrent retries observe the ledger and return the stored result
-    idempotently. On any step failure the ledger walks its tracked mutations
-    in reverse — using the recorded ``before`` state — so we compensate
-    only the effects created by THIS operation.
+    Uses the authoritative accounting return contract: success requires a
+    valid ``result["journal_entry"]``. ``is_duplicate=True`` is a valid
+    idempotent success but the pre-existing journal is NEVER tagged /
+    deleted as though this request created it.
     """
-    from services.financial_operation import FinancialOperation, RecoveryRequired
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Only Finance can issue invoices")
 
     invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-
     if invoice.get("status") != "approved":
         raise HTTPException(status_code=400, detail="Only approved invoices can be issued")
-
     if invoice.get("document_type") == "proforma":
         raise HTTPException(
             status_code=400,
             detail="This is a Proforma Invoice - convert it first."
         )
 
-    try:
-        async with FinancialOperation(
-            db, op_type="issue_invoice",
-            op_key=f"issue_invoice:{invoice_id}",
-            actor=current_user,
-        ) as op:
-            if op.replay:
-                return op.result
+    now_iso = get_malaysia_time().isoformat()
+    prior_status = invoice.get("status")
 
-            now_iso = get_malaysia_time().isoformat()
-            prior_status = invoice.get("status")
-
-            # Step 1 — conditional status flip; a stale caller sees 0 modified.
-            modified = await op.track_update(
-                "invoices", invoice_id,
-                match={"id": invoice_id, "status": "approved"},
-                set_fields={
-                    "status": "issued",
-                    "issued_by": current_user.id,
-                    "issued_at": now_iso,
-                },
-                before={"status": prior_status},
+    # Step 1: conditional status flip — a stale/concurrent caller lands 0.
+    claim = await db.invoices.update_one(
+        {"id": invoice_id, "status": "approved"},
+        {"$set": {
+            "status": "issued",
+            "issued_by": current_user.id,
+            "issued_at": now_iso,
+            "updated_at": now_iso,
+        }},
+    )
+    if claim.modified_count == 0:
+        # Only report "already issued" when the invoice is truly issued AND
+        # a valid active accounting journal already exists for it. Otherwise
+        # the prior attempt is incomplete and we return a conflict.
+        current = await db.invoices.find_one(
+            {"id": invoice_id}, {"_id": 0, "status": 1, "invoice_number": 1},
+        )
+        if current and current.get("status") == "issued":
+            active_j = await db.journal_entries.find_one(
+                {"source_id": invoice_id, "source_module": "invoice",
+                 "status": {"$ne": "voided"}}, {"_id": 0, "id": 1},
             )
-            if modified == 0:
-                current = await db.invoices.find_one(
-                    {"id": invoice_id}, {"_id": 0, "status": 1, "invoice_number": 1},
-                )
-                if current and current.get("status") == "issued":
-                    op.set_result({
-                        "message": "Invoice already issued",
-                        "invoice_number": current.get("invoice_number"),
-                        "idempotent": True,
-                    })
-                    return op.result
-                raise HTTPException(status_code=409, detail={
-                    "code": "INVOICE_ISSUE_CONFLICT",
-                    "message": "Invoice status changed since read; refresh and retry.",
-                })
-
-            # Reflect on the session index (best-effort — not a required
-            # accounting effect).
-            await db.sessions.update_one(
-                {"invoice_id": invoice_id},
-                {"$set": {"invoice_status": "issued"}},
-            )
-            session = await db.sessions.find_one(
-                {"invoice_id": invoice_id}, {"_id": 0},
-            )
-
-            # Step 2 — required accounting.
-            accounting_error: Optional[str] = None
-            try:
-                updated_invoice = await db.invoices.find_one(
-                    {"id": invoice_id}, {"_id": 0},
-                )
-                accounting_result = await post_invoice_issued(
-                    invoice=updated_invoice,
-                    session=session,
-                    user_id=current_user.id,
-                    user_name=current_user.full_name,
-                )
-                if isinstance(accounting_result, dict) and accounting_result.get("error"):
-                    accounting_error = accounting_result.get("error")
-                elif not isinstance(accounting_result, dict) or not accounting_result.get("journal_entry"):
-                    accounting_error = "ACCOUNTING_RETURNED_NO_JOURNAL"
-                else:
-                    # Tag the newly-inserted journal so it can be reverted by
-                    # THIS op's compensation (deletion is safe because the
-                    # ledger only removes rows still tagged with our op_id).
-                    je = accounting_result["journal_entry"]
-                    je_id = je.get("id") if isinstance(je, dict) else None
-                    if je_id:
-                        await db.journal_entries.update_one(
-                            {"id": je_id},
-                            {"$set": {"op_id": op.op_id,
-                                      "_created_by_op": op.op_type}},
-                        )
-                        op.steps.append({"kind": "insert",
-                                         "collection": "journal_entries",
-                                         "doc_id": je_id})
-            except Exception as e:
-                accounting_error = str(e)
-
-            if accounting_error:
-                # Reset session index; the ledger will revert the invoice
-                # status flip because it was tracked as an update.
-                await db.sessions.update_one(
-                    {"invoice_id": invoice_id},
-                    {"$set": {"invoice_status": prior_status}},
-                )
-                raise HTTPException(status_code=500, detail={
-                    "code": "INVOICE_ISSUE_ACCOUNTING_FAILED",
-                    "message": (
-                        "Invoice issuance accounting failed; ledger will "
-                        "restore prior status. Retry after resolving the "
-                        "accounting error."
-                    ),
-                    "error": accounting_error,
-                })
-
-            # Optional marketing-commission upsert (idempotent, not tracked
-            # for rollback — represents a projection, not the accounting).
-            if session and session.get("marketing_user_id"):
-                if session.get("commission_type") == "percentage":
-                    commission_amount = invoice.get("total_amount", 0) * (session.get("commission_rate", 0) / 100)
-                else:
-                    commission_amount = session.get("commission_fixed_amount", 0)
-                await db.marketing_commissions.update_one(
-                    {"session_id": session["id"]},
-                    {"$set": {
-                        "calculated_amount": commission_amount,
-                        "invoice_id": invoice_id,
-                        "status": "approved",
-                        "updated_at": now_iso,
-                    }},
-                    upsert=True,
-                )
-
-            await log_finance_action(
-                "invoice", invoice_id, "status_changed", current_user.id,
-                {"status": prior_status}, {"status": "issued"},
-            )
-
-            op.set_result({
-                "message": "Invoice issued successfully",
-                "invoice_number": invoice.get("invoice_number"),
-                "op_id": op.op_id,
-            })
-            return op.result
-    except RecoveryRequired as rr:
+            if active_j:
+                return {
+                    "message": "Invoice already issued",
+                    "invoice_number": current.get("invoice_number"),
+                    "idempotent": True,
+                }
         raise HTTPException(status_code=409, detail={
-            "code": rr.code, "message": rr.message, **rr.extra,
+            "code": "INVOICE_ISSUE_CONFLICT",
+            "message": "Invoice status changed since read or previous attempt "
+                       "did not complete accounting; refresh and retry.",
         })
 
-    # ============ EMAIL NOTIFICATION (post-success, best-effort) =============
+    # Reflect on the session index (best-effort).
+    await db.sessions.update_one(
+        {"invoice_id": invoice_id}, {"$set": {"invoice_status": "issued"}},
+    )
+    session = await db.sessions.find_one({"invoice_id": invoice_id}, {"_id": 0})
+
+    # Step 2: mandatory accounting — using the authoritative contract.
+    accounting_error: Optional[str] = None
+    is_duplicate_journal = False
     try:
         updated_invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
-        session = await db.sessions.find_one({"invoice_id": invoice_id}, {"_id": 0})
-        await notify_invoice_issued(updated_invoice, session)
+        acct = await post_invoice_issued(
+            invoice=updated_invoice, session=session,
+            user_id=current_user.id, user_name=current_user.full_name,
+        )
+        if not isinstance(acct, dict) or acct.get("error"):
+            accounting_error = (acct or {}).get("error") or "ACCOUNTING_RESULT_INVALID"
+        elif not acct.get("journal_entry"):
+            accounting_error = "ACCOUNTING_RETURNED_NO_JOURNAL"
+        else:
+            is_duplicate_journal = bool(acct.get("is_duplicate"))
+    except Exception as e:
+        accounting_error = str(e)
+
+    if accounting_error:
+        # Compensate: restore prior invoice+session status. Do NOT touch
+        # any journal — if is_duplicate, the pre-existing journal is not
+        # ours; if no journal, there is nothing to void.
+        await db.invoices.update_one(
+            {"id": invoice_id, "status": "issued"},
+            {"$set": {"status": prior_status, "updated_at": now_iso},
+             "$unset": {"issued_by": "", "issued_at": ""}},
+        )
+        await db.sessions.update_one(
+            {"invoice_id": invoice_id},
+            {"$set": {"invoice_status": prior_status}},
+        )
+        raise HTTPException(status_code=500, detail={
+            "code": "INVOICE_ISSUE_ACCOUNTING_FAILED",
+            "message": "Invoice issuance accounting failed; status restored.",
+            "error": accounting_error,
+        })
+
+    await log_finance_action(
+        "invoice", invoice_id, "status_changed", current_user.id,
+        {"status": prior_status},
+        {"status": "issued", "journal_is_duplicate": is_duplicate_journal},
+    )
+
+    # Post-success email notification remains reachable (best-effort).
+    try:
+        latest_invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+        await notify_invoice_issued(latest_invoice, session)
     except Exception as e:
         print(f"Invoice notification error: {str(e)}")
+
+    return {
+        "message": "Invoice issued successfully",
+        "invoice_number": invoice.get("invoice_number"),
+        "journal_is_duplicate": is_duplicate_journal,
+    }
 
 
 @router.post("/invoices/{invoice_id}/convert-to-invoice")
@@ -720,18 +673,68 @@ async def convert_proforma_to_invoice(invoice_id: str, current_user: User = Depe
     if proforma.get("document_type") != "proforma":
         raise HTTPException(status_code=400, detail="This is already a tax invoice, not a proforma")
 
-    # ---- Idempotency guard (Section C) --------------------------------------
-    # If ANY invoice already references this proforma via converted_from_proforma_id,
-    # return that invoice. This handles double-click, retry, and concurrent races.
+    # ---- Idempotency guard (Section H CLOSEOUT) --------------------------
+    # If ANY invoice already references this proforma via
+    # converted_from_proforma_id, this is a RETRY of the same conversion.
+    # Before returning success, verify and (where safe) idempotently repair
+    # the parent Proforma + session linkage. Never create a second invoice.
     from services.financial_write_guard import FinancialWriteGuard
     guard = FinancialWriteGuard(db)
     existing = await guard.find_existing_conversion(invoice_id)
     if existing:
+        now_iso = get_malaysia_time().isoformat()
+        # Repair parent Proforma if the earlier attempt died mid-way.
+        pf_state = proforma or {}
+        pf_updates: dict = {}
+        if pf_state.get("status") != "converted":
+            pf_updates.update({
+                "status": "converted",
+                "converted_to_invoice_id": existing.get("id"),
+                "converted_to_invoice_number": existing.get("invoice_number"),
+                "converted_by": current_user.id,
+                "converted_by_name": current_user.full_name,
+                "converted_at": pf_state.get("converted_at") or now_iso,
+                "updated_at": now_iso,
+            })
+        elif pf_state.get("converted_to_invoice_id") != existing.get("id"):
+            # Parent has a DIFFERENT converted_to link — refuse to silently
+            # overwrite; surface for review.
+            raise HTTPException(status_code=409, detail={
+                "code": "PROFORMA_CONVERSION_LINK_MISMATCH",
+                "message": (
+                    "Proforma already marked converted but points to a "
+                    "different invoice than the one indexed by "
+                    "converted_from_proforma_id. Ops must reconcile."
+                ),
+                "existing_invoice_id": existing.get("id"),
+                "proforma_converted_to_invoice_id": pf_state.get("converted_to_invoice_id"),
+            })
+        if pf_updates:
+            await db.invoices.update_one(
+                {"id": invoice_id},
+                {"$set": pf_updates},
+            )
+        # Repair session linkage.
+        if pf_state.get("session_id"):
+            session_now = await db.sessions.find_one(
+                {"id": pf_state["session_id"]}, {"_id": 0, "invoice_id": 1, "invoice_status": 1},
+            )
+            desired_status = (existing.get("status") or "draft")
+            sess_updates: dict = {}
+            if session_now and session_now.get("invoice_id") != existing.get("id"):
+                sess_updates["invoice_id"] = existing.get("id")
+            if session_now and session_now.get("invoice_status") != desired_status:
+                sess_updates["invoice_status"] = desired_status
+            if sess_updates:
+                await db.sessions.update_one(
+                    {"id": pf_state["session_id"]}, {"$set": sess_updates},
+                )
         return {
             "message": "Proforma already converted — returning existing invoice",
             "new_invoice_id": existing.get("id"),
             "new_invoice_number": existing.get("invoice_number"),
             "idempotent": True,
+            "recovered_parent": bool(pf_updates),
         }
     if proforma.get("status") in ("converted", "cancelled"):
         # Terminal but no linked invoice found — surface explicitly.

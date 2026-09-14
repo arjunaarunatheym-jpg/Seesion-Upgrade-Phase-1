@@ -341,10 +341,17 @@ class SuperAdminFinancialCorrection:
                 if isinstance(repost, dict):
                     if repost.get("error"):
                         repost_error = repost.get("error")
-                    elif repost.get("journal_id"):
-                        new_journal_ids.append(repost["journal_id"])
-                    else:
+                    elif not repost.get("journal_entry"):
                         repost_error = "ACCOUNTING_RETURNED_NO_JOURNAL"
+                    else:
+                        # Section G CLOSEOUT: only tag as new when NOT a
+                        # duplicate. is_duplicate means the existing journal
+                        # is pre-existing history, not our creation.
+                        if not repost.get("is_duplicate"):
+                            je = repost["journal_entry"]
+                            j_id = je.get("id") if isinstance(je, dict) else None
+                            if j_id:
+                                new_journal_ids.append(j_id)
             except ImportError:
                 if voided_journal_snapshot:
                     repost_error = "ACCOUNTING_LAYER_UNAVAILABLE"
@@ -677,21 +684,21 @@ class SuperAdminFinancialCorrection:
                     user_id=getattr(user, "id", None),
                     user_name=getattr(user, "full_name", None),
                 )
+                # Section G CLOSEOUT: use `journal_entry`, not `journal_id`.
+                # `is_duplicate=True` means the existing journal is NOT ours;
+                # do NOT track/void it as compensation.
                 if isinstance(repost, dict):
-                    new_journal_id = repost.get("journal_id")
                     if repost.get("error"):
                         repost_error = repost.get("error")
                         hard_failure = True
-                    elif not new_journal_id:
-                        # Accounting call returned no journal id — treat as
-                        # incomplete accounting.
+                    elif not repost.get("journal_entry"):
                         repost_error = "ACCOUNTING_RETURNED_NO_JOURNAL"
                         hard_failure = True
+                    else:
+                        if not repost.get("is_duplicate"):
+                            je = repost["journal_entry"]
+                            new_journal_id = je.get("id") if isinstance(je, dict) else None
             except ImportError:
-                # Accounting layer genuinely missing — treat as soft only
-                # when the CN wasn't previously journalled. If old journals
-                # DID exist and were voided, we cannot leave the CN corrected
-                # with no accounting; roll back.
                 if active_journal_ids:
                     repost_error = "ACCOUNTING_LAYER_UNAVAILABLE"
                     hard_failure = True

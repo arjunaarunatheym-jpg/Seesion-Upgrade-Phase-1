@@ -561,20 +561,20 @@ async def setup_admin_account():
                     idx_info = await db.invoices.index_information()
                     pf_idx = idx_info.get("uniq_converted_from_proforma_id_partial")
                     pf_ok = bool(pf_idx and pf_idx.get("unique") and pf_idx.get("partialFilterExpression"))
-                    # Also ensure a unique invoice_number index — protects
-                    # against concurrent duplicate allocation on conversion.
+                    # Phase 3A CLOSEOUT (I): use only MongoDB-supported
+                    # partialFilterExpression operators. Uniqueness applies
+                    # wherever `invoice_number` exists as a string.
                     num_ok = False
                     try:
                         await db.invoices.create_index(
                             "invoice_number", unique=True,
                             partialFilterExpression={
                                 "invoice_number": {"$exists": True, "$type": "string"},
-                                "document_type": {"$ne": "proforma"},
                             },
-                            name="uniq_invoice_number_non_proforma_partial",
+                            name="uniq_invoice_number_partial",
                         )
                         idx_info2 = await db.invoices.index_information()
-                        num_idx = idx_info2.get("uniq_invoice_number_non_proforma_partial")
+                        num_idx = idx_info2.get("uniq_invoice_number_partial")
                         num_ok = bool(num_idx and num_idx.get("unique"))
                     except Exception as _num_idx_err:
                         logging.warning(
@@ -607,15 +607,9 @@ async def setup_admin_account():
                     f"could not be created: {_pr_idx_err}."
                 )
 
-            # Phase 3A FINAL Section (uow): financial_operations ledger.
-            try:
-                from services.financial_operation import ensure_financial_operations_indexes
-                await ensure_financial_operations_indexes(db)
-            except Exception as _uow_idx_err:
-                logging.warning(
-                    "financial_operations indexes could not be created: "
-                    f"{_uow_idx_err}"
-                )
+            # Phase 3A FINAL Section (uow): DEPRECATED — experimental
+            # financial_operations ledger no longer wired. Kept as an
+            # unused historical file; do not extend.
 
             logging.info("✅ Database indexes created successfully")
         except Exception as idx_error:
