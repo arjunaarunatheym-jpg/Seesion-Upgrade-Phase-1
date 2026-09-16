@@ -294,10 +294,22 @@ async def export_invoices(
 ):
     """Export invoices data as actual Excel (.xlsx) file.
 
-    MINI PHASE 2 (K): ALL financial figures come from the canonical
+    MINI PHASE 2 (K) FINAL: ALL financial figures come from the canonical
     :class:`FinancialSourceOfTruth` per-invoice snapshot. Raw payment /
-    Credit Note arithmetic is NO LONGER performed here. The Credit Note
-    column is document-metadata only (number, amount, status).
+    Credit Note arithmetic is NOT performed here.
+
+    K1 exports every required canonical value:
+      document_face_value, credit_note_total, net_invoiced_value,
+      paid_amount, outstanding_amount, payment_status.
+
+    K2 strictly validates that every one of those fields is PRESENT on the
+    snapshot (zero is a valid financial value; missing is not). Any missing
+    invoice id, missing snapshot, or missing required canonical field
+    aborts the export with ``INVOICE_EXPORT_SOT_UNAVAILABLE`` — no silent
+    fallback, no ``.get(field, 0)`` substitution.
+
+    The existing ``Credit Note No & Value`` column remains as document
+    metadata only and MUST NOT be used for financial calculation.
     """
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
@@ -318,14 +330,32 @@ async def export_invoices(
         if inv_id:
             cn_by_invoice.setdefault(inv_id, []).append(cn)
 
-    # ---- MINI PHASE 2 (K): canonical Source-of-Truth snapshots ---------
+    # ---- MINI PHASE 2 (K) FINAL: canonical Source-of-Truth snapshots ---
+    REQUIRED_SOT_FIELDS = (
+        "document_face_value",
+        "credit_note_total",
+        "net_invoiced_value",
+        "paid_amount",
+        "outstanding_amount",
+        "payment_status",
+    )
     from services.financial_source_of_truth import FinancialSourceOfTruth
     sot = FinancialSourceOfTruth(db)
     snapshots: dict = {}
     for inv in invoices:
         inv_id = inv.get("id")
+        # K2 FINAL: an invoice with no id CANNOT be canonically resolved.
+        # Refuse to silently continue.
         if not inv_id:
-            continue
+            raise HTTPException(status_code=500, detail={
+                "code": "INVOICE_EXPORT_SOT_UNAVAILABLE",
+                "message": (
+                    "Invoice export aborted: an invoice document has no "
+                    "'id' field and cannot be canonically resolved via "
+                    "the Source-of-Truth."
+                ),
+                "invoice_number": inv.get("invoice_number"),
+            })
         try:
             snap = await sot.get_invoice_snapshot(inv_id)
         except Exception as _sot_err:
@@ -348,12 +378,25 @@ async def export_invoices(
                 ),
                 "invoice_id": inv_id,
             })
+        # K2 FINAL: strict presence check. ZERO is valid, MISSING is not.
+        missing = [f for f in REQUIRED_SOT_FIELDS if f not in snap]
+        if missing:
+            raise HTTPException(status_code=500, detail={
+                "code": "INVOICE_EXPORT_SOT_UNAVAILABLE",
+                "message": (
+                    "Invoice export aborted: canonical Source-of-Truth "
+                    "snapshot is missing required financial fields."
+                ),
+                "invoice_id": inv_id,
+                "missing_fields": missing,
+            })
         snapshots[inv_id] = snap
 
-    def _payment_status_display(sot_status: Optional[str]) -> str:
+    def _payment_status_display(sot_status: str) -> str:
         """Map SoT canonical payment_status → user-facing spreadsheet string.
         Kept next to the export because it is a pure display concern; SoT
-        values themselves are never recomputed."""
+        values themselves are never recomputed. K2 FINAL: only called with
+        a value that has already been validated as present on the snapshot."""
         s = (sot_status or "").lower()
         if s == "n/a_proforma":
             return "N/A (Proforma)"
@@ -371,7 +414,7 @@ async def export_invoices(
             return "Unpaid"
         if s == "paid":
             return "Paid"
-        return s.title() if s else "N/A"
+        return s.title() if s else ""
 
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -388,10 +431,21 @@ async def export_invoices(
         left=Side(style='thin'), right=Side(style='thin'),
         top=Side(style='thin'), bottom=Side(style='thin')
     )
-    
-    headers = ["Bil", "Date", "Invoice Number", "Bill To", "Programme", "Company Name", 
-               "Venue", "No of Participants", "Invoice Value (RM)", "Invoice Status", 
-               "Payment Status", "Credit Note No & Value"]
+
+    # K1 FINAL: add the minimum canonical financial columns required by
+    # the contract. Existing lifecycle "Invoice Status" and canonical
+    # "Payment Status" columns are preserved. Existing "Credit Note No &
+    # Value" metadata column remains at the end (metadata only).
+    headers = [
+        "Bil", "Date", "Invoice Number", "Bill To", "Programme", "Company Name",
+        "Venue", "No of Participants", "Invoice Value (RM)", "Invoice Status",
+        "Payment Status",
+        "Credit Note Total (RM)",
+        "Net Invoiced Value (RM)",
+        "Paid Amount (RM)",
+        "Outstanding Amount (RM)",
+        "Credit Note No & Value",
+    ]
     
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
@@ -403,11 +457,17 @@ async def export_invoices(
     bil = 1
     for inv in invoices:
         inv_id = inv.get("id")
-        snap = snapshots.get(inv_id) or {}
-
-        # MINI PHASE 2 (K): canonical figures from SoT snapshot only.
-        document_face_value = snap.get("document_face_value", 0)
-        payment_status = _payment_status_display(snap.get("payment_status"))
+        # K2 FINAL: snapshot presence + required-field presence were both
+        # validated above. Direct indexing (not .get with default) is
+        # intentional so any regression fails loudly instead of exporting
+        # misleading zeros.
+        snap = snapshots[inv_id]
+        document_face_value = snap["document_face_value"]
+        credit_note_total   = snap["credit_note_total"]
+        net_invoiced_value  = snap["net_invoiced_value"]
+        paid_amount         = snap["paid_amount"]
+        outstanding_amount  = snap["outstanding_amount"]
+        payment_status      = _payment_status_display(snap["payment_status"])
 
         # CN display column — document metadata only, NOT financial arithmetic.
         inv_credit_notes = cn_by_invoice.get(inv_id, [])
@@ -438,7 +498,12 @@ async def export_invoices(
         # Invoice LIFECYCLE status (kept separate from Payment Status column).
         ws.cell(row=row, column=10, value=inv.get("status", "").replace("_", " ").title()).border = thin_border
         ws.cell(row=row, column=11, value=payment_status).border = thin_border
-        ws.cell(row=row, column=12, value=_safe(cn_info)).border = thin_border
+        # K1 FINAL: canonical financial columns from SoT snapshot.
+        ws.cell(row=row, column=12, value=credit_note_total).border = thin_border
+        ws.cell(row=row, column=13, value=net_invoiced_value).border = thin_border
+        ws.cell(row=row, column=14, value=paid_amount).border = thin_border
+        ws.cell(row=row, column=15, value=outstanding_amount).border = thin_border
+        ws.cell(row=row, column=16, value=_safe(cn_info)).border = thin_border
         bil += 1
     
     for col in ws.columns:
@@ -824,7 +889,7 @@ async def _recover_proforma_conversion(
     existing_invoice: dict,
     current_user: User,
 ) -> bool:
-    """MINI PHASE 2 (H): shared recovery helper for
+    """MINI PHASE 2 (H) FINAL: shared recovery helper for
     :func:`convert_proforma_to_invoice`.
 
     Idempotently verify/repair the parent Proforma and the linked session so
@@ -837,65 +902,94 @@ async def _recover_proforma_conversion(
 
     Returns True if any repair write actually landed.
 
-    Raises HTTPException 409 ``PROFORMA_CONVERSION_LINK_MISMATCH`` if the
-    Proforma is already marked converted BUT points to a DIFFERENT tax
-    invoice than ``existing_invoice`` — the link is NEVER silently
-    overwritten.
+    Link-verification semantics (H1 FINAL):
+      * A NON-EMPTY existing ``converted_to_invoice_id`` that points to a
+        DIFFERENT invoice is a mismatch REGARDLESS of Proforma status →
+        HTTP 409 ``PROFORMA_CONVERSION_LINK_MISMATCH``.
+      * A MISSING / None / empty ``converted_to_invoice_id`` is treated as
+        an incomplete prior conversion and is REPAIRED (not a mismatch),
+        regardless of Proforma status.
+
+    Persistence verification (H2 FINAL):
+      Every repair ``update_one`` result is inspected. If the expected doc
+      did not match (``matched_count == 0``) we raise HTTP 409
+      ``PROFORMA_CONVERSION_RECOVERY_CONFLICT`` — success is never claimed
+      for an update that silently no-op'd.
     """
     now_iso = get_malaysia_time().isoformat()
     repaired = False
     proforma_id = proforma.get("id")
+    existing_id = existing_invoice.get("id")
+    existing_number = existing_invoice.get("invoice_number")
 
     # Re-read the current proforma to observe any concurrent update.
     pf_state = await db.invoices.find_one(
         {"id": proforma_id}, {"_id": 0},
     ) or proforma
 
-    # Repair parent Proforma if the earlier attempt died mid-way.
-    pf_updates: dict = {}
-    if pf_state.get("status") != "converted":
-        pf_updates.update({
-            "status": "converted",
-            "converted_to_invoice_id": existing_invoice.get("id"),
-            "converted_to_invoice_number": existing_invoice.get("invoice_number"),
-            "converted_by": current_user.id,
-            "converted_by_name": current_user.full_name,
-            "converted_at": pf_state.get("converted_at") or now_iso,
-            "updated_at": now_iso,
-        })
-    elif pf_state.get("converted_to_invoice_id") != existing_invoice.get("id"):
-        # Parent has a DIFFERENT converted_to link — refuse to silently
-        # overwrite; surface for review.
+    # ---- H1 FINAL: mismatch check runs BEFORE any status logic ---------
+    existing_link = pf_state.get("converted_to_invoice_id")
+    if existing_link and existing_link != existing_id:
         raise HTTPException(status_code=409, detail={
             "code": "PROFORMA_CONVERSION_LINK_MISMATCH",
             "message": (
-                "Proforma already marked converted but points to a "
-                "different invoice than the one indexed by "
+                "Proforma has a converted_to_invoice_id link that points "
+                "to a different invoice than the one indexed by "
                 "converted_from_proforma_id. Ops must reconcile."
             ),
-            "existing_invoice_id": existing_invoice.get("id"),
-            "proforma_converted_to_invoice_id":
-                pf_state.get("converted_to_invoice_id"),
+            "proforma_id": proforma_id,
+            "existing_invoice_id": existing_id,
+            "proforma_converted_to_invoice_id": existing_link,
         })
+
+    # ---- H1 FINAL: build repair set — handles all 4 valid states ------
+    # (status not-converted + no link)     -> full repair
+    # (status converted     + no link)     -> repair link fields
+    # (status not-converted + correct link)-> repair status
+    # (status converted     + correct link)-> repair number if stale
+    pf_updates: dict = {}
+    if pf_state.get("status") != "converted":
+        pf_updates["status"] = "converted"
+        pf_updates["converted_by"] = current_user.id
+        pf_updates["converted_by_name"] = current_user.full_name
+        pf_updates["converted_at"] = pf_state.get("converted_at") or now_iso
+    if not existing_link:
+        # Missing / None / empty link is an incomplete prior conversion —
+        # NOT a mismatch. Repair it.
+        pf_updates["converted_to_invoice_id"] = existing_id
+        pf_updates["converted_to_invoice_number"] = existing_number
     else:
-        # Same target — repair a missing/stale invoice_number back-reference.
-        if pf_state.get("converted_to_invoice_number") != existing_invoice.get("invoice_number"):
-            pf_updates["converted_to_invoice_number"] = existing_invoice.get("invoice_number")
-            pf_updates["updated_at"] = now_iso
+        # Link is present AND correct (mismatch was already rejected above).
+        # Repair stale/missing number back-reference if needed.
+        if pf_state.get("converted_to_invoice_number") != existing_number:
+            pf_updates["converted_to_invoice_number"] = existing_number
     if pf_updates:
-        await db.invoices.update_one(
+        pf_updates["updated_at"] = now_iso
+        pf_res = await db.invoices.update_one(
             {"id": proforma_id}, {"$set": pf_updates},
         )
+        if pf_res.matched_count != 1:
+            raise HTTPException(status_code=409, detail={
+                "code": "PROFORMA_CONVERSION_RECOVERY_CONFLICT",
+                "message": (
+                    "Proforma repair write did not match the expected "
+                    "Proforma record; concurrent change suspected. Ops "
+                    "must reconcile."
+                ),
+                "proforma_id": proforma_id,
+                "existing_invoice_id": existing_id,
+            })
         repaired = True
 
-    # Repair session linkage. Prefer proforma.session_id (canonical link);
-    # fall back to the invoice's own session_id if the proforma was missing it.
+    # ---- Session linkage repair (H2 FINAL: matched_count verified) ----
+    # Prefer proforma.session_id (canonical link); fall back to the
+    # invoice's own session_id if the proforma was missing it.
     session_id = pf_state.get("session_id") or existing_invoice.get("session_id")
     if session_id:
         # Read the current status of the real invoice so we can mirror it
         # exactly onto the session.
         real_inv = await db.invoices.find_one(
-            {"id": existing_invoice.get("id")},
+            {"id": existing_id},
             {"_id": 0, "status": 1},
         )
         desired_status = (
@@ -907,14 +1001,26 @@ async def _recover_proforma_conversion(
         )
         if session_now:
             sess_updates: dict = {}
-            if session_now.get("invoice_id") != existing_invoice.get("id"):
-                sess_updates["invoice_id"] = existing_invoice.get("id")
+            if session_now.get("invoice_id") != existing_id:
+                sess_updates["invoice_id"] = existing_id
             if session_now.get("invoice_status") != desired_status:
                 sess_updates["invoice_status"] = desired_status
             if sess_updates:
-                await db.sessions.update_one(
+                sess_res = await db.sessions.update_one(
                     {"id": session_id}, {"$set": sess_updates},
                 )
+                if sess_res.matched_count != 1:
+                    raise HTTPException(status_code=409, detail={
+                        "code": "PROFORMA_CONVERSION_RECOVERY_CONFLICT",
+                        "message": (
+                            "Session repair write did not match the "
+                            "expected linked session; concurrent change "
+                            "suspected. Ops must reconcile."
+                        ),
+                        "proforma_id": proforma_id,
+                        "session_id": session_id,
+                        "existing_invoice_id": existing_id,
+                    })
                 repaired = True
     return repaired
 
