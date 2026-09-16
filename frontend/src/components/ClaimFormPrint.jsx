@@ -98,6 +98,25 @@ const ClaimFormPrint = ({ session, onClose }) => {
         setFinancialTotalsUnavailable(true);
       }
 
+      // MINI PHASE 3 FINAL (J1): the four canonical headline fields are
+      // ALWAYS taken from the valid session snapshot — never from
+      // costingRes.data — regardless of how many revenue-eligible
+      // invoices exist. Invoice-metadata enrichment stays conditional on
+      // realInvoices.length > 0, but headline totals do not.
+      const canonicalHeadline = snapshotOk
+        ? {
+            session_revenue: Number(sessionSnapshot.session_revenue),
+            session_cost: Number(sessionSnapshot.session_cost),
+            gross_profit: Number(sessionSnapshot.gross_profit),
+            gross_margin_pct: Number(sessionSnapshot.gross_margin_pct),
+          }
+        : {
+            session_revenue: NaN,
+            session_cost: NaN,
+            gross_profit: NaN,
+            gross_margin_pct: NaN,
+          };
+
       if (realInvoices.length > 0) {
         const invoiceNumbers = realInvoices.map(inv => inv.invoice_number).filter(Boolean).join(', ');
         const primary = realInvoices[0];
@@ -112,15 +131,8 @@ const ClaimFormPrint = ({ session, onClose }) => {
           credit_note_total: Number(sot.credit_note_total || 0),
           paid_amount: Number(sot.paid_amount || 0),
           outstanding_amount: Number(sot.outstanding_amount || 0),
-          // MINI PHASE 3 (J1/J4): headline totals — canonical ONLY.
-          // No `?? net_invoiced_value`, no `?? 0`, no local recompute.
-          // When the snapshot is unavailable these carry NaN so any leaked
-          // render fails loudly; the unavailable banner + hidden Download
-          // are the intended user-facing behaviour.
-          session_revenue: snapshotOk ? Number(sessionSnapshot.session_revenue) : NaN,
-          session_cost: snapshotOk ? Number(sessionSnapshot.session_cost) : NaN,
-          gross_profit: snapshotOk ? Number(sessionSnapshot.gross_profit) : NaN,
-          gross_margin_pct: snapshotOk ? Number(sessionSnapshot.gross_margin_pct) : NaN,
+          // MINI PHASE 3 FINAL (J1): headline totals ALWAYS canonical.
+          ...canonicalHeadline,
           all_invoices: realInvoices.map(snap => ({
             invoice_number: snap.invoice_number,
             invoice_date: snap.invoice_date || snap.invoice_created_at,
@@ -131,15 +143,13 @@ const ClaimFormPrint = ({ session, onClose }) => {
             outstanding_amount: Number(snap.outstanding_amount || 0),
           })),
         }));
-      } else if (!snapshotOk) {
-        // No revenue-eligible invoices AND no valid snapshot — still surface
-        // the unavailable state so we don't emit a zero-filled Claim Form.
+      } else {
+        // No revenue-eligible invoices — still overwrite the four
+        // canonical headline totals so nothing from the ordinary costing
+        // endpoint leaks into the Claim Form headline rows.
         setCostingData(prev => ({
           ...prev,
-          session_revenue: NaN,
-          session_cost: NaN,
-          gross_profit: NaN,
-          gross_margin_pct: NaN,
+          ...canonicalHeadline,
         }));
       }
     } catch (error) {
