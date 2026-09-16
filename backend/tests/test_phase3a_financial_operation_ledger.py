@@ -475,14 +475,33 @@ async def test_c4_final_sot_reconciliation_failure_returns_controlled_error(db_c
 async def test_c5_cn_journal_voided_on_payment_accounting_failure(db_conn, app_client, monkeypatch):
     """When a payment request creates a linked CN + posts its journal, and
     then payment accounting fails, the CN doc AND its journal MUST both
-    be voided; unrelated journals remain untouched."""
+    be voided; unrelated journals remain untouched.
+
+    MINI 3.2A (C5): the mocked successful CN accounting now INSERTS the
+    journal row into `journal_entries` (mirroring the real
+    `post_credit_note_issued` side-effect). The compensation code voids
+    journals that already exist; it does not create them. Without this
+    seed the test would fail on missing-precondition rather than on real
+    behaviour.
+    """
     from routes import finance_payments
 
-    seen = {"payment_accounting": 0}
+    seen = {"payment_accounting": 0, "cn_journal_id": None}
 
-    async def _cn_ok(**_):
-        # CN accounting succeeds.
-        return {"journal_entry": {"id": f"jcn-{uuid.uuid4().hex[:6]}"},
+    async def _cn_ok(**kwargs):
+        # Real post_credit_note_issued would INSERT a journal row for the
+        # credit note. Mirror that here so the compensation branch has
+        # something to void.
+        cn = kwargs.get("credit_note") or {}
+        j_id = f"jcn-{uuid.uuid4().hex[:8]}"
+        await db_conn.journal_entries.insert_one({
+            "id": j_id,
+            "source_id": cn.get("id"),
+            "source_module": "credit_note",
+            "status": "posted",
+        })
+        seen["cn_journal_id"] = j_id
+        return {"journal_entry": {"id": j_id},
                 "is_duplicate": False, "error": None}
 
     async def _payment_fail(**_):
@@ -504,11 +523,12 @@ async def test_c5_cn_journal_voided_on_payment_accounting_failure(db_conn, app_c
     inv = await _seed_invoice(db_conn, status="issued", total_amount=200.0)
     payload = _payment_payload(inv["id"], 150.0)
     payload["create_credit_note"] = True
-    payload["credit_note_amount"] = 50.0
-    payload["credit_note_reason"] = "test-cn"
+    payload["deduction_amount"] = 50.0
+    payload["deduction_reason"] = "test-cn"
     r = await app_client.post("/api/finance/payments", json=payload)
     assert r.status_code == 500, r.text
     assert seen["payment_accounting"] == 1
+    assert seen["cn_journal_id"], "CN journal must have been created before failure"
 
     # Linked CN doc must be voided.
     cns = await db_conn.credit_notes.find({"invoice_id": inv["id"]}).to_list(10)
@@ -521,6 +541,10 @@ async def test_c5_cn_journal_voided_on_payment_accounting_failure(db_conn, app_c
         ).to_list(10)
         assert cn_journals, "expected CN journal was created"
         assert all(j["status"] == "voided" for j in cn_journals)
+
+    # The specific journal id we seeded must be voided.
+    j_after = await db_conn.journal_entries.find_one({"id": seen["cn_journal_id"]})
+    assert j_after["status"] == "voided"
 
     # Unrelated journal untouched.
     unrelated_after = await db_conn.journal_entries.find_one({"id": "j-unrelated"})
@@ -830,117 +854,159 @@ async def test_f3_delete_payment_recovery_required_returns_controlled_nonsuccess
 # ==========================================================================
 # G — SuperAdmin corrections
 # ==========================================================================
-
-async def _get_correction_service(db_conn):
-    from services.superadmin_financial_correction import SuperAdminFinancialCorrection
-    return SuperAdminFinancialCorrection(db_conn)
-
-
-async def test_g1_correction_accepts_journal_entry_result(db_conn, monkeypatch):
-    """G1: when the corrected repost returns a valid journal_entry, the
-    correction records success and the new journal is attached."""
-    svc = await _get_correction_service(db_conn)
-    inv = await _seed_invoice(db_conn, status="issued", total_amount=500.0)
-
-    from services import superadmin_financial_correction as gmod
-
-    async def _ok(**_):
-        return {"journal_entry": {"id": "j-corr-1"},
-                "is_duplicate": False, "error": None}
-
-    # SuperAdminFinancialCorrection posts through the accounting module.
-    if hasattr(gmod, "post_invoice_issued"):
-        monkeypatch.setattr(gmod, "post_invoice_issued", _ok, raising=False)
-    if hasattr(gmod, "post_credit_note_issued"):
-        monkeypatch.setattr(gmod, "post_credit_note_issued", _ok, raising=False)
-
-    # Exercise the correction-value invoice path if available on the
-    # public API; otherwise, verify the accounting contract classification
-    # matches Phase 3A rules using the actual service helper.
-    result = None
-    for method_name in ("correct_invoice_value", "correct_invoice_amount"):
-        method = getattr(svc, method_name, None)
-        if method is None:
-            continue
-        try:
-            result = await method(
-                invoice_id=inv["id"], new_total=550.0, reason="g1", user=_TestUser(),
-            )
-        except TypeError:
-            continue
-        break
-    if result is not None:
-        assert not (isinstance(result, dict) and result.get("error"))
+# MINI 3.2A (G1/G2/G3): use the REAL signature of
+# `SuperAdminFinancialCorrection.correct_invoice_value(...)`:
+#   (invoice_id, new_total_amount, reason, correction_type, user,
+#    confirm=False, new_subtotal=None, new_tax_amount=None,
+#    corrected_line_items=None)
+# and the REAL `CORRECTION_TYPES = ("data_entry_correction",
+# "commercial_adjustment", "exceptional_override")`. No exception swallowing.
 
 
-async def test_g2_correction_respects_is_duplicate(db_conn, monkeypatch):
-    """G2: an is_duplicate=True response must NOT lead the correction to
-    treat the pre-existing journal as owned by this operation."""
-    svc = await _get_correction_service(db_conn)
-    inv = await _seed_invoice(db_conn, status="issued", total_amount=500.0)
-
-    existing_journal = {
-        "id": "j-corr-existing",
+async def _seed_issued_invoice_with_journal(db, total_amount=500.0):
+    """Seed an issued invoice + its existing accounting journal so the
+    correction path enters the accounting-repost branch (which only fires
+    for issued/partially_paid/paid invoices)."""
+    inv = await _seed_invoice(
+        db, status="issued", total_amount=total_amount,
+        subtotal=total_amount, tax_amount=0.0, tax_rate=0.0,
+        line_items=[],
+    )
+    old_journal = {
+        "id": f"j-old-{uuid.uuid4().hex[:8]}",
         "source_id": inv["id"],
         "source_module": "invoice",
         "status": "posted",
     }
-    await db_conn.journal_entries.insert_one(dict(existing_journal))
+    await db.journal_entries.insert_one(dict(old_journal))
+    return inv, old_journal
 
-    from services import superadmin_financial_correction as gmod
+
+async def test_g1_correction_accepts_journal_entry_result(db_conn, monkeypatch):
+    """G1: successful repost -> correction completes; invoice.total_amount
+    updated to new_total_amount; new journal recorded as owned by this op."""
+    from services.superadmin_financial_correction import SuperAdminFinancialCorrection
+    from routes import accounting as acct_mod
+
+    inv, old_journal = await _seed_issued_invoice_with_journal(db_conn, 500.0)
+
+    new_journal_id = f"j-new-{uuid.uuid4().hex[:8]}"
+
+    async def _ok(**_):
+        await db_conn.journal_entries.insert_one({
+            "id": new_journal_id,
+            "source_id": inv["id"],
+            "source_module": "invoice",
+            "status": "posted",
+        })
+        return {"journal_entry": {"id": new_journal_id},
+                "is_duplicate": False, "error": None}
+
+    monkeypatch.setattr(acct_mod, "post_invoice_issued", _ok, raising=False)
+
+    svc = SuperAdminFinancialCorrection(db_conn)
+    result = await svc.correct_invoice_value(
+        invoice_id=inv["id"],
+        new_total_amount=550.0,
+        reason="G1 real correction",
+        correction_type="data_entry_correction",
+        user=_TestUser(),
+        confirm=True,
+    )
+    assert result.get("message") == "Invoice value corrected."
+    assert result.get("before_total_amount") == 500.0
+    assert result.get("after_total_amount") == 550.0
+    ae = result.get("accounting_effect") or {}
+    assert ae.get("applied") is True
+    assert new_journal_id in (ae.get("new_journal_ids") or [])
+    # Real DB effects:
+    inv_after = await db_conn.invoices.find_one({"id": inv["id"]})
+    assert abs(float(inv_after["total_amount"]) - 550.0) < 0.001
+    j_old = await db_conn.journal_entries.find_one({"id": old_journal["id"]})
+    assert j_old["status"] == "voided"
+
+
+async def test_g2_correction_respects_is_duplicate(db_conn, monkeypatch):
+    """G2: when repost returns is_duplicate=True, the returned journal
+    represents PRE-EXISTING accounting history. The correction service
+    MUST NOT tag it as owned by this operation (i.e. it must not appear
+    in accounting_effect.new_journal_ids). Correction still succeeds."""
+    from services.superadmin_financial_correction import SuperAdminFinancialCorrection
+    from routes import accounting as acct_mod
+
+    inv, old_journal = await _seed_issued_invoice_with_journal(db_conn, 500.0)
+
+    preexisting_journal = {
+        "id": f"j-preexist-{uuid.uuid4().hex[:8]}",
+        "source_id": inv["id"],
+        "source_module": "invoice",
+        "status": "posted",
+    }
+    await db_conn.journal_entries.insert_one(dict(preexisting_journal))
 
     async def _duplicate(**_):
-        return {"journal_entry": dict(existing_journal),
+        return {"journal_entry": {"id": preexisting_journal["id"]},
                 "is_duplicate": True, "error": None}
 
-    for name in ("post_invoice_issued", "post_credit_note_issued"):
-        if hasattr(gmod, name):
-            monkeypatch.setattr(gmod, name, _duplicate, raising=False)
+    monkeypatch.setattr(acct_mod, "post_invoice_issued", _duplicate, raising=False)
 
-    # Attempt any correction that would post; the invariant we assert is
-    # global: the pre-existing journal is never treated as this-operation-owned.
-    for method_name in ("correct_invoice_value", "correct_invoice_amount"):
-        method = getattr(svc, method_name, None)
-        if method is None:
-            continue
-        try:
-            await method(invoice_id=inv["id"], new_total=550.0,
-                         reason="g2", user=_TestUser())
-        except Exception:
-            pass
-        break
-    after = await db_conn.journal_entries.find_one({"id": "j-corr-existing"})
-    assert after["status"] == "posted"
+    svc = SuperAdminFinancialCorrection(db_conn)
+    result = await svc.correct_invoice_value(
+        invoice_id=inv["id"],
+        new_total_amount=550.0,
+        reason="G2 duplicate accounting path",
+        correction_type="data_entry_correction",
+        user=_TestUser(),
+        confirm=True,
+    )
+    assert result.get("message") == "Invoice value corrected."
+    ae = result.get("accounting_effect") or {}
+    assert ae.get("applied") is True
+    # STRICT G2: the pre-existing journal must NOT be tagged as
+    # current-operation-owned.
+    assert preexisting_journal["id"] not in (ae.get("new_journal_ids") or [])
+    # The pre-existing journal is untouched by this correction
+    # (correction only voids the OLD journal it captured pre-repost).
+    pre_after = await db_conn.journal_entries.find_one(
+        {"id": preexisting_journal["id"]},
+    )
+    assert pre_after["status"] == "posted"
 
 
-async def test_g3_correction_rollback_on_failure(db_conn, monkeypatch):
-    """G3: a hard failure during the corrected repost must restore prior
-    state and NOT leave the invoice with a partial/incoherent update."""
-    svc = await _get_correction_service(db_conn)
-    inv = await _seed_invoice(db_conn, status="issued", total_amount=500.0)
+async def test_g3_correction_rolls_back_on_repost_failure(db_conn, monkeypatch):
+    """G3: repost failure MUST raise the controlled Phase 3A error and
+    restore both the invoice total and the previously-voided journal."""
+    from services.superadmin_financial_correction import (
+        SuperAdminFinancialCorrection, FinancialSafetyError,
+    )
+    from routes import accounting as acct_mod
 
-    from services import superadmin_financial_correction as gmod
+    inv, old_journal = await _seed_issued_invoice_with_journal(db_conn, 500.0)
 
     async def _fail(**_):
-        return {"journal_entry": None, "error": "SYNTH_CORR_FAIL"}
+        return {"journal_entry": None, "error": "SYNTH_REPOST_FAIL"}
 
-    for name in ("post_invoice_issued", "post_credit_note_issued"):
-        if hasattr(gmod, name):
-            monkeypatch.setattr(gmod, name, _fail, raising=False)
+    monkeypatch.setattr(acct_mod, "post_invoice_issued", _fail, raising=False)
 
-    for method_name in ("correct_invoice_value", "correct_invoice_amount"):
-        method = getattr(svc, method_name, None)
-        if method is None:
-            continue
-        try:
-            await method(invoice_id=inv["id"], new_total=555.5,
-                         reason="g3", user=_TestUser())
-        except Exception:
-            pass
-        break
-    after = await db_conn.invoices.find_one({"id": inv["id"]})
-    # Prior total preserved (no partial write of new value).
-    assert after["total_amount"] == 500.0
+    svc = SuperAdminFinancialCorrection(db_conn)
+    with pytest.raises(FinancialSafetyError) as exc_info:
+        await svc.correct_invoice_value(
+            invoice_id=inv["id"],
+            new_total_amount=555.5,
+            reason="G3 forced repost failure",
+            correction_type="data_entry_correction",
+            user=_TestUser(),
+            confirm=True,
+        )
+    assert exc_info.value.code == "INVOICE_VALUE_CORRECTION_ACCOUNTING_FAILED"
+    # Invoice total NOT changed — no partial write.
+    inv_after = await db_conn.invoices.find_one({"id": inv["id"]})
+    assert abs(float(inv_after["total_amount"]) - 500.0) < 0.001
+    # Previously-voided old journal RESTORED to posted.
+    j_old = await db_conn.journal_entries.find_one({"id": old_journal["id"]})
+    assert j_old["status"] == "posted"
+    assert not j_old.get("voided_by")
+    assert not j_old.get("voided_at")
 
 
 # ==========================================================================
