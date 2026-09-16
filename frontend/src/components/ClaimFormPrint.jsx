@@ -33,11 +33,15 @@ const ClaimFormPrint = ({ session, onClose }) => {
   const [companySettings, setCompanySettings] = useState(null);
   const printRef = useRef(null);
 
-  // Phase 3A FINAL Section 7: increment a token per session load so a late
-  // response for a previous session cannot overwrite current state, and
-  // show a clear "unavailable" state when the authoritative snapshot fails
-  // instead of silently substituting zeros.
+  // Phase 3A FINAL Section 7 + MINI PHASE 3 (J): the four Claim Form
+  // headline totals — session_revenue, session_cost, gross_profit,
+  // gross_margin_pct — come ONLY from the canonical session snapshot.
+  // If the snapshot fails or lacks ANY of those fields (zero is valid,
+  // missing is not) we set financialTotalsUnavailable=true, show a clear
+  // message, and hide the Download button so no misleading document is
+  // produced.
   const [sotError, setSotError] = useState(null);
+  const [financialTotalsUnavailable, setFinancialTotalsUnavailable] = useState(false);
   const loadTokenRef = React.useRef(0);
   useEffect(() => {
     loadTokenRef.current += 1;
@@ -45,9 +49,17 @@ const ClaimFormPrint = ({ session, onClose }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id]);
 
+  const REQUIRED_SNAPSHOT_FIELDS = [
+    'session_revenue',
+    'session_cost',
+    'gross_profit',
+    'gross_margin_pct',
+  ];
+
   const loadData = async (token) => {
     try {
       setSotError(null);
+      setFinancialTotalsUnavailable(false);
       const [costingRes, settingsRes, sotRes] = await Promise.all([
         axiosInstance.get(`/finance/session/${session.id}/costing`),
         axiosInstance.get('/finance/company-settings'),
@@ -59,44 +71,56 @@ const ClaimFormPrint = ({ session, onClose }) => {
       setCompanySettings(settingsRes.data);
 
       const sot = sotRes.data || {};
-      // sot.invoices already excludes proformas & terminal invoices — it is
-      // the canonical set of REVENUE-eligible invoices for this session.
       const realInvoices = Array.isArray(sot.invoices) ? sot.invoices : [];
-      // ---- Phase 3A Section 15/16: also fetch session SoT snapshot so the
-      // headline financials (session revenue, cost, profit) come from ONE
-      // authoritative source instead of being recomputed in React.
+
+      // MINI PHASE 3 (J1/J2): fetch the canonical SESSION snapshot. It is
+      // the ONE authoritative source for headline totals. If it fails or
+      // any required field is not PRESENT on the returned object (zero is
+      // valid, missing is not), mark headline totals unavailable.
       let sessionSnapshot = null;
+      let snapshotOk = false;
       try {
         const sRes = await axiosInstance.get(
           `/finance/source-of-truth/session/${session.id}/snapshot`,
         );
         sessionSnapshot = sRes.data || null;
+        if (sessionSnapshot && typeof sessionSnapshot === 'object') {
+          const missing = REQUIRED_SNAPSHOT_FIELDS.filter(
+            (f) => !Object.prototype.hasOwnProperty.call(sessionSnapshot, f),
+          );
+          snapshotOk = missing.length === 0;
+        }
       } catch (_err) {
-        sessionSnapshot = null;
+        snapshotOk = false;
       }
+
+      if (!snapshotOk) {
+        setFinancialTotalsUnavailable(true);
+      }
+
       if (realInvoices.length > 0) {
         const invoiceNumbers = realInvoices.map(inv => inv.invoice_number).filter(Boolean).join(', ');
         const primary = realInvoices[0];
         setCostingData(prev => ({
           ...prev,
           invoice_number: invoiceNumbers,
-          // Phase 3A Section 18: use SoT invoice_date, fall back to
-          // invoice_created_at (never generic created_at).
           invoice_date: primary.invoice_date || primary.invoice_created_at,
-          // Canonical values from Source of Truth (never double-counted).
           invoice_total: Number(sot.net_invoiced_value || 0),
-          less_tax: 0,  // net_invoiced_value already reflects credit-note adjustments
+          less_tax: 0,
           gross_invoice_value: Number(sot.gross_invoice_value || 0),
           net_invoiced_value: Number(sot.net_invoiced_value || 0),
           credit_note_total: Number(sot.credit_note_total || 0),
           paid_amount: Number(sot.paid_amount || 0),
           outstanding_amount: Number(sot.outstanding_amount || 0),
-          // Phase 3A Section 15/16: canonical headline financials from
-          // session snapshot; React must not recompute them locally.
-          session_revenue: Number(sessionSnapshot?.session_revenue ?? sot.net_invoiced_value ?? 0),
-          session_cost: Number(sessionSnapshot?.session_cost ?? 0),
-          gross_profit: Number(sessionSnapshot?.gross_profit ?? 0),
-          gross_margin_pct: Number(sessionSnapshot?.gross_margin_pct ?? 0),
+          // MINI PHASE 3 (J1/J4): headline totals — canonical ONLY.
+          // No `?? net_invoiced_value`, no `?? 0`, no local recompute.
+          // When the snapshot is unavailable these carry NaN so any leaked
+          // render fails loudly; the unavailable banner + hidden Download
+          // are the intended user-facing behaviour.
+          session_revenue: snapshotOk ? Number(sessionSnapshot.session_revenue) : NaN,
+          session_cost: snapshotOk ? Number(sessionSnapshot.session_cost) : NaN,
+          gross_profit: snapshotOk ? Number(sessionSnapshot.gross_profit) : NaN,
+          gross_margin_pct: snapshotOk ? Number(sessionSnapshot.gross_margin_pct) : NaN,
           all_invoices: realInvoices.map(snap => ({
             invoice_number: snap.invoice_number,
             invoice_date: snap.invoice_date || snap.invoice_created_at,
@@ -107,9 +131,20 @@ const ClaimFormPrint = ({ session, onClose }) => {
             outstanding_amount: Number(snap.outstanding_amount || 0),
           })),
         }));
+      } else if (!snapshotOk) {
+        // No revenue-eligible invoices AND no valid snapshot — still surface
+        // the unavailable state so we don't emit a zero-filled Claim Form.
+        setCostingData(prev => ({
+          ...prev,
+          session_revenue: NaN,
+          session_cost: NaN,
+          gross_profit: NaN,
+          gross_margin_pct: NaN,
+        }));
       }
     } catch (error) {
       setSotError('Financial snapshot unavailable — please retry. Values not shown to avoid displaying stale zeros.');
+      setFinancialTotalsUnavailable(true);
       toast.error('Failed to load claim form data');
       console.error(error);
     } finally {
@@ -277,32 +312,30 @@ const ClaimFormPrint = ({ session, onClose }) => {
   }
 
   const days = calculateDays();
-  // ---- Phase 3A Sections 15-17: SoT is the ONLY headline formula source.
-  // These values come from the canonical session snapshot; NO local
-  // recomputation of gross revenue / profit / margin.
+  // ---- MINI PHASE 3 (J1/J4): headline totals are canonical ONLY.
+  // No local recomputation, no fallback to net_invoiced_value, no
+  // "revenue - expenses" recovery formula, no zero substitution when
+  // the snapshot is unavailable. The `financialTotalsUnavailable` gate
+  // below controls whether these values ever reach the DOM.
   const invoiceTotal = Number(costingData.net_invoiced_value || 0);
   const taxAmount = 0;
-  const grossRevenue = Number(
-    costingData.session_revenue ?? costingData.net_invoiced_value ?? 0,
-  );
+  const grossRevenue = Number(costingData.session_revenue);
   const trainerFeesTotal = costingData.trainer_fees_total || 0;
   const coordFeeTotal = costingData.coordinator_fee_total || 0;
   const cashExpenses = costingData.cash_expenses_actual || costingData.cash_expenses_estimated || 0;
 
+  // Marketing amount is a derived detail row (session_cost minus the other
+  // detail rows). It is NOT one of the four headline totals and remains a
+  // display-only breakdown.
   const marketingAmount = Math.max(
     0,
     Number(costingData.session_cost || 0)
       - trainerFeesTotal - coordFeeTotal - cashExpenses,
   );
 
-  const totalExpenses = Number(
-    costingData.session_cost ??
-      (trainerFeesTotal + coordFeeTotal + cashExpenses + marketingAmount),
-  );
-  const profit = Number(costingData.gross_profit ?? (grossRevenue - totalExpenses));
-  const profitPct = Number(
-    costingData.gross_margin_pct ?? (grossRevenue > 0 ? (profit / grossRevenue * 100) : 0),
-  );
+  const totalExpenses = Number(costingData.session_cost);
+  const profit = Number(costingData.gross_profit);
+  const profitPct = Number(costingData.gross_margin_pct);
   const marketingName = costingData.marketing?.marketing_user_name || costingData.marketing?.full_name || 'N/A';
 
   return (
@@ -312,16 +345,37 @@ const ClaimFormPrint = ({ session, onClose }) => {
         <div className="sticky top-0 bg-white border-b p-3 flex justify-between items-center z-10">
           <h2 className="text-lg font-bold">Course Registration Form (Claim Form)</h2>
           <div className="flex gap-2">
-            <Button onClick={handlePrint} className="bg-green-600 hover:bg-green-700">
-              <Download className="w-4 h-4 mr-2" />
-              Download
-            </Button>
+            {!financialTotalsUnavailable && (
+              <Button
+                onClick={handlePrint}
+                className="bg-green-600 hover:bg-green-700"
+                data-testid="claim-form-download-btn"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download
+              </Button>
+            )}
             <Button variant="outline" onClick={onClose}>
               <X className="w-4 h-4 mr-2" />
               Close
             </Button>
           </div>
         </div>
+
+        {financialTotalsUnavailable && (
+          <div
+            className="m-3 p-3 rounded border border-red-300 bg-red-50 text-red-700 text-sm"
+            data-testid="claim-form-financial-unavailable"
+          >
+            <strong>Financial totals unavailable. Please retry.</strong>
+            <div className="mt-1 text-xs">
+              The authoritative session financial snapshot could not be loaded,
+              so headline revenue / cost / profit / margin cannot be shown.
+              Download is disabled to avoid producing a financially misleading
+              Claim Form.
+            </div>
+          </div>
+        )}
 
         {/* Printable Content */}
         <div ref={printRef} className="p-6 bg-white" style={{ fontSize: '11px' }}>
@@ -533,7 +587,9 @@ const ClaimFormPrint = ({ session, onClose }) => {
                 </tr>
                 <tr style={{ background: '#dbeafe' }}>
                   <td className="costing-label">GROSS REVENUE</td>
-                  <td className="costing-value" style={{ fontWeight: 'bold' }}>{grossRevenue.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                  <td className="costing-value" style={{ fontWeight: 'bold' }} data-testid="claim-form-gross-revenue">
+                    {financialTotalsUnavailable ? '—' : grossRevenue.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                  </td>
                   <td className="costing-pct"></td>
                 </tr>
                 <tr>
@@ -553,13 +609,19 @@ const ClaimFormPrint = ({ session, onClose }) => {
                 </tr>
                 <tr style={{ background: '#fef3c7' }}>
                   <td className="costing-label">TOTAL EXPENSES</td>
-                  <td className="costing-value" style={{ fontWeight: 'bold' }}>{totalExpenses.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
+                  <td className="costing-value" style={{ fontWeight: 'bold' }} data-testid="claim-form-total-expenses">
+                    {financialTotalsUnavailable ? '—' : totalExpenses.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                  </td>
                   <td className="costing-pct"></td>
                 </tr>
                 <tr className="profit-row">
                   <td className="costing-label" style={{ fontSize: '11px' }}>NET PROFIT</td>
-                  <td className="costing-value" style={{ fontSize: '12px' }}>{profit.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td>
-                  <td className="costing-pct highlight" style={{ fontSize: '11px', fontWeight: 'bold' }}>{profitPct.toFixed(2)}%</td>
+                  <td className="costing-value" style={{ fontSize: '12px' }} data-testid="claim-form-net-profit">
+                    {financialTotalsUnavailable ? '—' : profit.toLocaleString('en-MY', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="costing-pct highlight" style={{ fontSize: '11px', fontWeight: 'bold' }} data-testid="claim-form-net-profit-pct">
+                    {financialTotalsUnavailable ? '—' : `${profitPct.toFixed(2)}%`}
+                  </td>
                 </tr>
               </tbody>
             </table>
