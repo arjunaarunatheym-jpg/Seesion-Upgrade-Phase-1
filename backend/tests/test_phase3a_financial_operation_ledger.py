@@ -49,6 +49,11 @@ _TEST_COLLECTIONS = (
     "sessions", "payment_reversals", "trainer_fees",
     "coordinator_fees", "session_expenses", "marketing_commissions",
     "finance_audit_log", "counters",
+    # MINI 3.2B cleanup: SuperAdminFinancialCorrection._write_audit
+    # writes to `superadmin_god_mode_audit` (see the service's line ~93).
+    # Every other write from that service lands on collections already
+    # listed above (invoices / payments / credit_notes / journal_entries).
+    "superadmin_god_mode_audit",
 )
 
 
@@ -97,6 +102,11 @@ async def patch_db_everywhere(monkeypatch, db_conn):
         "services.financial_source_of_truth",
         "services.financial_write_guard",
         "services.superadmin_financial_correction",
+        # MINI 3.2B (I1): I1 executes server.py's real @app.on_event(
+        # "startup") handler, which references the module-level `db` in
+        # server.py. Rebind it to the isolated test DB so the real
+        # startup path runs against *_phase3a_closeout_test.
+        "server",
     ):
         try:
             mod = __import__(mod_name, fromlist=["db"])
@@ -1105,26 +1115,59 @@ async def test_h5_concurrent_race_recovery_produces_single_child(db_conn, app_cl
     """Simulate the concurrent-insert-race path: a peer request already
     created the converted invoice, so `db.invoices.insert_one` fails on
     the unique index. The endpoint must delegate to the helper and return
-    the existing invoice — exactly one child in the DB."""
+    the existing invoice — exactly one child in the DB.
+
+    MINI 3.2B (H5): the peer child is NOT pre-seeded. If it were, the
+    endpoint's initial ``find_existing_conversion()`` lookup at the top
+    of ``convert_proforma_to_invoice`` would find it and return via the
+    normal retry path — the failed-insert `except` branch (finance_invoices
+    lines 837-852) would never execute. Instead the peer is published to
+    the test DB as a SIDE-EFFECT of the mocked ``insert_one``, and the
+    same mocked call raises a duplicate-key exception. This forces the
+    endpoint to enter its actual race-recovery branch.
+    """
     from routes import finance_invoices as fi
+    from pymongo.errors import DuplicateKeyError
 
     pf = await _seed_invoice(
         db_conn, document_type="proforma", status="approved",
     )
+    # Sanity: initial lookup MUST see no existing child.
+    assert await db_conn.invoices.count_documents(
+        {"converted_from_proforma_id": pf["id"]}
+    ) == 0
+
     peer_id = str(uuid.uuid4())
     peer_number = f"INV/T/{uuid.uuid4().hex[:8]}"
-    peer = await _seed_invoice(
-        db_conn, id=peer_id, invoice_number=peer_number,
-        document_type="invoice", status="draft",
-        converted_from_proforma_id=pf["id"],
-    )
-    # Force the insert to raise so the except-branch runs.
+    peer_doc = {
+        "id": peer_id,
+        "invoice_number": peer_number,
+        "document_type": "invoice",
+        "status": "draft",
+        "converted_from_proforma_id": pf["id"],
+        "total_amount": pf.get("total_amount", 1000.0),
+        "company_name": pf.get("company_name", "ACME"),
+        "bill_to_name": pf.get("bill_to_name", "ACME"),
+        "session_id": pf.get("session_id"),
+        "created_at": "2025-01-01T00:00:00",
+    }
     orig_insert = fi.db.invoices.insert_one
+    race_state = {"inserted_peer": False, "raised": False}
 
-    async def _boom(_doc):
-        raise Exception("SYNTH_DUP_KEY")
+    async def _race_insert(doc):
+        # Simulate a competing request that beat us to the unique index:
+        # (1) publish the peer into the same isolated test DB,
+        # (2) then raise the same DuplicateKeyError shape a real concurrent
+        # insert would produce. Route's `except Exception:` at line 839
+        # catches it and calls find_existing_conversion() which now sees
+        # the peer.
+        if not race_state["inserted_peer"]:
+            await orig_insert(peer_doc)
+            race_state["inserted_peer"] = True
+        race_state["raised"] = True
+        raise DuplicateKeyError("simulated concurrent insert race")
 
-    monkeypatch.setattr(fi.db.invoices, "insert_one", _boom, raising=False)
+    monkeypatch.setattr(fi.db.invoices, "insert_one", _race_insert, raising=False)
     try:
         r = await app_client.post(
             f"/api/finance/invoices/{pf['id']}/convert-to-invoice",
@@ -1132,12 +1175,25 @@ async def test_h5_concurrent_race_recovery_produces_single_child(db_conn, app_cl
     finally:
         monkeypatch.setattr(fi.db.invoices, "insert_one", orig_insert, raising=False)
 
+    # Race branch must have been reached AND resolved successfully.
+    assert race_state["raised"] is True
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["idempotent"] is True
-    assert body["new_invoice_id"] == peer["id"]
+    # The route's race branch returns this exact message; if the pre-insert
+    # retry path had returned instead, the message would be different.
+    assert body.get("message") == "Proforma already converted (concurrent race)"
+    assert body.get("idempotent") is True
+    assert body.get("new_invoice_id") == peer_id
+
+    # Recovery helper repaired the parent linkage in the same DB.
+    pf_after = await db_conn.invoices.find_one({"id": pf["id"]})
+    assert pf_after["status"] == "converted"
+    assert pf_after["converted_to_invoice_id"] == peer_id
+    assert pf_after["converted_to_invoice_number"] == peer_number
+
+    # Exactly ONE child exists for this Proforma.
     n = await db_conn.invoices.count_documents(
-        {"converted_from_proforma_id": pf["id"]},
+        {"converted_from_proforma_id": pf["id"]}
     )
     assert n == 1
 
@@ -1146,21 +1202,59 @@ async def test_h5_concurrent_race_recovery_produces_single_child(db_conn, app_cl
 # I — Invoice-number unique index
 # ==========================================================================
 
-async def test_i1_invoice_number_index_exists_and_is_supported(db_conn):
-    """The suffixed test DB MUST have the required unique partial index
-    just like production. An empty DB with only _id_ must fail this test."""
-    # Ensure the same index that server startup creates is present in the
-    # test DB. We create it directly on the test collection so the assertion
-    # exercises the real index build semantics.
-    await db_conn.invoices.create_index(
-        "invoice_number", unique=True, name="uniq_invoice_number_partial",
-        partialFilterExpression={
-            "invoice_number": {"$exists": True, "$type": "string"},
-        },
+async def test_i1_invoice_number_index_exists_and_is_supported(db_conn, monkeypatch):
+    """MINI 3.2B (I1): execute the REAL application startup / index
+    readiness handler against the isolated test DB and verify:
+      * ``uniq_invoice_number_partial`` was created BY the startup handler
+      * ``unique = True``
+      * ``partialFilterExpression`` uses the supported ``$exists`` +
+        ``$type == "string"`` shape (no ``$ne``, which MongoDB refuses)
+      * ``app.state.proforma_conversion_ready`` becomes True as a
+        consequence of the startup handler completing successfully.
+
+    Prior version created the index directly inside the test; this
+    version invokes the actual ``@app.on_event("startup")`` handler
+    ``setup_admin_account()`` in ``server.py`` so the assertion proves
+    what the app itself does at boot.
+    """
+    import server as server_mod
+    from server import app
+
+    # Pre-condition: fail-closed default. If startup does NOT successfully
+    # verify the required indexes it must NOT flip readiness.
+    app.state.proforma_conversion_ready = False
+
+    # Drop the target indexes if a prior test left them, so we prove
+    # startup CREATES them (not merely "they happened to be there").
+    for idx_name in (
+        "uniq_invoice_number_partial",
+        "uniq_converted_from_proforma_id_partial",
+    ):
+        try:
+            await db_conn.invoices.drop_index(idx_name)
+        except Exception:
+            pass
+
+    # Belt-and-braces: ensure the startup handler sees the isolated test
+    # DB. The autouse patch_db_everywhere fixture already rebinds
+    # server.db, but this local monkeypatch guards against any subtle
+    # module-reload timing.
+    monkeypatch.setattr(server_mod, "db", db_conn, raising=False)
+
+    # Execute the REAL production startup handler.
+    await server_mod.setup_admin_account()
+
+    # The handler flips readiness True ONLY after both indexes are
+    # verified present + unique.
+    assert app.state.proforma_conversion_ready is True, (
+        "Real startup did not verify the required indexes; readiness "
+        "did not flip True."
     )
+
     idx = await db_conn.invoices.index_information()
     assert "uniq_invoice_number_partial" in idx, (
-        "required invoice_number unique partial index is absent"
+        "Real startup did not create uniq_invoice_number_partial "
+        "against the isolated test DB."
     )
     spec = idx["uniq_invoice_number_partial"]
     assert spec.get("unique") is True
@@ -1168,10 +1262,14 @@ async def test_i1_invoice_number_index_exists_and_is_supported(db_conn):
     assert keys and any(k[0] == "invoice_number" for k in keys)
     pfe = spec.get("partialFilterExpression")
     assert pfe, "partialFilterExpression is required"
-    # Supported operators only — $ne is NOT supported by MongoDB.
+    # Supported operators only — MongoDB rejects $ne inside PFE.
     for _k, v in pfe.items():
         if isinstance(v, dict):
             assert "$ne" not in v
+    # Definition must match the production application definition.
+    inv_pfe = pfe.get("invoice_number") or {}
+    assert inv_pfe.get("$exists") is True
+    assert inv_pfe.get("$type") == "string"
 
 
 # ==========================================================================
