@@ -292,7 +292,13 @@ async def export_invoices(
     status: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Export invoices data as actual Excel (.xlsx) file"""
+    """Export invoices data as actual Excel (.xlsx) file.
+
+    MINI PHASE 2 (K): ALL financial figures come from the canonical
+    :class:`FinancialSourceOfTruth` per-invoice snapshot. Raw payment /
+    Credit Note arithmetic is NO LONGER performed here. The Credit Note
+    column is document-metadata only (number, amount, status).
+    """
     if current_user.role not in ["admin", "super_admin", "finance"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
@@ -301,18 +307,72 @@ async def export_invoices(
         query["status"] = status
     
     invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", 1).to_list(10000)
-    payments = await db.payments.find({}, {"_id": 0}).to_list(10000)
-    payment_by_invoice = {p.get("invoice_id"): p for p in payments}
-    
+
+    # Credit Notes are still loaded — but ONLY for the display column
+    # "Credit Note No & Value" (document metadata: number, amount, status).
+    # All financial totals come from FinancialSourceOfTruth below.
     credit_notes = await db.credit_notes.find({}, {"_id": 0}).to_list(10000)
-    cn_by_invoice = {}
+    cn_by_invoice: dict = {}
     for cn in credit_notes:
         inv_id = cn.get("invoice_id")
         if inv_id:
-            if inv_id not in cn_by_invoice:
-                cn_by_invoice[inv_id] = []
-            cn_by_invoice[inv_id].append(cn)
-    
+            cn_by_invoice.setdefault(inv_id, []).append(cn)
+
+    # ---- MINI PHASE 2 (K): canonical Source-of-Truth snapshots ---------
+    from services.financial_source_of_truth import FinancialSourceOfTruth
+    sot = FinancialSourceOfTruth(db)
+    snapshots: dict = {}
+    for inv in invoices:
+        inv_id = inv.get("id")
+        if not inv_id:
+            continue
+        try:
+            snap = await sot.get_invoice_snapshot(inv_id)
+        except Exception as _sot_err:
+            raise HTTPException(status_code=500, detail={
+                "code": "INVOICE_EXPORT_SOT_UNAVAILABLE",
+                "message": (
+                    f"Invoice export aborted: canonical Source-of-Truth "
+                    f"snapshot failed for invoice {inv_id}. Refusing to "
+                    f"export locally-recomputed financial figures."
+                ),
+                "invoice_id": inv_id,
+                "error": str(_sot_err),
+            })
+        if snap is None:
+            raise HTTPException(status_code=500, detail={
+                "code": "INVOICE_EXPORT_SOT_UNAVAILABLE",
+                "message": (
+                    f"Invoice export aborted: canonical Source-of-Truth "
+                    f"snapshot is unavailable for invoice {inv_id}."
+                ),
+                "invoice_id": inv_id,
+            })
+        snapshots[inv_id] = snap
+
+    def _payment_status_display(sot_status: Optional[str]) -> str:
+        """Map SoT canonical payment_status → user-facing spreadsheet string.
+        Kept next to the export because it is a pure display concern; SoT
+        values themselves are never recomputed."""
+        s = (sot_status or "").lower()
+        if s == "n/a_proforma":
+            return "N/A (Proforma)"
+        if s in ("voided", "cancelled", "deleted", "converted"):
+            return s.title()
+        if s.startswith("n/a_"):
+            return f"N/A ({s[4:].replace('_', ' ').title()})"
+        if s == "fully_credited":
+            return "Fully Credited"
+        if s == "partially_paid":
+            return "Partially Paid"
+        if s == "overpaid":
+            return "Overpaid"
+        if s == "unpaid":
+            return "Unpaid"
+        if s == "paid":
+            return "Paid"
+        return s.title() if s else "N/A"
+
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from fastapi.responses import StreamingResponse
@@ -342,34 +402,14 @@ async def export_invoices(
     
     bil = 1
     for inv in invoices:
-        # Phase 3A FINAL Section 7: Payment status derived from CANONICAL
-        # active payments + issued-only Credit Notes, not "any payment exists".
         inv_id = inv.get("id")
-        inv_status_lower = (inv.get("status") or "").lower()
-        cn_active_total = sum(
-            float(cn.get("amount") or 0)
-            for cn in cn_by_invoice.get(inv_id, [])
-            if (cn.get("status") or "").lower() == "issued"
-        )
-        active_payments = [
-            p for p in payments
-            if p.get("invoice_id") == inv_id
-            and (p.get("status") or "").lower() not in ("reversed", "voided")
-        ]
-        paid_amount = sum(float(p.get("amount") or 0) for p in active_payments)
-        gross_total = float(inv.get("total_amount") or 0)
-        net_total = max(0.0, gross_total - cn_active_total)
-        if inv_status_lower in ("voided", "cancelled"):
-            payment_status = inv_status_lower.title()
-        elif net_total <= 0.005:
-            payment_status = "Fully Credited"
-        elif paid_amount + 0.005 >= net_total and paid_amount > 0:
-            payment_status = "Paid"
-        elif paid_amount > 0:
-            payment_status = "Partially Paid"
-        else:
-            payment_status = "Unpaid"
+        snap = snapshots.get(inv_id) or {}
 
+        # MINI PHASE 2 (K): canonical figures from SoT snapshot only.
+        document_face_value = snap.get("document_face_value", 0)
+        payment_status = _payment_status_display(snap.get("payment_status"))
+
+        # CN display column — document metadata only, NOT financial arithmetic.
         inv_credit_notes = cn_by_invoice.get(inv_id, [])
         cn_info = ""
         if inv_credit_notes:
@@ -394,7 +434,8 @@ async def export_invoices(
         ws.cell(row=row, column=6, value=_safe(inv.get("company_name", ""))).border = thin_border
         ws.cell(row=row, column=7, value=_safe(inv.get("venue", ""))).border = thin_border
         ws.cell(row=row, column=8, value=inv.get("pax", 0)).border = thin_border
-        ws.cell(row=row, column=9, value=inv.get("total_amount", 0)).border = thin_border
+        ws.cell(row=row, column=9, value=document_face_value).border = thin_border
+        # Invoice LIFECYCLE status (kept separate from Payment Status column).
         ws.cell(row=row, column=10, value=inv.get("status", "").replace("_", " ").title()).border = thin_border
         ws.cell(row=row, column=11, value=payment_status).border = thin_border
         ws.cell(row=row, column=12, value=_safe(cn_info)).border = thin_border
@@ -641,6 +682,12 @@ async def convert_proforma_to_invoice(invoice_id: str, current_user: User = Depe
     concurrent request), the existing invoice is returned instead of creating
     a second invoice. The converted proforma is TERMINAL and cannot receive
     further mutations.
+
+    MINI PHASE 2 (H): Retry and concurrent-race paths use the SAME shared
+    recovery helper so the parent Proforma + linked session are always
+    verified/repaired before returning success. A Proforma pointing to a
+    DIFFERENT tax invoice than the one being recovered returns HTTP 409
+    PROFORMA_CONVERSION_LINK_MISMATCH — no silent relink.
     """
     # Section E: FAIL-CLOSED readiness check. Any lookup failure defaults
     # to NOT ready - do not silently allow conversion.
@@ -676,65 +723,21 @@ async def convert_proforma_to_invoice(invoice_id: str, current_user: User = Depe
     # ---- Idempotency guard (Section H CLOSEOUT) --------------------------
     # If ANY invoice already references this proforma via
     # converted_from_proforma_id, this is a RETRY of the same conversion.
-    # Before returning success, verify and (where safe) idempotently repair
-    # the parent Proforma + session linkage. Never create a second invoice.
+    # Delegate verify/repair to the shared helper so BOTH this normal-retry
+    # path AND the concurrent-insert-race path below run identical recovery.
     from services.financial_write_guard import FinancialWriteGuard
     guard = FinancialWriteGuard(db)
     existing = await guard.find_existing_conversion(invoice_id)
     if existing:
-        now_iso = get_malaysia_time().isoformat()
-        # Repair parent Proforma if the earlier attempt died mid-way.
-        pf_state = proforma or {}
-        pf_updates: dict = {}
-        if pf_state.get("status") != "converted":
-            pf_updates.update({
-                "status": "converted",
-                "converted_to_invoice_id": existing.get("id"),
-                "converted_to_invoice_number": existing.get("invoice_number"),
-                "converted_by": current_user.id,
-                "converted_by_name": current_user.full_name,
-                "converted_at": pf_state.get("converted_at") or now_iso,
-                "updated_at": now_iso,
-            })
-        elif pf_state.get("converted_to_invoice_id") != existing.get("id"):
-            # Parent has a DIFFERENT converted_to link — refuse to silently
-            # overwrite; surface for review.
-            raise HTTPException(status_code=409, detail={
-                "code": "PROFORMA_CONVERSION_LINK_MISMATCH",
-                "message": (
-                    "Proforma already marked converted but points to a "
-                    "different invoice than the one indexed by "
-                    "converted_from_proforma_id. Ops must reconcile."
-                ),
-                "existing_invoice_id": existing.get("id"),
-                "proforma_converted_to_invoice_id": pf_state.get("converted_to_invoice_id"),
-            })
-        if pf_updates:
-            await db.invoices.update_one(
-                {"id": invoice_id},
-                {"$set": pf_updates},
-            )
-        # Repair session linkage.
-        if pf_state.get("session_id"):
-            session_now = await db.sessions.find_one(
-                {"id": pf_state["session_id"]}, {"_id": 0, "invoice_id": 1, "invoice_status": 1},
-            )
-            desired_status = (existing.get("status") or "draft")
-            sess_updates: dict = {}
-            if session_now and session_now.get("invoice_id") != existing.get("id"):
-                sess_updates["invoice_id"] = existing.get("id")
-            if session_now and session_now.get("invoice_status") != desired_status:
-                sess_updates["invoice_status"] = desired_status
-            if sess_updates:
-                await db.sessions.update_one(
-                    {"id": pf_state["session_id"]}, {"$set": sess_updates},
-                )
+        recovered = await _recover_proforma_conversion(
+            proforma, existing, current_user,
+        )
         return {
             "message": "Proforma already converted — returning existing invoice",
             "new_invoice_id": existing.get("id"),
             "new_invoice_number": existing.get("invoice_number"),
             "idempotent": True,
-            "recovered_parent": bool(pf_updates),
+            "recovered_parent": recovered,
         }
     if proforma.get("status") in ("converted", "cancelled"):
         # Terminal but no linked invoice found — surface explicitly.
@@ -764,16 +767,22 @@ async def convert_proforma_to_invoice(invoice_id: str, current_user: User = Depe
              "reversed_by", "reversed_by_name", "reversed_at", "reversal_reason", "reversal_id"):
         new_invoice.pop(k, None)
     # Insert with a race-safe re-check: if a concurrent request beat us, prefer that.
+    # MINI PHASE 2 (H): concurrent-race path now runs the SAME shared
+    # recovery helper as the pre-insert retry path above — no bypass.
     try:
         await db.invoices.insert_one(new_invoice)
     except Exception:
         existing2 = await guard.find_existing_conversion(invoice_id)
         if existing2:
+            recovered = await _recover_proforma_conversion(
+                proforma, existing2, current_user,
+            )
             return {
                 "message": "Proforma already converted (concurrent race)",
                 "new_invoice_id": existing2.get("id"),
                 "new_invoice_number": existing2.get("invoice_number"),
                 "idempotent": True,
+                "recovered_parent": recovered,
             }
         raise
 
@@ -808,6 +817,106 @@ async def convert_proforma_to_invoice(invoice_id: str, current_user: User = Depe
         "new_invoice_number": new_number,
         "idempotent": False,
     }
+
+
+async def _recover_proforma_conversion(
+    proforma: dict,
+    existing_invoice: dict,
+    current_user: User,
+) -> bool:
+    """MINI PHASE 2 (H): shared recovery helper for
+    :func:`convert_proforma_to_invoice`.
+
+    Idempotently verify/repair the parent Proforma and the linked session so
+    both point to ``existing_invoice`` before the conversion endpoint returns
+    a successful result. Used by both:
+
+      A. the pre-insert retry path (a converted invoice already exists),
+      B. the concurrent insert-race path (insert failed because a peer
+         request already created the converted invoice).
+
+    Returns True if any repair write actually landed.
+
+    Raises HTTPException 409 ``PROFORMA_CONVERSION_LINK_MISMATCH`` if the
+    Proforma is already marked converted BUT points to a DIFFERENT tax
+    invoice than ``existing_invoice`` — the link is NEVER silently
+    overwritten.
+    """
+    now_iso = get_malaysia_time().isoformat()
+    repaired = False
+    proforma_id = proforma.get("id")
+
+    # Re-read the current proforma to observe any concurrent update.
+    pf_state = await db.invoices.find_one(
+        {"id": proforma_id}, {"_id": 0},
+    ) or proforma
+
+    # Repair parent Proforma if the earlier attempt died mid-way.
+    pf_updates: dict = {}
+    if pf_state.get("status") != "converted":
+        pf_updates.update({
+            "status": "converted",
+            "converted_to_invoice_id": existing_invoice.get("id"),
+            "converted_to_invoice_number": existing_invoice.get("invoice_number"),
+            "converted_by": current_user.id,
+            "converted_by_name": current_user.full_name,
+            "converted_at": pf_state.get("converted_at") or now_iso,
+            "updated_at": now_iso,
+        })
+    elif pf_state.get("converted_to_invoice_id") != existing_invoice.get("id"):
+        # Parent has a DIFFERENT converted_to link — refuse to silently
+        # overwrite; surface for review.
+        raise HTTPException(status_code=409, detail={
+            "code": "PROFORMA_CONVERSION_LINK_MISMATCH",
+            "message": (
+                "Proforma already marked converted but points to a "
+                "different invoice than the one indexed by "
+                "converted_from_proforma_id. Ops must reconcile."
+            ),
+            "existing_invoice_id": existing_invoice.get("id"),
+            "proforma_converted_to_invoice_id":
+                pf_state.get("converted_to_invoice_id"),
+        })
+    else:
+        # Same target — repair a missing/stale invoice_number back-reference.
+        if pf_state.get("converted_to_invoice_number") != existing_invoice.get("invoice_number"):
+            pf_updates["converted_to_invoice_number"] = existing_invoice.get("invoice_number")
+            pf_updates["updated_at"] = now_iso
+    if pf_updates:
+        await db.invoices.update_one(
+            {"id": proforma_id}, {"$set": pf_updates},
+        )
+        repaired = True
+
+    # Repair session linkage. Prefer proforma.session_id (canonical link);
+    # fall back to the invoice's own session_id if the proforma was missing it.
+    session_id = pf_state.get("session_id") or existing_invoice.get("session_id")
+    if session_id:
+        # Read the current status of the real invoice so we can mirror it
+        # exactly onto the session.
+        real_inv = await db.invoices.find_one(
+            {"id": existing_invoice.get("id")},
+            {"_id": 0, "status": 1},
+        )
+        desired_status = (
+            real_inv.get("status") if real_inv else existing_invoice.get("status")
+        ) or "draft"
+        session_now = await db.sessions.find_one(
+            {"id": session_id},
+            {"_id": 0, "invoice_id": 1, "invoice_status": 1},
+        )
+        if session_now:
+            sess_updates: dict = {}
+            if session_now.get("invoice_id") != existing_invoice.get("id"):
+                sess_updates["invoice_id"] = existing_invoice.get("id")
+            if session_now.get("invoice_status") != desired_status:
+                sess_updates["invoice_status"] = desired_status
+            if sess_updates:
+                await db.sessions.update_one(
+                    {"id": session_id}, {"$set": sess_updates},
+                )
+                repaired = True
+    return repaired
 
 
 @router.post("/invoices/{invoice_id}/cancel")
