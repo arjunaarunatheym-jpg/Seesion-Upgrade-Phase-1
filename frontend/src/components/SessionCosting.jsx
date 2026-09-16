@@ -113,6 +113,16 @@ const SessionCosting = ({ session, onClose, onUpdate }) => {
               ((costingData.less_tax / costingData.invoice_total) * 100).toFixed(1) : '6',
           });
         }
+      } else if (costingData.quotation && costingData.quotation.total_amount > 0) {
+        // No invoice yet — prefill from linked won quotation so admin
+        // doesn't have to retype the won amount. Admin only enters costing.
+        const q = costingData.quotation;
+        setInvoiceData(prev => ({
+          ...prev,
+          pricing_type: q.pricing_type === 'per_pax' ? 'per_pax' : 'lumpsum',
+          lumpsum_amount: q.pricing_type === 'per_pax' ? '' : (q.total_amount?.toString() || ''),
+          per_pax_rate: q.pricing_type === 'per_pax' ? (q.rate_per_pax?.toString() || '') : '',
+        }));
       }
       
       // Load additional invoices

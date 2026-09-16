@@ -30,6 +30,6 @@
   "seed_data_creation": "None. Test used existing 4 payments in DB (2 Active, 2 Reversed).",
   "retest_needed": false,
   "main_agent_can_self_test": true,
-  "context_for_next_testing_agent": "Payment History feature (Phase 1) fully verified — backend endpoints (/api/finance/payments/history, /history/export, /{id}/detail) and PaymentHistoryTab component both fully functional and integrated. Only observation: default status filter='Active' hides Reversed payments; may want to change to 'All' if UX feedback comes in. The Finance Dashboard has 13 tabs; use data-testid='payment-history-tab' and 'view-all-payments-btn' for future regressions. Preview URL: https://training-finance-hub-1.preview.emergentagent.com",
+  "context_for_next_testing_agent": "Payment History feature (Phase 1) fully verified — backend endpoints (/api/finance/payments/history, /history/export, /{id}/detail) and PaymentHistoryTab component both fully functional and integrated. Only observation: default status filter='Active' hides Reversed payments; may want to change to 'All' if UX feedback comes in. The Finance Dashboard has 13 tabs; use data-testid='payment-history-tab' and 'view-all-payments-btn' for future regressions. Preview URL: https://payment-reversal-fix.preview.emergentagent.com",
   "rca of the issue": "N/A — no bugs found."
 }

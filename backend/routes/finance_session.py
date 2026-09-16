@@ -114,6 +114,25 @@ async def get_session_costing(session_id: str, current_user: User = Depends(get_
     coordinator_count = 1 if session.get("coordinator_id") else 0
     total_headcount = len(session.get("participant_ids", [])) + trainer_count + coordinator_count
 
+    # Pull linked-quotation snapshot so Session Costing can prefill invoice
+    # amount without the admin retyping the won value.
+    quotation_snapshot = None
+    if session.get("quotation_id"):
+        quo = await db.quotations.find_one(
+            {"id": session["quotation_id"]},
+            {"_id": 0, "total_amount": 1, "subtotal": 1, "pricing_type": 1,
+             "rate_per_pax": 1, "group_price": 1, "num_participants": 1},
+        )
+        if quo:
+            quotation_snapshot = {
+                "total_amount": quo.get("total_amount") or 0,
+                "subtotal": quo.get("subtotal") or 0,
+                "pricing_type": quo.get("pricing_type") or "lumpsum",
+                "rate_per_pax": quo.get("rate_per_pax") or 0,
+                "group_price": quo.get("group_price") or 0,
+                "num_participants": quo.get("num_participants") or 0,
+            }
+
     return {
         "session_id": session_id,
         "session_name": session.get("name"),
@@ -138,7 +157,8 @@ async def get_session_costing(session_id: str, current_user: User = Depends(get_
         "marketing_commission": marketing_amount,
         "total_expenses": total_expenses,
         "profit": final_profit,
-        "profit_percentage": round(profit_percentage, 2)
+        "profit_percentage": round(profit_percentage, 2),
+        "quotation": quotation_snapshot,
     }
 
 

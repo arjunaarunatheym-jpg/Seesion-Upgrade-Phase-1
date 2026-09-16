@@ -1141,6 +1141,7 @@ async def record_client_response(quotation_id: str, response_data: dict, current
             "client_response_at": now.isoformat(),
             "client_response_notes": response_data.get("notes"),
             "training_date": response_data.get("training_date"),
+            "end_date": response_data.get("end_date") or response_data.get("training_date"),
             "training_dates": response_data.get("training_dates"),
             "venue": response_data.get("venue")
         }}
@@ -1246,6 +1247,91 @@ async def record_client_response(quotation_id: str, response_data: dict, current
             pass
     
     return result
+
+
+
+@router.post("/quotations/{quotation_id}/revert-acceptance")
+async def revert_quotation_acceptance(quotation_id: str, current_user: User = Depends(get_current_user)):
+    """Reverse an accepted quotation back to 'sent' status so marketing can re-accept
+    with new dates or decline.
+    
+    Guardrails:
+    - Only 'accepted' quotations can be reverted.
+    - If the auto-created draft session has ANY financial history (invoice/
+      payment/credit note/journal), the request is REJECTED (409) — admin must
+      handle via SuperAdmin correction flow.
+    - Otherwise the draft session (and its safe-draft related records) is
+      deleted so a fresh acceptance can create a new draft.
+    """
+    if not check_marketing_access(current_user):
+        raise HTTPException(status_code=403, detail="Marketing access required")
+    
+    quotation = await db.quotations.find_one({"id": quotation_id}, {"_id": 0})
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+    
+    if quotation.get("status") != "accepted":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only 'accepted' quotations can be reverted (current: {quotation.get('status')})"
+        )
+    
+    # Find the auto-created session for this quotation
+    linked_session = await db.sessions.find_one({"quotation_id": quotation_id}, {"_id": 0})
+    
+    # Financial-history guard — same guard used by session delete
+    if linked_session:
+        from services.financial_write_guard import FinancialWriteGuard, is_production_mode
+        guard = FinancialWriteGuard(db)
+        history = await guard.session_has_financial_history(linked_session["id"])
+        if history.get("has_history") and is_production_mode():
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "SESSION_HAS_FINANCIAL_HISTORY",
+                    "message": (
+                        "The session created from this quotation already has financial history "
+                        "(invoices/payments/credit notes). Marketing cannot revert acceptance. "
+                        "Ask an admin to archive/correct via SuperAdmin controls."
+                    ),
+                    "session_id": linked_session["id"],
+                    "history": history,
+                },
+            )
+        
+        # Safe to delete — remove session and related safe-draft records
+        session_id = linked_session["id"]
+        await db.sessions.delete_one({"id": session_id})
+        for coll in [
+            "trainer_fees", "coordinator_fees", "session_expenses",
+            "marketing_commissions", "invoices",
+        ]:
+            await db[coll].delete_many({"session_id": session_id})
+    
+    now = get_malaysia_time()
+    await db.quotations.update_one(
+        {"id": quotation_id},
+        {"$set": {
+            "status": "sent",
+            "reverted_at": now.isoformat(),
+            "reverted_by": current_user.id,
+        },
+         "$unset": {
+             "client_response_at": "",
+             "training_date": "",
+             "end_date": "",
+             "training_dates": "",
+         }}
+    )
+    
+    # Sync lead stage back to quotation_sent
+    await sync_lead_stage_from_quotation(quotation_id, "sent")
+    
+    return {
+        "message": "Quotation acceptance reverted; status is now 'sent'.",
+        "session_deleted": bool(linked_session),
+    }
+
 
 
 
@@ -2658,29 +2744,51 @@ async def _generate_quotation_pdf(quotation_id: str, current_user: User):
     pdf.cell_safe(60, 5, f"Status: {quotation.get('status', '').title()}")
     
     pdf.set_y(pdf.get_y() + 25)
+    pdf.set_x(10)
     
     # Client info box
     pdf.set_fill_color(232, 244, 253)
     pdf.set_font_safe('B', 9)
     pdf.cell_safe(0, 6, "TO:", fill=True, ln=True)
+    pdf.set_x(10)
     pdf.set_font_safe('', 9)
     pdf.cell_safe(0, 5, client.get("company_name", ""), ln=True)
+    pdf.set_x(10)
     for line in client.get("company_address", "").split('\n'):
         stripped = line.strip()
         if stripped:
+            pdf.set_x(10)
             pdf.multi_cell_safe(0, 5, stripped)
+    pdf.set_x(10)
     pdf.cell_safe(0, 5, f"Attn: {client.get('contact_person', '')}", ln=True)
+    pdf.set_x(10)
     pdf.cell_safe(0, 5, f"Tel: {client.get('contact_phone', '')}", ln=True)
+    pdf.set_x(10)
     pdf.ln(5)
     
-    # Training date/venue if accepted
-    if quotation.get("status") == "accepted" and quotation.get("training_date"):
+    # Training date/venue if accepted — supports single, date range, and multiple non-consecutive dates
+    if quotation.get("status") == "accepted" and (quotation.get("training_date") or quotation.get("training_dates")):
+        # Build training-dates display string
+        t_dates = quotation.get("training_dates")
+        t_start = quotation.get("training_date")
+        t_end = quotation.get("end_date")
+        if isinstance(t_dates, list) and len([d for d in t_dates if d]) > 1:
+            training_display = ", ".join([d for d in t_dates if d])
+        elif t_end and t_start and t_end != t_start:
+            training_display = f"{t_start} to {t_end}"
+        else:
+            training_display = t_start or ""
+        
+        pdf.set_x(10)
         pdf.set_fill_color(232, 253, 232)
         pdf.set_font_safe('B', 9)
         pdf.cell_safe(0, 6, "TRAINING DETAILS:", fill=True, ln=True)
+        pdf.set_x(10)
         pdf.set_font_safe('', 9)
-        pdf.cell_safe(0, 5, f"Date: {quotation.get('training_date', '')}", ln=True)
+        pdf.cell_safe(0, 5, f"Date: {training_display}", ln=True)
+        pdf.set_x(10)
         pdf.cell_safe(0, 5, f"Venue: {quotation.get('venue', '')}", ln=True)
+        pdf.set_x(10)
         pdf.ln(5)
     
     # Quotation table with text wrapping for description

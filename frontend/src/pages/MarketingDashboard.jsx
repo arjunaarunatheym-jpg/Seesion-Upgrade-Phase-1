@@ -400,6 +400,27 @@ const MarketingDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const handleRevertAcceptance = async (quotationId) => {
+    const q = quotations.find(x => x.id === quotationId);
+    const label = q?.quotation_number || quotationId;
+    if (!window.confirm(
+      `Revert acceptance of ${label}?\n\n` +
+      `This will:\n` +
+      `• Move the quotation back to "Sent" so you can decline or re-accept with new dates.\n` +
+      `• Delete the draft session created from this quotation.\n\n` +
+      `If the session already has any invoice, payment, or credit note, this will be blocked and only an admin can proceed.`
+    )) return;
+    try {
+      const res = await axiosInstance.post(`/marketing/quotations/${quotationId}/revert-acceptance`);
+      toast.success(res.data?.message || 'Acceptance reverted');
+      loadData();
+    } catch (error) {
+      const detail = error.response?.data?.detail;
+      const msg = typeof detail === 'string' ? detail : (detail?.message || 'Failed to revert acceptance');
+      toast.error(msg);
+    }
+  };
+
   const handleAcceptQuotation = async () => {
     const { date_mode, training_date, end_date, training_dates, venue } = acceptForm;
     if (!venue) {
@@ -943,6 +964,7 @@ const MarketingDashboard = ({ user, onLogout }) => {
               onDownloadPdf={handleDownloadPdf}
               onMarkSent={handleMarkSent}
               onClientResponse={handleClientResponse}
+              onRevertAcceptance={handleRevertAcceptance}
               onApplyDiscount={(q) => { setDiscountingQuotation(q); setShowDiscountDialog(true); }}
               downloadingPdf={downloadingPdf}
             />

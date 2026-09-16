@@ -4,7 +4,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Button } from "../ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Plus, Eye, Edit, Send, Download, CheckCircle, XCircle, Percent } from "lucide-react";
+import { Plus, Eye, Edit, Send, Download, CheckCircle, XCircle, Percent, RotateCcw } from "lucide-react";
 
 const QuotationsTab = ({
   quotations,
@@ -19,6 +19,7 @@ const QuotationsTab = ({
   onDownloadPdf,
   onMarkSent,
   onClientResponse,
+  onRevertAcceptance,
   onApplyDiscount,
   downloadingPdf,
 }) => {
@@ -129,9 +130,16 @@ const QuotationsTab = ({
                       )}
                       
                       {q.status === 'accepted' && (
-                        <Button variant="ghost" size="sm" onClick={() => onDownloadPdf(q.id)} title="Download Final PDF" className="text-emerald-600 h-7 w-7 sm:h-8 sm:w-8 p-0" disabled={downloadingPdf}>
-                          <Download className="w-3 h-3 sm:w-4 sm:h-4" />
-                        </Button>
+                        <>
+                          <Button variant="ghost" size="sm" onClick={() => onDownloadPdf(q.id)} title="Download Final PDF" className="text-emerald-600 h-7 w-7 sm:h-8 sm:w-8 p-0" disabled={downloadingPdf} data-testid={`quotation-download-${q.id}`}>
+                            <Download className="w-3 h-3 sm:w-4 sm:h-4" />
+                          </Button>
+                          {onRevertAcceptance && (
+                            <Button variant="ghost" size="sm" onClick={() => onRevertAcceptance(q.id)} title="Revert Acceptance (Cancel Won)" className="text-amber-600 hover:text-amber-800 h-7 w-7 sm:h-8 sm:w-8 p-0" data-testid={`quotation-revert-${q.id}`}>
+                              <RotateCcw className="w-3 h-3 sm:w-4 sm:h-4" />
+                            </Button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>

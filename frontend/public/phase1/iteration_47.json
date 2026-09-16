@@ -18,6 +18,6 @@
   "seed_data_creation": "Test fixtures seed 130 payments + 4 malicious-payload payments tagged ph_test / PHINJ_ marker, and auto-clean on teardown. No production data touched.",
   "retest_needed": false,
   "main_agent_can_self_test": true,
-  "context_for_next_testing_agent": "CSV formula-injection correction verified end-to-end. Use data-testid='payment-history-tab' and the 'Export CSV' button on Finance Dashboard for future regressions. Preview URL: https://training-finance-hub-1.preview.emergentagent.com. All 26 pytest tests in /app/backend/tests/test_payment_history.py green.",
+  "context_for_next_testing_agent": "CSV formula-injection correction verified end-to-end. Use data-testid='payment-history-tab' and the 'Export CSV' button on Finance Dashboard for future regressions. Preview URL: https://payment-reversal-fix.preview.emergentagent.com. All 26 pytest tests in /app/backend/tests/test_payment_history.py green.",
   "rca of the issue": "N/A — correction verified, no bugs found."
 }
