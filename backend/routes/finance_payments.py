@@ -624,6 +624,7 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
         "hrdcorp_invoice_date": payment_data.hrdcorp_invoice_date if payment_type == "hrdcorp" else None,
         "hrdcorp_invoice_url": payment_data.hrdcorp_invoice_url if payment_type == "hrdcorp" else None,
         "receipt_number": await generate_receipt_number(),
+        "status": "active",
         "recorded_by": current_user.id,
         "created_at": get_malaysia_time().isoformat()
     }
@@ -763,17 +764,13 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
             print(f"Error creating credit note: {e}")
     # ============ END CREDIT NOTE ============
     
-    all_payments = await db.payments.find({"invoice_id": payment_data.invoice_id}, {"_id": 0}).to_list(100)
-    # Status calculation: sum cash received + HRDCorp service fees absorbed (treat as settled)
-    total_paid = sum(
-        (p.get("amount", 0) or 0) + (p.get("hrdcorp_service_fee", 0) or 0)
-        for p in all_payments
-        if p.get("status") != "reversed"
-    )
-    
-    if total_paid >= invoice.get("total_amount", 0):
-        await db.invoices.update_one({"id": payment_data.invoice_id}, {"$set": {"status": "paid", "updated_at": get_malaysia_time().isoformat()}})
-        await db.sessions.update_one({"invoice_id": payment_data.invoice_id}, {"$set": {"invoice_status": "paid"}})
+    # MINI PHASE 1 (C): DO NOT flip invoice/session status BEFORE the
+    # payment accounting has succeeded. The final invoice payment status is
+    # derived below from a fresh FinancialSourceOfTruth snapshot AFTER
+    # accounting succeeds. The prior inline arithmetic + eager "paid" flip
+    # (and its symmetric rollback in the accounting-compensation block)
+    # could otherwise leave invoice.status != session.invoice_status when
+    # accounting failed.
     
     await log_finance_action("payment", payment["id"], "created", current_user.id, after_value=payment)
     
@@ -837,12 +834,8 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
                     "updated_at": now_iso,
                 }},
             )
-        # Roll back the invoice status flip if we just marked it paid.
-        if total_paid >= invoice.get("total_amount", 0):
-            await db.invoices.update_one(
-                {"id": payment_data.invoice_id},
-                {"$set": {"status": invoice.get("status"), "updated_at": now_iso}},
-            )
+        # MINI PHASE 1 (C): eager invoice status flip has been removed —
+        # no rollback of invoice/session status is required here.
         await log_finance_action(
             "payment", payment["id"], "compensated_after_accounting_failure",
             current_user.id, after_value={"error": payment_accounting_error},
@@ -855,38 +848,114 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
             "error": payment_accounting_error,
         })
 
-    # Section A: derive invoice status from CANONICAL snapshot instead of
-    # inline arithmetic. Legitimate partial payments preserved.
+    # MINI PHASE 1 (C) — FINAL SoT RECONCILIATION IS MANDATORY.
+    # Derive canonical invoice payment status from a fresh
+    # FinancialSourceOfTruth snapshot taken AFTER the payment accounting
+    # journal has landed. Update invoice.status AND session.invoice_status
+    # coherently in one pass. If the reconciliation itself fails, we
+    # compensate everything this request created (payment, payment journal,
+    # linked CN + its journal) and return a controlled non-success. NEVER
+    # swallow this failure.
+    sot_error: Optional[str] = None
+    sot_new_status: Optional[str] = None
     try:
         from services.financial_source_of_truth import FinancialSourceOfTruth
         _sot = FinancialSourceOfTruth(db)
         _snap = await _sot.get_invoice_snapshot(payment_data.invoice_id)
-        if _snap is not None:
-            _paid = float(_snap.get("paid_amount") or 0)
-            _outstanding = float(_snap.get("outstanding_amount") or 0)
-            _net = float(_snap.get("net_invoiced_value") or 0)
-            _cur = (invoice.get("status") or "").lower()
-            if _cur not in {"voided", "cancelled", "deleted", "converted"}:
-                if _outstanding <= 0.005 and _paid > 0:
-                    _new = "paid"
-                elif 0 < _paid < _net:
-                    _new = "partially_paid"
-                else:
-                    _new = _cur or "issued"
-                if _new != _cur:
-                    await db.invoices.update_one(
-                        {"id": payment_data.invoice_id},
-                        {"$set": {"status": _new,
-                                  "updated_at": get_malaysia_time().isoformat()}},
-                    )
-                    await db.sessions.update_one(
-                        {"invoice_id": payment_data.invoice_id},
-                        {"$set": {"invoice_status": _new}},
-                    )
+        if _snap is None:
+            raise Exception("SOT_SNAPSHOT_UNAVAILABLE")
+        _paid = float(_snap.get("paid_amount") or 0)
+        _outstanding = float(_snap.get("outstanding_amount") or 0)
+        _net = float(_snap.get("net_invoiced_value") or 0)
+        _cur = (invoice.get("status") or "").lower()
+        if _cur in {"voided", "cancelled", "deleted", "converted"}:
+            sot_new_status = _cur
+        elif _outstanding <= 0.005 and _paid > 0:
+            sot_new_status = "paid"
+        elif 0 < _paid < _net:
+            sot_new_status = "partially_paid"
+        else:
+            sot_new_status = _cur or "issued"
     except Exception as _sot_err:
-        # SoT is best-effort here; the accounting effect already landed
-        # so we do not fail the request.
-        print(f"SoT status derivation warning: {_sot_err}")
+        sot_error = str(_sot_err)
+
+    if sot_error is None:
+        # Persist invoice + session status coherently in the SAME pass.
+        try:
+            _iso = get_malaysia_time().isoformat()
+            await db.invoices.update_one(
+                {"id": payment_data.invoice_id},
+                {"$set": {"status": sot_new_status, "updated_at": _iso}},
+            )
+            await db.sessions.update_one(
+                {"invoice_id": payment_data.invoice_id},
+                {"$set": {"invoice_status": sot_new_status}},
+            )
+        except Exception as _persist_err:
+            sot_error = str(_persist_err)
+
+    if sot_error is not None:
+        now_iso = get_malaysia_time().isoformat()
+        # Reverse the payment (idempotent — only if still active).
+        await db.payments.update_one(
+            {"id": payment["id"], "status": {"$nin": ["reversed", "voided"]}},
+            {"$set": {
+                "status": "reversed",
+                "reversed_by": current_user.id,
+                "reversed_at": now_iso,
+                "reversal_reason": f"SoT reconciliation failed: {sot_error}",
+                "updated_at": now_iso,
+            }},
+        )
+        # Void the payment journal (idempotent — only non-voided).
+        await db.journal_entries.update_many(
+            {"source_id": payment["id"], "source_module": "payment",
+             "status": {"$ne": "voided"}},
+            {"$set": {
+                "status": "voided",
+                "voided_by": current_user.id,
+                "voided_at": now_iso,
+                "void_reason": f"SoT reconciliation compensation: {sot_error}",
+                "updated_at": now_iso,
+            }},
+        )
+        # Void the linked CN + its journal if this request created one.
+        if credit_note_created:
+            await db.credit_notes.update_one(
+                {"id": credit_note_created["id"], "status": {"$ne": "voided"}},
+                {"$set": {
+                    "status": "voided",
+                    "voided_by": current_user.id,
+                    "voided_at": now_iso,
+                    "void_reason": f"SoT reconciliation compensation: {sot_error}",
+                    "updated_at": now_iso,
+                }},
+            )
+            await db.journal_entries.update_many(
+                {"source_id": credit_note_created["id"],
+                 "source_module": "credit_note",
+                 "status": {"$ne": "voided"}},
+                {"$set": {
+                    "status": "voided",
+                    "voided_by": current_user.id,
+                    "voided_at": now_iso,
+                    "void_reason": f"SoT reconciliation compensation: {sot_error}",
+                    "updated_at": now_iso,
+                }},
+            )
+        await log_finance_action(
+            "payment", payment["id"], "compensated_after_sot_failure",
+            current_user.id, after_value={"error": sot_error},
+        )
+        raise HTTPException(status_code=500, detail={
+            "code": "PAYMENT_SOT_RECONCILIATION_FAILED",
+            "message": (
+                "Final Source-of-Truth reconciliation failed; payment "
+                "reversed and linked accounting compensated. Retry after "
+                "resolving the reconciliation error."
+            ),
+            "error": sot_error,
+        })
     # ============ END ACCOUNTING AUTO-POST ============
     
     # ============ EMAIL NOTIFICATION ============

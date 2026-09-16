@@ -141,41 +141,75 @@ class PaymentReversalService:
         user: Any,
         alias: str = "canonical",
     ) -> Dict[str, Any]:
-        """Reverse a payment. Idempotent: if already reversed, return the prior
-        reversal record.
+        """Reverse a payment. Idempotent based on payment_reversals.status.
+
+        MINI PHASE 1 (E) — strict order:
+            1. Validate payment.
+            2. Reserve in-progress reversal record.
+            3. Void linked CNs (source_payment_id == payment.id). Preserve
+               unrelated / manual CNs.
+            4. Void the payment journal and journals of the linked CNs.
+            5. Atomic-claim flip payment.status = "reversed".
+            6. Confirm the flip actually landed.
+            7. ONLY AFTER payment.status is reversed: take a fresh
+               FinancialSourceOfTruth snapshot and derive the invoice status.
+            8. Update invoice.status.
+            9. Update session.invoice_status = EXACTLY the same status.
+           10. ONLY AFTER 7-9 succeed: mark payment_reversals.status = "completed".
         """
         payment = await self.db.payments.find_one({"id": payment_id}, {"_id": 0})
         if not payment:
             return {"error": "PAYMENT_NOT_FOUND"}
 
-        # ---- IDEMPOTENCY GUARD (Section N + concurrent) ----------------
-        # Atomic claim: only ONE reversal request can flip the payment
-        # status from active/non-reversed → reversed. Concurrent losers
-        # observe the existing reversal record and return it.
+        # ---- STRICT IDEMPOTENCY (Section E) ----------------------------
+        # payment.status == "reversed" BY ITSELF is not enough to claim
+        # completion. The source of truth for "completed" is the matching
+        # payment_reversals record.
         if payment.get("status") == "reversed":
             existing = await self.db.payment_reversals.find_one(
                 {"payment_id": payment_id}, {"_id": 0},
             )
+            existing_status = (existing or {}).get("status")
+            if existing_status == "completed":
+                return {
+                    "message": "Payment already reversed",
+                    "idempotent": True,
+                    "reversal": existing,
+                    "payment_id": payment_id,
+                }
+            if existing_status == "in_progress":
+                return {
+                    "message": "Reversal already in progress",
+                    "code": "REVERSAL_IN_PROGRESS",
+                    "payment_id": payment_id,
+                    "idempotent": True,
+                }
+            if existing_status == "recovery_required":
+                return {
+                    "message": "Prior reversal attempt requires ops recovery",
+                    "code": "REVERSAL_RECOVERY_REQUIRED",
+                    "payment_id": payment_id,
+                    "idempotent": True,
+                }
+            # Payment is 'reversed' but there is NO completed reversal
+            # record — do NOT claim completed.
             return {
-                "message": "Payment already reversed",
-                "idempotent": True,
-                "reversal": existing,
+                "message": (
+                    "Payment status is 'reversed' but no completed reversal "
+                    "record exists; ops recovery required."
+                ),
+                "code": "REVERSAL_RECOVERY_REQUIRED",
                 "payment_id": payment_id,
+                "idempotent": True,
             }
 
         now = datetime.now(timezone.utc)
         reversal_id = str(uuid.uuid4())
         actions_taken: List[str] = []
 
-        # Phase 3A FINAL Section 4: two-phase reversal —
-        # 1) Reserve an in-progress reversal record with unique payment_id
-        #    (index enforced). If another request already reserved, we
-        #    observe/return it.
-        # 2) Do all CN/journal work while payment is STILL active.
-        # 3) Only after everything is durable, flip payment.status to
-        #    "reversed" (last atomic claim).
-        # A retry can therefore only return "completed" when the reversal
-        # record status is "completed".
+        # ---- 1. Reserve in-progress reversal record --------------------
+        # Unique index on payment_id makes concurrent losers observe the
+        # existing record.
         try:
             await self.db.payment_reversals.insert_one({
                 "id": reversal_id,
@@ -188,28 +222,27 @@ class PaymentReversalService:
                 "reversed_at": now.isoformat(),
             })
         except Exception:
-            # Unique-index collision means someone else is reversing this payment.
             existing = await self.db.payment_reversals.find_one(
                 {"payment_id": payment_id}, {"_id": 0},
             )
-            if existing and existing.get("status") == "completed":
+            existing_status = (existing or {}).get("status")
+            if existing_status == "completed":
                 return {
                     "message": "Payment already reversed (concurrent completed)",
                     "idempotent": True,
                     "reversal": existing,
                     "payment_id": payment_id,
                 }
-            # In-progress or recovery-required states — do NOT claim success.
-            state = (existing.get("status") if existing else "in_progress")
             return {
                 "message": (
                     "Reversal already in progress or awaiting recovery"
-                    if state != "recovery_required"
+                    if existing_status != "recovery_required"
                     else "Prior reversal attempt requires ops recovery"
                 ),
                 "code": (
                     "REVERSAL_IN_PROGRESS"
-                    if state != "recovery_required" else "REVERSAL_RECOVERY_REQUIRED"
+                    if existing_status != "recovery_required"
+                    else "REVERSAL_RECOVERY_REQUIRED"
                 ),
                 "payment_id": payment_id,
                 "idempotent": True,
@@ -221,7 +254,7 @@ class PaymentReversalService:
                 {"id": payment["invoice_id"]}, {"_id": 0},
             )
 
-        # ---- 2. Auto-void EXPLICITLY LINKED CNs (Section L) -------------
+        # ---- 2. Void EXPLICITLY LINKED CNs; preserve manual CNs --------
         voided_credit_notes: List[str] = []
         manual_review: List[Dict[str, Any]] = []
         if invoice:
@@ -256,7 +289,7 @@ class PaymentReversalService:
                     f"(RM {float(cn.get('amount') or 0):,.2f})"
                 )
 
-        # ---- 3. Void related journal entries (idempotent) ---------------
+        # ---- 3. Void related journal entries (idempotent) --------------
         voided_journals: List[str] = []
         payment_journals = await self.db.journal_entries.find(
             {"source_id": payment_id, "source_module": "payment",
@@ -298,23 +331,98 @@ class PaymentReversalService:
                 )
                 voided_journals.append(je["id"])
 
-        # ---- 4. Recompute invoice status via fresh SoT (Section M) ------
+        # ---- 4. Atomic claim: flip payment.status = "reversed" ---------
+        # MUST occur BEFORE the fresh SoT snapshot below (Section E strict
+        # order). If this update lands 0 rows, someone else finished ahead
+        # of us — do NOT claim success.
+        claim = await self.db.payments.update_one(
+            {"id": payment_id, "status": {"$nin": list(NON_ACTIVE_PAYMENT_STATUSES)}},
+            {"$set": {
+                "status": "reversed",
+                "reversed_by": getattr(user, "id", None),
+                "reversed_by_name": getattr(user, "full_name", None),
+                "reversed_at": now.isoformat(),
+                "reversal_reason": reason,
+                "reversal_id": reversal_id,
+                "reversal_alias": alias,
+                "updated_at": now.isoformat(),
+            }},
+        )
+        if claim.modified_count != 1:
+            existing = await self.db.payment_reversals.find_one(
+                {"payment_id": payment_id, "status": "completed"}, {"_id": 0},
+            )
+            if existing:
+                return {
+                    "message": "Payment already reversed (peer completed)",
+                    "idempotent": True,
+                    "reversal": existing,
+                    "payment_id": payment_id,
+                }
+            await self.db.payment_reversals.update_one(
+                {"id": reversal_id},
+                {"$set": {"status": "recovery_required",
+                          "note": "payment flip did not modify a row"}},
+            )
+            return {
+                "message": "Payment reversal requires ops recovery",
+                "code": "REVERSAL_RECOVERY_REQUIRED",
+                "payment_id": payment_id,
+                "reversal_id": reversal_id,
+                "idempotent": False,
+            }
+        actions_taken.append(
+            f"Payment RM {float(payment.get('amount') or 0):,.2f} reversed"
+        )
+
+        # ---- 5. POST-FLIP: fresh SoT snapshot + invoice/session sync ---
+        # If any part of the reconciliation fails, DO NOT mark the reversal
+        # completed. Mark payment_reversals.status = "recovery_required"
+        # and return a controlled non-success. Payment is already reversed
+        # so we do not un-reverse it.
         new_status: Optional[str] = None
-        if invoice:
-            fresh = await self.sot.get_invoice_snapshot(invoice["id"])
-            if fresh is not None:
+        try:
+            if invoice:
+                fresh = await self.sot.get_invoice_snapshot(invoice["id"])
+                if fresh is None:
+                    raise Exception("SOT_SNAPSHOT_UNAVAILABLE")
                 new_status = self._derive_invoice_status(invoice, fresh)
                 if new_status and new_status != invoice.get("status"):
                     await self.db.invoices.update_one(
                         {"id": invoice["id"]},
-                        {"$set": {"status": new_status, "updated_at": now.isoformat()}},
+                        {"$set": {"status": new_status,
+                                  "updated_at": now.isoformat()}},
                     )
                     actions_taken.append(
                         f"Invoice {invoice.get('invoice_number')} status: "
                         f"{invoice.get('status')} → {new_status}"
                     )
+                final_status = new_status or invoice.get("status")
+                if final_status:
+                    # session.invoice_status MUST match invoice.status exactly.
+                    await self.db.sessions.update_one(
+                        {"invoice_id": invoice["id"]},
+                        {"$set": {"invoice_status": final_status}},
+                    )
+        except Exception as e:
+            await self.db.payment_reversals.update_one(
+                {"id": reversal_id},
+                {"$set": {"status": "recovery_required",
+                          "note": f"post-flip SoT reconciliation failed: {e}"}},
+            )
+            return {
+                "message": (
+                    "Payment reversed but final Source-of-Truth reconciliation "
+                    "failed; ops recovery required."
+                ),
+                "code": "REVERSAL_RECOVERY_REQUIRED",
+                "payment_id": payment_id,
+                "reversal_id": reversal_id,
+                "idempotent": False,
+                "error": str(e),
+            }
 
-        # ---- 5. Create reversal record ----------------------------------
+        # ---- 6. Finalize: mark payment_reversals completed -------------
         company_name = (
             invoice.get("company_name") or invoice.get("bill_to_name") or "Unknown"
         ) if invoice else "Unknown"
@@ -336,60 +444,11 @@ class PaymentReversalService:
             "reversed_by_name": getattr(user, "full_name", None),
             "reversed_at": now.isoformat(),
         }
-        # ---- 6. FINAL step: flip payment.status = reversed + finalize -------
-        # Only after CN/journal/invoice work has landed durably. If this
-        # conditional update lands 0 rows, someone else finished ahead of us —
-        # return idempotently.
-        claim = await self.db.payments.update_one(
-            {"id": payment_id, "status": {"$nin": list(NON_ACTIVE_PAYMENT_STATUSES)}},
-            {"$set": {
-                "status": "reversed",
-                "reversed_by": getattr(user, "id", None),
-                "reversed_by_name": getattr(user, "full_name", None),
-                "reversed_at": now.isoformat(),
-                "reversal_reason": reason,
-                "reversal_id": reversal_id,
-                "reversal_alias": alias,
-                "updated_at": now.isoformat(),
-            }},
-        )
-        # Section B: only return "successful reversal" when the payment
-        # status was ACTUALLY flipped by THIS request.
-        if claim.modified_count != 1:
-            existing = await self.db.payment_reversals.find_one(
-                {"payment_id": payment_id, "status": "completed"}, {"_id": 0},
-            )
-            if existing:
-                return {
-                    "message": "Payment already reversed (peer completed)",
-                    "idempotent": True,
-                    "reversal": existing,
-                    "payment_id": payment_id,
-                }
-            # Mark our reservation as recovery-required so ops can inspect.
-            await self.db.payment_reversals.update_one(
-                {"id": reversal_id},
-                {"$set": {"status": "recovery_required",
-                          "note": "final payment flip did not modify a row"}},
-            )
-            raise Exception("PAYMENT_REVERSAL_RECOVERY_REQUIRED")
-        actions_taken.append(
-            f"Payment RM {float(payment.get('amount') or 0):,.2f} reversed"
-        )
-
-        # Finalize the previously-reserved reversal record: mark completed
-        # + attach the durable audit trail. Retries that see status=completed
-        # can safely return this record.
         await self.db.payment_reversals.update_one(
             {"id": reversal_id},
-            {"$set": {
-                **reversal_record,
-                "status": "completed",
-            }},
+            {"$set": {**reversal_record, "status": "completed"}},
         )
         reversal_record.pop("_id", None)
-        # Also stamp reversal_id back onto the payment (payments row was
-        # already flipped in the atomic claim; this is metadata only).
         return {
             "message": "Payment reversed successfully",
             "reversal_id": reversal_id,
