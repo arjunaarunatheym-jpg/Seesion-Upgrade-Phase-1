@@ -380,6 +380,10 @@ class PaymentReversalService:
         # completed. Mark payment_reversals.status = "recovery_required"
         # and return a controlled non-success. Payment is already reversed
         # so we do not un-reverse it.
+        #
+        # MINI PHASE 1 FINAL (E1): every invoice/session write below is
+        # verified via matched_count. A silent zero-match write MUST NOT
+        # allow the flow to reach "completed" — treat it as recovery.
         new_status: Optional[str] = None
         try:
             if invoice:
@@ -388,11 +392,16 @@ class PaymentReversalService:
                     raise Exception("SOT_SNAPSHOT_UNAVAILABLE")
                 new_status = self._derive_invoice_status(invoice, fresh)
                 if new_status and new_status != invoice.get("status"):
-                    await self.db.invoices.update_one(
+                    inv_res = await self.db.invoices.update_one(
                         {"id": invoice["id"]},
                         {"$set": {"status": new_status,
                                   "updated_at": now.isoformat()}},
                     )
+                    if inv_res.matched_count != 1:
+                        raise Exception(
+                            f"INVOICE_PERSIST_NOT_MATCHED (invoice_id="
+                            f"{invoice['id']})"
+                        )
                     actions_taken.append(
                         f"Invoice {invoice.get('invoice_number')} status: "
                         f"{invoice.get('status')} → {new_status}"
@@ -400,10 +409,20 @@ class PaymentReversalService:
                 final_status = new_status or invoice.get("status")
                 if final_status:
                     # session.invoice_status MUST match invoice.status exactly.
-                    await self.db.sessions.update_one(
-                        {"invoice_id": invoice["id"]},
-                        {"$set": {"invoice_status": final_status}},
+                    # Only assert a session match when a linked session exists.
+                    linked_session = await self.db.sessions.find_one(
+                        {"invoice_id": invoice["id"]}, {"_id": 0, "id": 1},
                     )
+                    if linked_session is not None:
+                        sess_res = await self.db.sessions.update_one(
+                            {"invoice_id": invoice["id"]},
+                            {"$set": {"invoice_status": final_status}},
+                        )
+                        if sess_res.matched_count < 1:
+                            raise Exception(
+                                f"SESSION_PERSIST_NOT_MATCHED (invoice_id="
+                                f"{invoice['id']})"
+                            )
         except Exception as e:
             await self.db.payment_reversals.update_one(
                 {"id": reversal_id},
@@ -444,10 +463,44 @@ class PaymentReversalService:
             "reversed_by_name": getattr(user, "full_name", None),
             "reversed_at": now.isoformat(),
         }
-        await self.db.payment_reversals.update_one(
+        # MINI PHASE 1 FINAL (E1): verify the reserved reversal record was
+        # actually matched/updated. If the write matched zero rows, the
+        # reservation was lost or overwritten — treat as recovery-required
+        # and DO NOT claim "Payment reversed successfully".
+        finalize_res = await self.db.payment_reversals.update_one(
             {"id": reversal_id},
             {"$set": {**reversal_record, "status": "completed"}},
         )
+        if finalize_res.matched_count != 1:
+            existing = await self.db.payment_reversals.find_one(
+                {"payment_id": payment_id, "status": "completed"}, {"_id": 0},
+            )
+            if existing:
+                return {
+                    "message": "Payment already reversed (peer completed)",
+                    "idempotent": True,
+                    "reversal": existing,
+                    "payment_id": payment_id,
+                }
+            # Best-effort recovery mark using payment_id (no id match).
+            await self.db.payment_reversals.update_one(
+                {"payment_id": payment_id,
+                 "status": {"$ne": "completed"}},
+                {"$set": {
+                    "status": "recovery_required",
+                    "note": "finalize update did not match reserved reversal_id",
+                }},
+            )
+            return {
+                "message": (
+                    "Payment reversed but finalize step could not confirm "
+                    "the reversal record; ops recovery required."
+                ),
+                "code": "REVERSAL_RECOVERY_REQUIRED",
+                "payment_id": payment_id,
+                "reversal_id": reversal_id,
+                "idempotent": False,
+            }
         reversal_record.pop("_id", None)
         return {
             "message": "Payment reversed successfully",

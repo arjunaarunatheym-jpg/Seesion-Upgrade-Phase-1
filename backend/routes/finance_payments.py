@@ -834,6 +834,22 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
                     "updated_at": now_iso,
                 }},
             )
+            # MINI PHASE 1 FINAL (C1): also void the CN's journal entry if one
+            # was created. Without this the CN document is voided but the
+            # accounting journal for that CN would remain active — leaving
+            # an active journal for a voided Credit Note.
+            await db.journal_entries.update_many(
+                {"source_id": credit_note_created["id"],
+                 "source_module": "credit_note",
+                 "status": {"$ne": "voided"}},
+                {"$set": {
+                    "status": "voided",
+                    "voided_by": current_user.id,
+                    "voided_at": now_iso,
+                    "void_reason": f"Payment accounting compensation: {payment_accounting_error}",
+                    "updated_at": now_iso,
+                }},
+            )
         # MINI PHASE 1 (C): eager invoice status flip has been removed —
         # no rollback of invoice/session status is required here.
         await log_finance_action(
@@ -858,6 +874,20 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
     # swallow this failure.
     sot_error: Optional[str] = None
     sot_new_status: Optional[str] = None
+    # MINI PHASE 1 FINAL (C2): capture pre-change statuses BEFORE any write
+    # so that if the session update or its match verification fails after
+    # the invoice update already landed, we can restore the invoice status.
+    prior_invoice_status = invoice.get("status")
+    prior_invoice_updated_at = invoice.get("updated_at")
+    prior_session_doc = await db.sessions.find_one(
+        {"invoice_id": payment_data.invoice_id}, {"_id": 0},
+    )
+    prior_session_invoice_status = (
+        prior_session_doc.get("invoice_status") if prior_session_doc else None
+    )
+    # Track how far the persist got so compensation can undo only what it did.
+    invoice_status_was_changed = False
+    session_status_was_changed = False
     try:
         from services.financial_source_of_truth import FinancialSourceOfTruth
         _sot = FinancialSourceOfTruth(db)
@@ -880,22 +910,57 @@ async def record_payment(payment_data: PaymentCreate, current_user: User = Depen
         sot_error = str(_sot_err)
 
     if sot_error is None:
-        # Persist invoice + session status coherently in the SAME pass.
+        # MINI PHASE 1 FINAL (C2): persist invoice + session status coherently
+        # AND verify each matched the intended record. matched_count == 0 for
+        # an expected record must NOT be silently treated as success.
         try:
             _iso = get_malaysia_time().isoformat()
-            await db.invoices.update_one(
+            inv_res = await db.invoices.update_one(
                 {"id": payment_data.invoice_id},
                 {"$set": {"status": sot_new_status, "updated_at": _iso}},
             )
-            await db.sessions.update_one(
-                {"invoice_id": payment_data.invoice_id},
-                {"$set": {"invoice_status": sot_new_status}},
-            )
+            if inv_res.matched_count != 1:
+                raise Exception(
+                    f"INVOICE_PERSIST_NOT_MATCHED (invoice_id="
+                    f"{payment_data.invoice_id})"
+                )
+            invoice_status_was_changed = True
+            # Only assert a session match when a linked session actually exists.
+            if prior_session_doc is not None:
+                sess_res = await db.sessions.update_one(
+                    {"invoice_id": payment_data.invoice_id},
+                    {"$set": {"invoice_status": sot_new_status}},
+                )
+                if sess_res.matched_count < 1:
+                    raise Exception(
+                        f"SESSION_PERSIST_NOT_MATCHED (invoice_id="
+                        f"{payment_data.invoice_id})"
+                    )
+                session_status_was_changed = True
         except Exception as _persist_err:
             sot_error = str(_persist_err)
 
     if sot_error is not None:
         now_iso = get_malaysia_time().isoformat()
+        # MINI PHASE 1 FINAL (C2): restore any invoice/session status this
+        # reconciliation already changed BEFORE compensating downstream.
+        # This prevents "payment=reversed but invoice=paid" divergence.
+        if invoice_status_was_changed:
+            restore_set = {
+                "status": prior_invoice_status,
+                "updated_at": now_iso,
+            }
+            if prior_invoice_updated_at is not None:
+                restore_set["updated_at"] = prior_invoice_updated_at
+            await db.invoices.update_one(
+                {"id": payment_data.invoice_id},
+                {"$set": restore_set},
+            )
+        if session_status_was_changed and prior_session_doc is not None:
+            await db.sessions.update_one(
+                {"invoice_id": payment_data.invoice_id},
+                {"$set": {"invoice_status": prior_session_invoice_status}},
+            )
         # Reverse the payment (idempotent — only if still active).
         await db.payments.update_one(
             {"id": payment["id"], "status": {"$nin": ["reversed", "voided"]}},
