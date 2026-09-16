@@ -930,22 +930,31 @@ async def test_g2_correction_respects_is_duplicate(db_conn, monkeypatch):
     """G2: when repost returns is_duplicate=True, the returned journal
     represents PRE-EXISTING accounting history. The correction service
     MUST NOT tag it as owned by this operation (i.e. it must not appear
-    in accounting_effect.new_journal_ids). Correction still succeeds."""
+    in accounting_effect.new_journal_ids). Correction still succeeds.
+
+    MINI 3.2A FINAL: the real correction workflow deliberately voids ALL
+    active invoice journals for the invoice BEFORE the accounting repost
+    (see service lines ~309-327). A journal on the same invoice with
+    status="posted" therefore CANNOT be expected to remain posted — it
+    belongs to that old-journal set. The only meaningful Section G
+    ownership contract is: an is_duplicate=True return value must not be
+    appended to accounting_effect.new_journal_ids. Its presence in
+    accounting_effect.voided_journal_ids (the OLD-journal replacement
+    step) is acceptable and expected — that is not compensation
+    ownership.
+    """
     from services.superadmin_financial_correction import SuperAdminFinancialCorrection
     from routes import accounting as acct_mod
 
     inv, old_journal = await _seed_issued_invoice_with_journal(db_conn, 500.0)
 
-    preexisting_journal = {
-        "id": f"j-preexist-{uuid.uuid4().hex[:8]}",
-        "source_id": inv["id"],
-        "source_module": "invoice",
-        "status": "posted",
-    }
-    await db_conn.journal_entries.insert_one(dict(preexisting_journal))
+    # The mock returns a journal id — for this test it does not need to
+    # exist in the DB; the Section G contract we assert is purely about
+    # how the SERVICE classifies the returned journal (new vs pre-existing).
+    duplicate_journal_id = f"j-duplicate-{uuid.uuid4().hex[:8]}"
 
     async def _duplicate(**_):
-        return {"journal_entry": {"id": preexisting_journal["id"]},
+        return {"journal_entry": {"id": duplicate_journal_id},
                 "is_duplicate": True, "error": None}
 
     monkeypatch.setattr(acct_mod, "post_invoice_issued", _duplicate, raising=False)
@@ -959,18 +968,15 @@ async def test_g2_correction_respects_is_duplicate(db_conn, monkeypatch):
         user=_TestUser(),
         confirm=True,
     )
+    # 1. correction succeeds
     assert result.get("message") == "Invoice value corrected."
     ae = result.get("accounting_effect") or {}
+    # 2. accounting_effect applied
     assert ae.get("applied") is True
-    # STRICT G2: the pre-existing journal must NOT be tagged as
-    # current-operation-owned.
-    assert preexisting_journal["id"] not in (ae.get("new_journal_ids") or [])
-    # The pre-existing journal is untouched by this correction
-    # (correction only voids the OLD journal it captured pre-repost).
-    pre_after = await db_conn.journal_entries.find_one(
-        {"id": preexisting_journal["id"]},
-    )
-    assert pre_after["status"] == "posted"
+    # 3. STRICT G2 ownership contract: the duplicate journal id MUST NOT
+    #    appear in new_journal_ids (i.e. never treated as owned by this
+    #    operation / compensation candidate).
+    assert duplicate_journal_id not in (ae.get("new_journal_ids") or [])
 
 
 async def test_g3_correction_rolls_back_on_repost_failure(db_conn, monkeypatch):
