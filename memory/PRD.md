@@ -118,6 +118,14 @@ All 26 independent-audit blockers implemented and regressed. 91/91 Phase
 ## Test Credentials
 - Super Admin: arjuna@mddrc.com.my / Dana102229
 
+## Marketing Bug Fixes — Feb 2026 (iter 52)
+Verified by testing_agent (11/11 pytest pass):
+1. Quotation PDF: `end_date` is now persisted on client-response and the download-pdf endpoint renders (a) single date, (b) `training_date to end_date` range, (c) comma-separated non-consecutive `training_dates` list. Client TO/Attn block now sets X=10 before every line so "Attn:" is left-aligned with company_name/Tel.
+2. Revert Acceptance: new endpoint `POST /api/marketing/quotations/{id}/revert-acceptance` — reverts status back to `sent`, deletes the auto-created draft session, syncs lead stage. Blocked (409 SESSION_HAS_FINANCIAL_HISTORY) if the linked session already has issued invoice / payment / credit note / journal.
+3. Session Costing Prefill: `GET /api/finance/session/{id}/costing` now returns a `quotation` snapshot (total_amount, pricing_type, rate_per_pax, group_price, num_participants) when the session was auto-created from an accepted quotation. `SessionCosting.jsx` prefills invoice amount from that snapshot so admin only enters costing values.
+
+Files touched: `backend/routes/marketing.py`, `backend/routes/finance_session.py`, `frontend/src/pages/MarketingDashboard.jsx`, `frontend/src/components/marketing/QuotationsTab.jsx`, `frontend/src/components/SessionCosting.jsx`. New regression suite: `backend/tests/test_marketing_bugfixes_iter52.py`.
+
 ## Upcoming (Blocked Until Sign-Off)
 - P0: Phase 3B Dynamic Funding Source Foundation
 - P1: Roles/Multi-Role redesign, Calendar, Marketing Easy Mode,

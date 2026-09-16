@@ -1,0 +1,31 @@
+{
+  "summary": "Tested the 3 marketing bug fixes (PDF date range + Attn alignment, revert-acceptance endpoint, and Session Costing quotation snapshot). 11/11 pytest cases pass. Frontend wiring verified — revert button renders on Accepted quotations with correct data-testid.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login (dev)", "issues": ["ESLint dev overlay ('react-hooks/exhaustive-deps rule not found') covers login form in dev preview. Non-blocking (dismissable); still visible to marketing users during development."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_marketing_bugfixes_iter52.py",
+    "/app/test_reports/pytest/iter52_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "revert-acceptance uses $unset on training_date/end_date/training_dates but session was already deleted before quotation reset — order is safe. However client_response_notes and venue are NOT unset on revert; they remain from prior accept. Minor: consider clearing them so a subsequent decline/accept isn't polluted.",
+    "finance_session.get_session_costing.quotation_snapshot exposes group_price and rate_per_pax but the frontend SessionCosting only reads total_amount / pricing_type / rate_per_pax — group_price field is unused (dead payload). Not a bug.",
+    "In test_invoice_endpoint_blocked_when_issued (regression), the guard only fires when session.invoice_id is set OR explicit invoice_id is passed. If neither is set and there's an issued invoice in the collection, the legacy candidate lookup misses it (statuses filter excludes 'issued') and a NEW invoice is created. This is a pre-existing Phase 3A behavior, out of scope for this ticket, but worth flagging."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_marketing_bugfixes_iter52.py (new)"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "smoke-verified (revert button renders with correct data-testid on Accepted rows)"},
+  "test_credentials": "SuperAdmin arjuna@mddrc.com.my / Dana102229",
+  "seed_data_creation": "All seeded records tagged with iter52_test:true and cleaned up per class via autouse fixture. Seeded: marketing_clients, quotations, sessions, invoices as needed per test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression suite for iter 52 lives at /app/backend/tests/test_marketing_bugfixes_iter52.py. It covers client-response end_date persistence, quotation PDF for single/range/list dates, revert-acceptance happy path + 409 financial-history guard + 400 state guard, session-costing quotation snapshot (linked + null), and Phase3A INVOICE_LOCKED regression. All 11 pass against current backend.",
+  "rca of the issue": "N/A — feature testing pass. All 3 reported bugs are fixed correctly at the API level: (1) end_date is persisted on client-response and PDF endpoint returns 200 application/pdf for single date / range / list; (2) /revert-acceptance returns 200 and deletes the draft session for the happy path, returns 409 SESSION_HAS_FINANCIAL_HISTORY when an issued invoice exists, and returns 400 when quotation is not 'accepted'; (3) /api/finance/session/{id}/costing now returns a quotation snapshot (total_amount=8000, pricing_type='lumpsum') for auto-created sessions and null for manual sessions."
+}
