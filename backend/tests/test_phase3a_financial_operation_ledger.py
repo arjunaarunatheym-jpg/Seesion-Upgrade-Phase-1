@@ -1126,7 +1126,7 @@ async def test_h5_concurrent_race_recovery_produces_single_child(db_conn, app_cl
     same mocked call raises a duplicate-key exception. This forces the
     endpoint to enter its actual race-recovery branch.
     """
-    from routes import finance_invoices as fi
+    import motor.motor_asyncio
     from pymongo.errors import DuplicateKeyError
 
     pf = await _seed_invoice(
@@ -1151,31 +1151,52 @@ async def test_h5_concurrent_race_recovery_produces_single_child(db_conn, app_cl
         "session_id": pf.get("session_id"),
         "created_at": "2025-01-01T00:00:00",
     }
-    orig_insert = fi.db.invoices.insert_one
+    # MINI 3.2B (H5): patch at CLASS level. Motor's
+    # AsyncIOMotorDatabase.__getattr__ can return a freshly-constructed
+    # AsyncIOMotorCollection wrapper for `db.invoices` on each access, so
+    # an instance-level monkeypatch on fi.db.invoices.insert_one can be
+    # bypassed by the route. Patching the unbound class method guarantees
+    # the interception fires regardless of which wrapper instance the
+    # route ends up calling.
+    orig_insert = motor.motor_asyncio.AsyncIOMotorCollection.insert_one
     race_state = {"inserted_peer": False, "raised": False}
 
-    async def _race_insert(doc):
-        # Simulate a competing request that beat us to the unique index:
-        # (1) publish the peer into the same isolated test DB,
-        # (2) then raise the same DuplicateKeyError shape a real concurrent
-        # insert would produce. Route's `except Exception:` at line 839
-        # catches it and calls find_existing_conversion() which now sees
-        # the peer.
-        if not race_state["inserted_peer"]:
-            await orig_insert(peer_doc)
-            race_state["inserted_peer"] = True
-        race_state["raised"] = True
-        raise DuplicateKeyError("simulated concurrent insert race")
+    async def _race_insert(self, doc, *args, **kwargs):
+        # Only intercept the route's convert-to-invoice write for THIS
+        # proforma, exactly once. Every other insert on every other
+        # collection (audit, sessions, etc.) delegates to the ORIGINAL
+        # class method unchanged.
+        if (
+            self.name == "invoices"
+            and isinstance(doc, dict)
+            and doc.get("converted_from_proforma_id") == pf["id"]
+            and not race_state["raised"]
+        ):
+            # (1) publish the peer into the same isolated test DB using
+            # the ORIGINAL class method, (2) then raise the same
+            # DuplicateKeyError shape a real concurrent insert would
+            # produce. The route's `except Exception:` branch catches it
+            # and calls find_existing_conversion() which now sees the
+            # peer.
+            if not race_state["inserted_peer"]:
+                await orig_insert(self, peer_doc)
+                race_state["inserted_peer"] = True
+            race_state["raised"] = True
+            raise DuplicateKeyError("simulated concurrent insert race")
+        return await orig_insert(self, doc, *args, **kwargs)
 
-    monkeypatch.setattr(fi.db.invoices, "insert_one", _race_insert, raising=False)
-    try:
-        r = await app_client.post(
-            f"/api/finance/invoices/{pf['id']}/convert-to-invoice",
-        )
-    finally:
-        monkeypatch.setattr(fi.db.invoices, "insert_one", orig_insert, raising=False)
+    monkeypatch.setattr(
+        motor.motor_asyncio.AsyncIOMotorCollection,
+        "insert_one",
+        _race_insert,
+        raising=True,
+    )
+    r = await app_client.post(
+        f"/api/finance/invoices/{pf['id']}/convert-to-invoice",
+    )
 
     # Race branch must have been reached AND resolved successfully.
+    assert race_state["inserted_peer"] is True
     assert race_state["raised"] is True
     assert r.status_code == 200, r.text
     body = r.json()
